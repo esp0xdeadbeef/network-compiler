@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -51,6 +53,10 @@ let
 
 in
 sanitize {
-  nodes = lib.listToAttrs (map (n: { name = n; value = wanForNode n; }) nodes);
+  nodes = lib.listToAttrs (
+    map (n: {
+      name = n;
+      value = wanForNode n;
+    }) nodes
+  );
 }
-

@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -13,4 +15,3 @@ renderer.render {
   topologyRaw = topoRaw;
   nodeName = "s-router-access-10";
 }
-

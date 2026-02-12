@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -38,4 +40,3 @@ sanitize {
     }) (l.endpoints or { });
   }) wanLinks;
 }
-

@@ -19,29 +19,33 @@ let
     if tenantVlans == [ ] then
       throw "topology-gen: tenantVlans must not be empty"
     else
-      lib.foldl' (a: b: if b < a then b else a)
-        (lib.head tenantVlans)
-        (lib.tail tenantVlans);
+      lib.foldl' (a: b: if b < a then b else a) (lib.head tenantVlans) (lib.tail tenantVlans);
 
-  accessTransitVlanFor =
-    vid: policyAccessTransitBase + (vid - minTenantVlan);
+  accessTransitVlanFor = vid: policyAccessTransitBase + (vid - minTenantVlan);
 
-  strip = s: builtins.elemAt (lib.splitString "." s) 0;
-
-  mkAccess =
-    vid: {
-      name = accessNodeFor vid;
-      value = {
-        ifs = { lan = "lan0"; };
+  mkAccess = vid: {
+    name = accessNodeFor vid;
+    value = {
+      ifs = {
+        lan = "lan0";
       };
     };
+  };
 
-  nodes =
-    {
-      "${coreNode}" = { ifs = { lan = "lan0"; wan = "wan0"; }; };
-      "${policyNode}" = { ifs = { lan = "lan0"; }; };
-    }
-    // (lib.listToAttrs (map mkAccess tenantVlans));
+  nodes = {
+    "${coreNode}" = {
+      ifs = {
+        lan = "lan0";
+        wan = "wan0";
+      };
+    };
+    "${policyNode}" = {
+      ifs = {
+        lan = "lan0";
+      };
+    };
+  }
+  // (lib.listToAttrs (map mkAccess tenantVlans));
 
   mkTenantLan =
     vid:
@@ -53,16 +57,18 @@ let
       name = lname;
       value = {
         kind = "lan";
+        scope = "internal";
         carrier = "lan";
         vlanId = vid;
         name = lname;
         members = [ n ];
         endpoints = {
           "${n}" = {
-            tenant = { vlanId = vid; };
+            tenant = {
+              vlanId = vid;
+            };
             gateway = true;
 
-            # deterministic gateway IPs so routing phase has addr4/addr6
             addr4 = "${tenantV4Base}.${toString vid}.1/24";
             addr6 = "${ulaPrefix}:${toString vid}::1/64";
           };
@@ -87,13 +93,19 @@ let
       name = lname;
       value = {
         kind = "p2p";
+        scope = "internal";
         carrier = "lan";
         vlanId = vlanId;
         name = lname;
-        members = [ policyNode access ];
+        members = [
+          policyNode
+          access
+        ];
         endpoints = {
           "${access}" = {
-            tenant = { vlanId = vid; };
+            tenant = {
+              vlanId = vid;
+            };
             addr4 = access4;
             addr6 = access6;
           };
@@ -111,10 +123,14 @@ let
     // {
       policy-core = {
         kind = "p2p";
+        scope = "internal";
         carrier = "lan";
         vlanId = corePolicyTransitVlan;
         name = "policy-core";
-        members = [ policyNode coreNode ];
+        members = [
+          policyNode
+          coreNode
+        ];
         endpoints = {
           "${policyNode}" = {
             addr4 = "${tenantV4Base}.255.2/30";

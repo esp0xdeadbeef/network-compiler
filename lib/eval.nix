@@ -5,24 +5,18 @@
 
 let
   # evaluate user-supplied topology (pure, no env, no <nixpkgs>, no absolute paths)
-  raw =
-    if builtins.isFunction topology then
-      topology { inherit lib; }
-    else
-      topology;
+  raw = if builtins.isFunction topology then topology { inherit lib; } else topology;
 
-  resolved =
-    import ./topology-resolve.nix {
-      inherit lib;
-      ulaPrefix = raw.ulaPrefix or "fd42:dead:beef";
-      tenantV4Base = raw.tenantV4Base or "10.10";
-    } raw;
+  resolved = import ./topology-resolve.nix {
+    inherit lib;
+    ulaPrefix = raw.ulaPrefix or "fd42:dead:beef";
+    tenantV4Base = raw.tenantV4Base or "10.10";
+  } raw;
 
-  compiled =
-    import ./compile/compile.nix {
-      inherit lib;
-      model = resolved;
-    };
+  compiled = import ./compile/compile.nix {
+    inherit lib;
+    model = resolved;
+  };
 
   sanitize =
     x:
@@ -51,4 +45,3 @@ sanitize {
   nodes = compiled.nodes or { };
   links = compiled.links or { };
 }
-

@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -12,4 +14,3 @@ import ./view-node.nix {
   inherit lib pkgs;
   inherit (cfg) ulaPrefix tenantV4Base;
 } node routed
-

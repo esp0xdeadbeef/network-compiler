@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 
 let
   base = {
@@ -21,4 +23,3 @@ let
   };
 in
 base // sopsData
-

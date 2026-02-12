@@ -18,6 +18,7 @@ echo "[hook] parsing staged nix files..."
 for f in $changed; do
     [ -f "$f" ] || continue
     nix-instantiate --parse "$f" >/dev/null
+    sed 's/# FILE: .*//g' -i $f
 done
 
 echo "[hook] done"

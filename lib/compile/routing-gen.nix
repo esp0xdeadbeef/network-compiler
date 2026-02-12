@@ -1,4 +1,3 @@
-# FILE: ./lib/routing-gen.nix
 {
   lib,
   ulaPrefix,

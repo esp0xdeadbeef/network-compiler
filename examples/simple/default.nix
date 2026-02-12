@@ -1,4 +1,3 @@
-# FILE: ./examples/simple/default.nix
 { lib }:
 let
   cfg = import ./inputs;

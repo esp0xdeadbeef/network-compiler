@@ -1,4 +1,3 @@
-# FILE: ./lib/compile/compile.nix
 { lib, model }:
 
 let

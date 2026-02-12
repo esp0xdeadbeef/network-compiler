@@ -1,4 +1,3 @@
-# FILE: ./lib/routing/policy-core.nix
 {
   lib,
   ulaPrefix,

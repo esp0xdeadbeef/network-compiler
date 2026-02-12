@@ -1,4 +1,3 @@
-# FILE: ./lib/eval.nix
 { lib }:
 
 { topology }:

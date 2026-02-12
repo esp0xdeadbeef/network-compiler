@@ -1,4 +1,3 @@
-# FILE: ./lib/model/topology.nix
 {
   ulaPrefix ? "fd42:dead:beef",
   tenantV4Base ? "10.10",

@@ -1,4 +1,3 @@
-# FILE: ./lib/topology-resolve.nix
 {
   lib,
   ulaPrefix,

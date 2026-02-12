@@ -1,9 +1,11 @@
+# FILE: ./dev/debug-lib/70-render-networkd.nix
 {
   sopsData ? { },
 }:
 let
   pkgs = null;
-  lib = import <nixpkgs/lib>;
+  flake = builtins.getFlake (toString ../../.);
+  lib = flake.lib;
 
   all = import ./90-all.nix { inherit sopsData; };
   topoRaw = import ./10-topology-raw.nix { inherit sopsData; };

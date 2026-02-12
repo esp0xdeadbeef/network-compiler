@@ -1,4 +1,4 @@
-# lib/addressing.nix
+# FILE: ./lib/model/addressing.nix
 { lib }:
 
 let
@@ -79,6 +79,20 @@ let
     else
       "ff${zpad 2 (toHex tvid)}";
 
+  net =
+    if lib ? net then
+      lib.net
+    else
+      throw ''
+        addressing: lib.net missing
+
+        Wire nix-lib-net (duairc net.nix + extensions) into the lib you pass in.
+        For dev/debug-lib, use builtins.getFlake(...) to obtain the flake's lib.
+      '';
+
+  # hostCidr wrapper (keeps original prefix length)
+  hostCidr = n: cidr: net.cidr.hostCidr n cidr;
+
 in
 {
   #
@@ -89,14 +103,14 @@ in
   #
   # Tenant LAN addressing
   #
-  mkTenantV4 = { v4Base, vlanId }: "${v4Base}.${toString vlanId}.1/24";
+  mkTenantV4 = { v4Base, vlanId }: hostCidr 1 "${v4Base}.${toString vlanId}.0/24";
 
-  mkTenantV6 = { ulaPrefix, vlanId }: "${ulaPrefix}:${toString vlanId}::1/64";
+  mkTenantV6 = { ulaPrefix, vlanId }: hostCidr 1 "${ulaPrefix}:${toString vlanId}::/64";
 
   #
   # Point-to-point IPv4 (/31)
-  # Index 0 → .2 (policy side)
-  # Index 1 → .3 (peer side)
+  # Index 0 → host 1 (base+.1)
+  # Index 1 → host 2 (base+.2)
   #
   mkP2P4 =
     {
@@ -111,12 +125,12 @@ in
     if idx < 0 || idx > 1 then
       throw "p2p requires exactly 2 members and node must be a member"
     else
-      "${v4Base}.${toString vlanId}.${toString (idx + 2)}/31";
+      hostCidr (idx + 1) "${v4Base}.${toString vlanId}.0/31";
 
   #
   # Point-to-point IPv6 (/127, ffXX encoding)
-  # Index 0 → ::2 (policy side)
-  # Index 1 → ::3 (peer side)
+  # Index 0 → host 1
+  # Index 1 → host 2
   #
   mkP2P6 =
     {
@@ -127,9 +141,10 @@ in
     }:
     let
       idx = nodeIndex node members;
+      base = "${ulaPrefix}:${transitHextet vlanId}::/127";
     in
     if idx < 0 || idx > 1 then
       throw "p2p requires exactly 2 members and node must be a member"
     else
-      "${ulaPrefix}:${transitHextet vlanId}::${toString (idx + 2)}/127";
+      hostCidr (idx + 1) base;
 }

@@ -1,9 +1,11 @@
+# FILE: ./dev/debug-lib/50-wan.nix
 {
   sopsData ? { },
 }:
 let
   pkgs = null;
-  lib = import <nixpkgs/lib>;
+  flake = builtins.getFlake (toString ../../.);
+  lib = flake.lib;
 
   routed = import ./30-routing.nix { inherit sopsData; };
 

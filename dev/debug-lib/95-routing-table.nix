@@ -1,9 +1,11 @@
+# FILE: ./dev/debug-lib/95-routing-table.nix
 {
   sopsData ? { },
 }:
 let
   pkgs = null;
-  lib = import <nixpkgs/lib>;
+  flake = builtins.getFlake (toString ../../.);
+  lib = flake.lib;
 
   routed = import ./30-routing.nix { inherit sopsData; };
 

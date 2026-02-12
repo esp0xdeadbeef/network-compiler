@@ -5,23 +5,34 @@
   policyAccessTransitBase,
   corePolicyTransitVlan,
 
-  ulaPrefix ? "fd42:dead:beef",
-  tenantV4Base ? "10.10",
+  policyAccessOffset ? 0,
+
+  policyNodeName ? "s-router-policy-only",
+  coreNodeName ? "s-router-core-wan",
+  accessNodePrefix ? "s-router-access-",
+
+  domain ? "lan.",
+  reservedVlans ? [ 1 ],
+  forbiddenVlanRanges ? [
+    {
+      from = 2;
+      to = 9;
+    }
+  ],
+
+  ulaPrefix,
+  tenantV4Base,
 }:
 
 let
-  policyNode = "s-router-policy-only";
-  coreNode = "s-router-core-wan";
+  addr = import ./model/addressing.nix { inherit lib; };
 
-  accessNodeFor = vid: "s-router-access-${toString vid}";
+  policyNode = policyNodeName;
+  coreNode = coreNodeName;
 
-  minTenantVlan =
-    if tenantVlans == [ ] then
-      throw "topology-gen: tenantVlans must not be empty"
-    else
-      lib.foldl' (a: b: if b < a then b else a) (lib.head tenantVlans) (lib.tail tenantVlans);
+  accessNodeFor = vid: "${accessNodePrefix}${toString vid}";
 
-  accessTransitVlanFor = vid: policyAccessTransitBase + (vid - minTenantVlan);
+  accessTransitVlanFor = vid: policyAccessTransitBase + policyAccessOffset + vid;
 
   mkAccess = vid: {
     name = accessNodeFor vid;
@@ -39,6 +50,7 @@ let
         wan = "wan0";
       };
     };
+
     "${policyNode}" = {
       ifs = {
         lan = "lan0";
@@ -68,9 +80,6 @@ let
               vlanId = vid;
             };
             gateway = true;
-
-            addr4 = "${tenantV4Base}.${toString vid}.1/24";
-            addr6 = "${ulaPrefix}:${toString vid}::1/64";
           };
         };
       };
@@ -82,12 +91,10 @@ let
       access = accessNodeFor vid;
       vlanId = accessTransitVlanFor vid;
       lname = "policy-access-${toString vid}";
-
-      access4 = "${tenantV4Base}.${toString vid}.2/30";
-      policy4 = "${tenantV4Base}.${toString vid}.3/30";
-
-      access6 = "${ulaPrefix}:${toString vid}:1::2/64";
-      policy6 = "${ulaPrefix}:${toString vid}:1::3/64";
+      members = [
+        policyNode
+        access
+      ];
     in
     {
       name = lname;
@@ -97,21 +104,79 @@ let
         carrier = "lan";
         vlanId = vlanId;
         name = lname;
-        members = [
-          policyNode
-          access
-        ];
+        members = members;
         endpoints = {
           "${access}" = {
             tenant = {
               vlanId = vid;
             };
-            addr4 = access4;
-            addr6 = access6;
+            addr4 = addr.mkP2P4 {
+              v4Base = tenantV4Base;
+              inherit vlanId members;
+              node = access;
+            };
+            addr6 = addr.mkP2P6 {
+              inherit ulaPrefix vlanId members;
+              node = access;
+            };
           };
+
           "${policyNode}" = {
-            addr4 = policy4;
-            addr6 = policy6;
+            addr4 = addr.mkP2P4 {
+              v4Base = tenantV4Base;
+              inherit vlanId members;
+              node = policyNode;
+            };
+            addr6 = addr.mkP2P6 {
+              inherit ulaPrefix vlanId members;
+              node = policyNode;
+            };
+          };
+        };
+      };
+    };
+
+  mkPolicyCore =
+    let
+      lname = "policy-core";
+      vlanId = corePolicyTransitVlan;
+      members = [
+        policyNode
+        coreNode
+      ];
+    in
+    {
+      name = lname;
+      value = {
+        kind = "p2p";
+        scope = "internal";
+        carrier = "lan";
+        vlanId = vlanId;
+        name = lname;
+        members = members;
+        endpoints = {
+          "${policyNode}" = {
+            addr4 = addr.mkP2P4 {
+              v4Base = tenantV4Base;
+              inherit vlanId members;
+              node = policyNode;
+            };
+            addr6 = addr.mkP2P6 {
+              inherit ulaPrefix vlanId members;
+              node = policyNode;
+            };
+          };
+
+          "${coreNode}" = {
+            addr4 = addr.mkP2P4 {
+              v4Base = tenantV4Base;
+              inherit vlanId members;
+              node = coreNode;
+            };
+            addr6 = addr.mkP2P6 {
+              inherit ulaPrefix vlanId members;
+              node = coreNode;
+            };
           };
         };
       };
@@ -121,32 +186,13 @@ let
     (lib.listToAttrs (map mkTenantLan tenantVlans))
     // (lib.listToAttrs (map mkPolicyAccess tenantVlans))
     // {
-      policy-core = {
-        kind = "p2p";
-        scope = "internal";
-        carrier = "lan";
-        vlanId = corePolicyTransitVlan;
-        name = "policy-core";
-        members = [
-          policyNode
-          coreNode
-        ];
-        endpoints = {
-          "${policyNode}" = {
-            addr4 = "${tenantV4Base}.255.2/30";
-            addr6 = "${ulaPrefix}:ffff::2/64";
-          };
-          "${coreNode}" = {
-            addr4 = "${tenantV4Base}.255.1/30";
-            addr6 = "${ulaPrefix}:ffff::1/64";
-          };
-        };
-      };
+      policy-core = (mkPolicyCore).value;
     };
 
 in
 {
   inherit ulaPrefix tenantV4Base;
-  domain = "lan.";
+  inherit domain;
   inherit nodes links;
+  inherit reservedVlans forbiddenVlanRanges;
 }

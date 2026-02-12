@@ -1,9 +1,11 @@
+# FILE: ./dev/debug-lib/20-topology-resolved.nix
 {
   sopsData ? { },
 }:
 let
   pkgs = null;
-  lib = import <nixpkgs/lib>;
+  flake = builtins.getFlake (toString ../../.);
+  lib = flake.lib;
   cfg = import ./inputs.nix { inherit sopsData; };
 
   raw = import ./10-topology-raw.nix { inherit sopsData; };

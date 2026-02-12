@@ -1,4 +1,3 @@
-# lib/routing/tenant-lan.nix
 { lib, ulaPrefix }:
 
 topo:
@@ -37,6 +36,9 @@ let
     in
     if candidates == [ ] then null else lib.head candidates;
 
+  tenantV4Base =
+    if topo ? tenantV4Base then topo.tenantV4Base else throw "tenant-lan: missing tenantV4Base in topo";
+
 in
 topo
 // {
@@ -49,6 +51,7 @@ topo
         vid = getTenantVid ep;
 
         ula64 = "${ulaPrefix}:${toString vid}::/64";
+        v4dst = "${tenantV4Base}.${toString vid}.0/24";
 
         gua64 = if delegatedV6 != null && vid != null then "${delegatedV6}:${toString vid}::/64" else null;
 
@@ -61,8 +64,13 @@ topo
           "${n}" =
             ep
             // {
+              # Explicit connected routes for access routers
+              routes4 = (ep.routes4 or [ ]) ++ lib.optional (vid != null) { dst = v4dst; };
+
+              routes6 = (ep.routes6 or [ ]) ++ lib.optional (vid != null) { dst = ula64; };
+
               ra6Prefixes = lib.unique (
-                (ep.ra6Prefixes or [ ]) ++ [ ula64 ] ++ lib.optional (gua64 != null) gua64
+                (ep.ra6Prefixes or [ ]) ++ lib.optional (vid != null) ula64 ++ lib.optional (gua64 != null) gua64
               );
             }
             // lib.optionalAttrs (guaAddr != null) {

@@ -1,9 +1,11 @@
+# FILE: ./dev/debug-lib/40-node.nix
 {
   sopsData ? { },
 }:
 let
   pkgs = null;
-  lib = import <nixpkgs/lib>;
+  flake = builtins.getFlake (toString ../../.);
+  lib = flake.lib;
   cfg = import ./inputs.nix { inherit sopsData; };
 
   node = "s-router-access-10";

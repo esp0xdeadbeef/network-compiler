@@ -1,15 +1,16 @@
-# lib/routing/policy-access.nix
+# FILE: ./lib/compile/routing/policy-access.nix
 {
   lib,
   ulaPrefix,
   tenantV4Base,
+  policyNodeName ? "s-router-policy-only",
 }:
 
 topo:
 
 let
   links = topo.links or { };
-  policyNode = "s-router-policy-only";
+  policyNode = policyNodeName;
 
   isPolicyAccess =
     lname: l:
@@ -20,7 +21,11 @@ let
   tenant4Dst = vid: "${tenantV4Base}.${toString vid}.0/24";
   tenant6DstUla = vid: "${ulaPrefix}:${toString vid}::/64";
 
+  # Aggregate ULA space (assumes ulaPrefix is /48 base like fd42:dead:beef)
+  ula48 = "${ulaPrefix}::/48";
+
   getEp = l: n: (l.endpoints or { }).${n} or { };
+
   setEp =
     l: n: ep:
     l
@@ -34,28 +39,6 @@ let
     ep:
     if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
 
-  # Find the "access-tenant-<vid>" LAN link for an access node, and return its endpoint.
-  tenantLanEpFor =
-    accessNode: vid:
-    let
-      lname = "access-tenant-${toString vid}";
-      l = links.${lname} or null;
-    in
-    if l == null then null else (l.endpoints or { }).${accessNode} or null;
-
-  # Convert "...::1/64" to "...::/64" (best-effort, deterministic for our synthesis)
-  prefix64FromHostAddr =
-    addr:
-    let
-      ip = stripCidr addr;
-    in
-    if ip == null then
-      null
-    else if lib.hasSuffix "::1" ip then
-      "${builtins.replaceStrings [ "::1" ] [ "::" ] ip}/64"
-    else
-      "${ip}/64";
-
 in
 topo
 // {
@@ -66,6 +49,7 @@ topo
     else
       let
         ms = l.members or [ ];
+
         accessNode = if lib.head ms == policyNode then builtins.elemAt ms 1 else lib.head ms;
 
         epAccess = getEp l accessNode;
@@ -73,22 +57,14 @@ topo
 
         vid = getTenantVid epAccess;
 
-        # gateways must be plain IPs, not CIDR strings
         gw4 = stripCidr epPolicy.addr4;
         gw6 = stripCidr epPolicy.addr6;
 
         via4toAccess = stripCidr epAccess.addr4;
         via6toAccess = stripCidr epAccess.addr6;
 
-        # Look up tenant LAN endpoint to fetch addr6Public synthesized by tenant-lan.nix
-        tenantLanEp = if vid == null then null else tenantLanEpFor accessNode vid;
-
-        tenantGuaPrefix =
-          if tenantLanEp != null && tenantLanEp ? addr6Public then
-            prefix64FromHostAddr tenantLanEp.addr6Public
-          else
-            null;
-
+        # Access router:
+        #  - default IPv4 via policy
         accessRoutes4 = [
           {
             dst = "0.0.0.0/0";
@@ -96,28 +72,28 @@ topo
           }
         ];
 
+        # Access router:
+        #  - route ALL internal ULAs to policy
+        #  - default IPv6 to policy
         accessRoutes6 = [
+          {
+            dst = ula48;
+            via6 = gw6;
+          }
           {
             dst = "::/0";
             via6 = gw6;
           }
         ];
 
-        policyRoutes4 = [
-          {
-            dst = tenant4Dst vid;
-            via4 = via4toAccess;
-          }
-        ];
+        # Policy router gets explicit per-tenant return routes
+        policyRoutes4 = lib.optional (vid != null) {
+          dst = tenant4Dst vid;
+          via4 = via4toAccess;
+        };
 
-        policyRoutes6 = [
-          {
-            dst = tenant6DstUla vid;
-            via6 = via6toAccess;
-          }
-        ]
-        ++ lib.optional (tenantGuaPrefix != null) {
-          dst = tenantGuaPrefix;
+        policyRoutes6 = lib.optional (vid != null) {
+          dst = tenant6DstUla vid;
           via6 = via6toAccess;
         };
       in

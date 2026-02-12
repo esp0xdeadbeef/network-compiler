@@ -1,6 +1,6 @@
 {
-  ulaPrefix ? "fd42:dead:beef",
-  tenantV4Base ? "10.10",
+  ulaPrefix,
+  tenantV4Base,
 }:
 
 let
@@ -20,6 +20,8 @@ let
     ];
     policyAccessTransitBase = 100;
     corePolicyTransitVlan = 200;
+
+    inherit ulaPrefix tenantV4Base;
   };
 
   resolved = import ./topology-resolve.nix {

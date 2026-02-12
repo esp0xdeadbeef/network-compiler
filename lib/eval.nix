@@ -3,13 +3,19 @@
 { topology }:
 
 let
-  # evaluate user-supplied topology (pure, no env, no <nixpkgs>, no absolute paths)
   raw = if builtins.isFunction topology then topology { inherit lib; } else topology;
 
+  ulaPrefix =
+    if raw ? ulaPrefix then raw.ulaPrefix else throw "evalNetwork: topology must define 'ulaPrefix'";
+
+  tenantV4Base =
+    if raw ? tenantV4Base then
+      raw.tenantV4Base
+    else
+      throw "evalNetwork: topology must define 'tenantV4Base'";
+
   resolved = import ./topology-resolve.nix {
-    inherit lib;
-    ulaPrefix = raw.ulaPrefix or "fd42:dead:beef";
-    tenantV4Base = raw.tenantV4Base or "10.10";
+    inherit lib ulaPrefix tenantV4Base;
   } raw;
 
   compiled = import ./compile/compile.nix {

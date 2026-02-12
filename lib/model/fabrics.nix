@@ -4,26 +4,8 @@ let
   inRange = r: vid: vid >= r.from && vid <= r.to;
 
   fabrics = [
-    {
-      key = "legacy";
-      range = {
-        from = 2;
-        to = 9;
-      };
-      plane = "legacy";
-      trust = "none";
-      role = "legacy/quarantine";
-      defaults = {
-        kind = "lan";
-        dhcp4 = true;
-        ra6 = false;
-        routable = true;
-        transit = false;
-        dns = true;
-        reverseDns = false;
-        mtu = 1500;
-      };
-    }
+
+    # ---------- Real fabrics only ----------
 
     {
       key = "control";
@@ -171,6 +153,7 @@ let
         mtu = 1500;
       };
     }
+
     {
       key = "observability";
       range = {
@@ -182,8 +165,8 @@ let
       role = "telemetry";
       defaults = {
         kind = "lan";
-        dhcp4 = false; # usually static sensors, tweak as desired
-        ra6 = false; # generally no SLAAC unless you want it
+        dhcp4 = false;
+        ra6 = false;
         routable = true;
         transit = false;
         dns = true;
@@ -214,6 +197,7 @@ let
         ipv6PrefixLen = 127;
       };
     }
+
     {
       key = "core-transit";
       range = {
@@ -238,7 +222,7 @@ let
     }
 
     {
-      key = "legacy-upstream";
+      key = "upstream-l2";
       range = {
         from = 1000;
         to = 4094;
@@ -271,14 +255,14 @@ in
     let
       f = getFabric vid;
     in
-    if f == null then throw "fabrics: VLAN ${toString vid} not in any defined range" else f;
+    if f == null then null else f;
 
   fabricKeyForVlan =
     vid:
     let
       f = getFabric vid;
     in
-    if f == null then throw "fabrics: VLAN ${toString vid} not in any defined range" else f.key;
+    if f == null then null else f.key;
 
   applyDefaults =
     vid: attrs:

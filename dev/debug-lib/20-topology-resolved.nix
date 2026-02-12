@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -10,4 +12,3 @@ import ../../lib/topology-resolve.nix {
   inherit lib;
   inherit (cfg) ulaPrefix tenantV4Base;
 } raw
-

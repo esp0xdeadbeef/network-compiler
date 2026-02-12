@@ -1,9 +1,8 @@
 throw ''
-Do not import internal paths from nixos-network-compiler.
+  Do not import internal paths from nixos-network-compiler.
 
-Use:
-  inputs.fabric.lib.evalNetwork
+  Use:
+    inputs.fabric.lib.evalNetwork
 
-Internal layout is not stable.
+  Internal layout is not stable.
 ''
-

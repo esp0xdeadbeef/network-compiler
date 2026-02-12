@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -26,4 +28,3 @@ in
   wan = import ./50-wan.nix { inherit sopsData; };
   multiWan = import ./60-multi-wan.nix { inherit sopsData; };
 }
-

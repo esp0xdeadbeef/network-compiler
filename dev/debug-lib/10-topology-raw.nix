@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -13,4 +15,3 @@ import ../../lib/topology-gen.nix { inherit lib; } {
     tenantV4Base
     ;
 }
-

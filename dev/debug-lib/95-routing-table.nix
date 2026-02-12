@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -27,4 +29,3 @@ lib.listToAttrs (
     value = mk n;
   }) (lib.attrNames routed.nodes)
 )
-

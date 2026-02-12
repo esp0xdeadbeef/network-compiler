@@ -1,4 +1,6 @@
-{ sopsData ? {} }:
+{
+  sopsData ? { },
+}:
 let
   pkgs = null;
   lib = import <nixpkgs/lib>;
@@ -61,9 +63,20 @@ base
   };
 
   nodes = base.nodes // {
-    "s-nebula-control" = { ifs = { nebula = "nebula0"; }; };
-    "s-nebula-service" = { ifs = { nebula = "nebula0"; }; };
-    "s-nebula-lab"     = { ifs = { nebula = "nebula0"; }; };
+    "s-nebula-control" = {
+      ifs = {
+        nebula = "nebula0";
+      };
+    };
+    "s-nebula-service" = {
+      ifs = {
+        nebula = "nebula0";
+      };
+    };
+    "s-nebula-lab" = {
+      ifs = {
+        nebula = "nebula0";
+      };
+    };
   };
 }
-

@@ -1,344 +1,148 @@
-# Router Architecture & Routing Policy
+# nixos-network-compiler
 
-This repository contains a **layered, deterministic, IPv6-first routing architecture**, implemented as a **pure Nix library** and consumed by multiple NixOS systems and containers.
+A pure Nix network topology compiler.
 
-The goal is **not abstraction for abstraction’s sake**, but:
+This repository defines a deterministic pipeline:
 
-* explicit control
-    
-* predictable failure modes
-    
-* auditable routing and policy decisions
-    
-* clear responsibility boundaries between components
-    
+topology → resolution → routing → rendering
 
-The design explicitly accounts for **real-world upstream constraints** (single-address WANs, VPN providers, delegated prefixes, NAT requirements) while keeping the internal topology **stable, explainable, and debuggable**.
+It produces structured network graphs and systemd-networkd
+configurations without builds, without runtime state, and without
+impure evaluation.
 
-* * *
+There is no legacy compatibility layer.
+There is no historical migration logic.
+There is no implicit behavior.
 
-## Repository Scope
+Everything is explicit and reproducible.
 
-This directory (`library/100-fabric-routing`) is **not a full system configuration**.
+---
 
-It provides:
+## Design Principles
 
-* **pure data** (topology, VLAN semantics, addressing rules)
-    
-* **derivation logic** (turning topology into networkd + sysctl config)
-    
-* **debug harnesses** for evaluation without building a system
-    
+- Pure evaluation
+- Deterministic outputs
+- No file I/O inside the library
+- No environment variable reads
+- No hidden defaults
+- No legacy abstractions
 
-Actual machines and containers **import this library** and render only the pieces they need.
+The compiler operates entirely on data structures.
 
-* * *
+---
 
-## Core Principles (Non-Negotiable)
+## Pipeline
 
-* Each component has **one clearly defined responsibility**
-    
-* **Policy lives in exactly one place**: `router-policy-only`
-    
-* Routing decisions are **explicit and auditable**
-    
-* NAT is a **compatibility shim**, never a design primitive
-    
-* Internal addressing remains **stable**, regardless of upstream changes
-    
-* No implicit RA or DHCPv6 on transit links
-    
-* Transport is dumb; policy is centralized
-    
+### 1. Topology
 
-> If a behavior cannot be explained by reading a single intent or topology file, it is considered a design failure.
+`lib/topology-gen.nix`
 
-* * *
+Defines:
 
-## High-Level Architecture
+- Nodes
+- Links
+- VLAN allocation
+- Address allocation
 
-Core routers terminate upstreams.  
-`router-policy-only` is the **only policy router**.  
-Fabric is **pure transport**.  
-Access routers serve clients.
+Links use:
 
-```mermaid
-flowchart TB
-    ISP["ISP WAN<br/>(PPPoE, DHCPv6-PD)"]
-    VPNP["VPN Providers<br/>(WireGuard / OpenVPN)"]
+- `kind = "lan"` for broadcast segments
+- `kind = "p2p"` for point-to-point links
+- `carrier = "lan" | "wan" | "nebula"`
+- `scope = "internal" | "external"`
 
-    CW["router-core-wan<br/>
-    - Terminates ISP<br/>
-    - Owns public v4 + delegated v6<br/>
-    - Default route → ISP<br/>
-    - Upstream shim only"]
+---
 
-    CVA["router-core-*<br/>
-    - Terminates VPN A<br/>
-    - Owns provider IPs<br/>
-    - Default route → tunnel"]
+### 2. Resolution
 
-    E["router-policy-only<br/>
-    - ONLY policy router<br/>
-    - Firewall & segmentation<br/>
-    - Policy routing / kill-switch<br/>
-    - Service selection"]
+`lib/topology-resolve.nix`
 
-    F["transport-fabric<br/>
-    - VLAN trunks / bridges<br/>
-    - No policy<br/>
-    - No NAT"]
+Normalizes and enriches topology:
 
-    A["router-access-*<br/>
-    - VLAN gateways<br/>
-    - RA/SLAAC (/64)<br/>
-    - DHCPv4 optional"]
+- Expands endpoints
+- Computes interface structures
+- Prepares for routing stage
 
-    C["Clients"]
+---
 
-    ISP --> CW
-    VPNP --> CVA
+### 3. Routing
 
-    CW <-->|"p2p transit<br/>/31 + ULA /127"| E
-    CV <-->|"p2p transit"| E
+`lib/compile/routing-gen.nix`
 
-    E --> F
-    F --> A
-    A --> C
-```
+Adds:
 
-* * *
+- Default routes
+- Tenant subnet routes
+- Core routing rules
+- RA prefixes
 
-## Addressing Model
+No routing logic exists in topology.
+No topology logic exists in routing.
 
-### Internal Addressing (Stable)
+---
 
-All internal infrastructure and VLANs live under a single ULA block:
+### 4. Rendering
 
-```
-fd42:dead:beef::/48
-```
+`lib/render/networkd`
 
-Each VLAN receives a dedicated `/64`.  
-These assignments **never depend on upstream state**.
+Transforms compiled graph into systemd-networkd definitions.
 
-* * *
+Rendering is mechanical.
+No routing decisions are made here.
 
-### Inter-Router Transit Links
+---
 
-Transit links never assign host address `.0` (or `::0`);
-endpoints are consistently placed at `.2/.3` regardless of prefix size.
+## Debugging
 
-* IPv4: `/31` (preferred) or `/29`
-* IPv6: `/127` (preferred) or `/64`
+Debug output is pure.
 
-`router-policy-only` → address at offset `+2` within the transit prefix.
+Run:
 
-### IPv4 examples
-* `/31`: usable space is `{2 (policy engine), 3 (other side)}`
-* `/29`: usable space is `{2 (policy engine), 3 (other side)}`
+    ./dev/debug.sh
 
-### IPv6 examples
-* `/127`: `::2` / `::3`
-* `/64` (router-only):
-  * `::2` policy
-  * `::3` peer
+Optional secrets injection:
 
-Rules:
+    ./dev/debug.sh ../../secrets/file.yaml
 
-* RA **disabled**
-* DHCPv6 **disabled**
-* No prefix delegation
-* One VLAN per adjacency
-* Routers only — no hosts
+Secrets are passed as JSON.
+The compiler never reads files.
+The compiler never reads environment variables.
 
-Transit exists solely to move packets between policy domains.
+---
 
-* * *
+## Topology Model
 
-## Responsibility Boundaries
+### Nodes
 
-### Core Routers
+    {
+      ifs = {
+        lan = "lan0";
+        wan = "wan0";
+      };
+    }
 
-Core routers exist to **terminate upstreams**.
+### Links
 
-They may:
-* hold provider-assigned addresses
-* maintain a default route
-* perform the **minimum translation or redirect required** by the upstream
-    
+    {
+      kind = "lan" | "p2p";
+      scope = "internal" | "external";
+      carrier = "...";
+      vlanId = 123;
+      members = [ "node-a" "node-b" ];
+      endpoints = { ... };
+    }
 
-They must **never**:
-* make service-level decisions
-* implement segmentation or firewall policy
-* perform selective port forwarding
-    
+---
 
-* * *
+## What This Repository Is Not
 
-### `router-policy-only`
+- Not a deployment framework
+- Not a secrets manager
+- Not a runtime orchestrator
+- Not a legacy migration layer
 
-This is the **only policy engine**.
+It is a compiler.
 
-Responsibilities include:
-* firewall rules
-* segmentation
-* service exposure
-* policy routing / kill-switch semantics
-* DNS egress enforcement
-* per-VLAN and per-host classification
+## License
 
-All policy lives here. Nowhere else.
-
-* * *
-
-### Fabric & Access
-
-* **Fabric**: VLAN trunks, bridges, pure transport
-* **Access routers**:
-    * act as VLAN gateways
-    * provide RA/SLAAC
-    * optional DHCPv4
-    * no policy logic
-
-* * *
-
-## NAT Is Not Policy
-
-NAT exists **only** to compensate for upstream limitations.
-
-### Case A: Routed Prefix Upstream
-
-* No NAT required
-    
-* Core routes prefix → `router-policy-only`
-    
-* Policy router routes to access VLANs
-    
-
-### Case B: Single-Address Upstream (`/32` or `/128`)
-
-* Address terminates on the core (provider adjacency)
-    
-* Core performs a **coarse redirect** to `router-policy-only`
-    
-* `router-policy-only` decides:
-    * which services exist
-    * where they go
-    * whether they are reachable
-
-> The core makes the uplink usable.  
-> The policy router decides everything else.
-
-* * *
-
-## Transitional Reality: `core-isp` Container
-
-During development, a **temporary core-isp container** exists to avoid downtime.
-
-Current state:
-
-* A legacy WAN VLAN (`lan1010`) exists
-    
-* IPv4 `/29` (`10.255.255.2/29 → 10.255.255.1`) is used temporarily
-    
-* This is **explicitly transitional**
-    
-* Final design removes reliance on this path once policy rules are complete
-    
-
-This compromise is documented to avoid accidental normalization.
-
-* * *
-
-## Library Structure
-
-```text
-lib/
-├── fabrics.nix            # VLAN ranges → semantic meaning
-├── topology.nix           # Nodes, links, memberships (truth)
-├── addressing.nix         # Deterministic p2p addressing
-├── get-attrs.nix          # VLAN attribute synthesis
-├── mk-links-from-topo.nix # L2/L2.5 rendering (VLANs, bridges)
-├── mk-l3-from-topo.nix    # L3 rendering (addresses, routes, sysctls)
-├── mk-networkd-vlans.nix  # Legacy helper
-└── site-defaults.nix
-```
-
-### Debug Harness
-
-```text
-debug/
-├── debug-eval.nix   # Minimal evalModules harness
-├── run.sh           # nix eval wrapper
-├── fabrics.nix      # fabric testing
-├── get-attrs.nix    # attribute synthesis testing
-```
-
-These allow **fast iteration without building systems**.
-
-* * *
-
-## VLAN Semantics
-
-Authoritative VLAN meaning lives in:
-
-```
-ROUTING-POLICY.md
-```
-
-That document defines:
-
-* trust levels
-    
-* allowed flows
-    
-* threat assumptions
-    
-* reserved ranges
-    
-
-The code **consumes** these semantics; it does not redefine them.
-
-* * *
-
-## Design Rationale
-
-This architecture exists to avoid:
-
-* NAT being used as policy
-    
-* implicit WAN/VPN fallback
-    
-* DNS leaks under failure
-    
-* “it works but nobody knows why” configurations
-    
-
-It accepts that upstreams are imperfect — and **contains the damage**:
-
-* internal topology stays stable
-    
-* policy remains centralized
-    
-* upstream constraints are handled explicitly
-    
-
-* * *
-
-## Final Contract
-
-* **Topology is truth**
-    
-* **Semantics are explicit**
-    
-* **Policy is centralized**
-    
-* **Rendering is mechanical**
-    
-* **Debugging must be possible without guessing**
-    
-
-If a route, NAT rule, or firewall decision cannot be explained by pointing to a **single file**, the design is incomplete.
-
-
+MIT

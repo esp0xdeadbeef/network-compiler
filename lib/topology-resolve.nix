@@ -43,29 +43,24 @@ let
 
   linkNamesForNode =
     nodeName:
-    lib.filter
-      (lname: lib.elem nodeName ((links.${lname}.members or [ ])))
-      (lib.attrNames links);
+    lib.filter (lname: lib.elem nodeName ((links.${lname}.members or [ ]))) (lib.attrNames links);
 
   interfacesForNode =
     nodeName:
     lib.listToAttrs (
-      map
-        (lname: {
-          name = lname;
-          value = mkIface lname links.${lname} nodeName;
-        })
-        (linkNamesForNode nodeName)
+      map (lname: {
+        name = lname;
+        value = mkIface lname links.${lname} nodeName;
+      }) (linkNamesForNode nodeName)
     );
 
-  nodes' =
-    lib.mapAttrs
-      (n: node:
-        node
-        // {
-          interfaces = interfacesForNode n;
-        })
-      nodes;
+  nodes' = lib.mapAttrs (
+    n: node:
+    node
+    // {
+      interfaces = interfacesForNode n;
+    }
+  ) nodes;
 
 in
 topoRaw
@@ -73,4 +68,3 @@ topoRaw
   inherit ulaPrefix tenantV4Base;
   nodes = nodes';
 }
-

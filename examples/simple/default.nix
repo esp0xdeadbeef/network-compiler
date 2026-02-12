@@ -12,4 +12,3 @@ import ../../lib/topology-gen.nix { inherit lib; } {
     tenantV4Base
     ;
 }
-

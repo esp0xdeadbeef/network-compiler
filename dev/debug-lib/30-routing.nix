@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/30-routing.nix
 {
   sopsData ? { },
 }:

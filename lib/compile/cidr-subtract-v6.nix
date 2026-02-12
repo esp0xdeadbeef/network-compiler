@@ -1,4 +1,3 @@
-# FILE: ./lib/compile/cidr-subtract-v6.nix
 { lib }:
 
 let

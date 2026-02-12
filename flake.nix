@@ -1,4 +1,3 @@
-# FILE: ./flake.nix
 {
   description = "NixOS network topology compiler";
 

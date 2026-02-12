@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/90-all.nix
 {
   sopsData ? { },
 }:

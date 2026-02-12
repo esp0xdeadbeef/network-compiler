@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/70-render-networkd.nix
 {
   sopsData ? { },
 }:

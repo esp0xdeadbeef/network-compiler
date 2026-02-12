@@ -1,4 +1,3 @@
-# FILE: ./lib/model/addressing.nix
 { lib }:
 
 let

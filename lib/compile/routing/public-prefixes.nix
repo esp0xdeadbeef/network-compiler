@@ -1,4 +1,3 @@
-# FILE: ./lib/compile/routing/public-prefixes.nix
 { lib }:
 
 let

@@ -1,4 +1,3 @@
-# FILE: ./lib/compile/cidr-substract.nix
 { lib }:
 
 let

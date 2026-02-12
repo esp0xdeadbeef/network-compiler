@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/60-multi-wan.nix
 {
   sopsData ? { },
 }:

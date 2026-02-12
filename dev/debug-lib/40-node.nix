@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/40-node.nix
 {
   sopsData ? { },
 }:

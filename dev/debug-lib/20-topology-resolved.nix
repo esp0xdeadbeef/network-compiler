@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/20-topology-resolved.nix
 {
   sopsData ? { },
 }:

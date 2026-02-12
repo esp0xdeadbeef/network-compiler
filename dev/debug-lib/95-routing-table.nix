@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/95-routing-table.nix
 {
   sopsData ? { },
 }:

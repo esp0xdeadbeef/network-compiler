@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/debug-eval.nix
 {
   sopsData ? { },
 }:

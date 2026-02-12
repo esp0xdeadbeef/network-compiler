@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/10-topology-raw.nix
 {
   sopsData ? { },
 }:

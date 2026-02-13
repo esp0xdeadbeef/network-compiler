@@ -1,3 +1,4 @@
+# ./lib/compile/routing/public-prefixes.nix
 { lib }:
 
 let
@@ -8,26 +9,29 @@ let
   is6 = p: lib.hasInfix ":" p;
   isCidr = s: builtins.isString s && (lib.hasInfix "/" s);
 
+in
+
+topo:
+
+let
+  defaultRouteMode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
+
+  # Only compute decomposed internet space when explicitly requested
+  doComputed = defaultRouteMode == "computed";
+
   collectFromEndpoint =
     ep:
     (lib.optional (ep ? addr4) ep.addr4)
     ++ (lib.optional (ep ? addr6) ep.addr6)
     ++ (lib.optional (ep ? addr6Public) ep.addr6Public);
 
-  collectOwned =
-    topo:
-    lib.flatten (
-      lib.mapAttrsToList (
-        _: l: lib.flatten (lib.mapAttrsToList (_: ep: collectFromEndpoint ep) (l.endpoints or { }))
-      ) (topo.links or { })
-    );
+  collectOwned = lib.flatten (
+    lib.mapAttrsToList (
+      _: l: lib.flatten (lib.mapAttrsToList (_: ep: collectFromEndpoint ep) (l.endpoints or { }))
+    ) (topo.links or { })
+  );
 
-in
-
-topo:
-
-let
-  ownedRaw = collectOwned topo;
+  ownedRaw = collectOwned;
   owned = lib.unique (lib.filter isCidr ownedRaw);
 
   owned4 = lib.filter is4 owned;
@@ -49,10 +53,26 @@ let
     "fc00::/7"
     "fe80::/10"
     "::1/128"
+    "::/128"
   ];
 
-  internet4 = cidrSubtract4 (reserved4 ++ owned4);
-  internet6 = cidrSubtract6 (reserved6 ++ owned6);
+  internet4 =
+    if doComputed then
+      cidrSubtract4 {
+        universe = "0.0.0.0/0";
+        blockedCidrs = reserved4 ++ owned4;
+      }
+    else
+      [ "0.0.0.0/0" ];
+
+  internet6 =
+    if doComputed then
+      cidrSubtract6 {
+        universe = "::/0";
+        blockedCidrs = reserved6 ++ owned6;
+      }
+    else
+      [ "::/0" ];
 
 in
 {

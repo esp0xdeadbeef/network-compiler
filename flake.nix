@@ -1,36 +1,52 @@
+# ./flake.nix
 {
   description = "NixOS network topology compiler";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    lib-net = {
-      url = "https://gist.github.com/duairc/5c9bb3c922e5d501a1edb9e7b3b845ba/archive/3885f7cd9ed0a746a9d675da6f265d41e9fd6704.tar.gz";
-      flake = false;
-    };
   };
 
   outputs =
     {
       self,
       nixpkgs,
-      lib-net,
     }:
     let
-      baseLib = nixpkgs.lib;
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
 
-      extendedLib = baseLib.recursiveUpdate baseLib (
-        import ./lib/nix-lib-net/net-extensions.nix {
-          lib = baseLib;
-          libNet = (import "${lib-net}/net.nix" { lib = baseLib; }).lib.net;
-        }
-      );
+      forAllSystems =
+        f:
+        nixpkgs.lib.genAttrs systems (
+          system:
+          let
+            pkgs = import nixpkgs { inherit system; };
+          in
+          f pkgs
+        );
     in
     {
-      lib = extendedLib // {
-        evalNetwork = import ./lib/eval.nix { lib = extendedLib; };
-      };
+      lib =
+        let
+          baseLib = nixpkgs.lib;
+        in
+        baseLib
+        // {
+          net = baseLib.net;
+        };
+
+      evalNetwork = import ./lib/eval.nix { };
 
       nixosModules.default = import ./modules/networkd-from-topology.nix;
+
+      checks = forAllSystems (pkgs: {
+        network-lib-tests = pkgs.runCommand "network-lib-tests" { } ''
+          export NIX_PATH=nixpkgs=${nixpkgs}
+          bash ${nixpkgs}/lib/tests/network.sh
+          touch $out
+        '';
+      });
     };
 }

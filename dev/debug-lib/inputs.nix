@@ -29,20 +29,23 @@ let
       isp-1 = {
         kind = "wan";
         carrier = "wan";
-        vlanId = 6;
+        vlanId = 4;
         name = "isp-1";
         members = [ "s-router-core-wan" ];
         endpoints = {
           "s-router-core-wan" = {
-            addr6 = "2001:db8:1::2/48";
+            addr4 = "10.11.0.40/24";
+            addr6 = "fd11:dead:beef:0::1337/64";
 
-            routes6 =
-              if defaultRouteMode == "default" then
-                [
-                  { dst = "::/0"; }
-                ]
-              else
-                [ ];
+            routes6 = [
+              { dst = "::/0"; }
+              {
+                dst = "0.0.0.0/0";
+                nat = true;
+                gateway = "10.11.0.1/24";
+              }
+            ];
+
           };
         };
       };
@@ -55,15 +58,16 @@ let
         members = [ "s-router-core-wan" ];
         endpoints = {
           "s-router-core-wan" = {
-            addr6 = "2001:db8:2::2/48";
+            addr4 = "10.13.0.40/24";
+            addr6 = "fd13:dead:beef:0::1337/64";
 
-            routes6 =
-              if defaultRouteMode == "default" then
-                [
-                  { dst = "::/0"; }
-                ]
-              else
-                [ ];
+            routes6 = [
+              {
+                dst = "::/0";
+                nat = true;
+                gateway = "10.13.0.1/24";
+              }
+            ];
           };
         };
       };

@@ -1,4 +1,3 @@
-# lib/routing/upstreams.nix
 { lib }:
 
 topo:

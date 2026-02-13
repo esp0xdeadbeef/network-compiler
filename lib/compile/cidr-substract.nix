@@ -1,12 +1,9 @@
-# ./lib/compile/cidr-substract.nix
 { lib }:
 
 args:
 
 let
-  # Accept either:
-  #   - [ "10.0.0.0/8" ... ]
-  #   - { universe = "0.0.0.0/0"; blockedCidrs = [ ... ]; }
+
   blockedCidrs =
     if builtins.isList args then
       args
@@ -17,7 +14,6 @@ let
 
   universeCidr = if builtins.isAttrs args && args ? universe then args.universe else "0.0.0.0/0";
 
-  # Small pow2 for n <= 8 (kept generic)
   pow2 = n: lib.foldl' (acc: _: acc * 2) 1 (builtins.genList (_: null) n);
 
   parseOctet =
@@ -62,7 +58,6 @@ let
       full = builtins.div len 8;
       rem = len - (full * 8);
 
-      # mask keeps the top rem bits: ((2^rem - 1) << (8-rem))
       mask = if rem == 0 then 0 else (pow2 rem - 1) * (pow2 (8 - rem));
 
       segs = c.segs;
@@ -91,7 +86,6 @@ let
   contains4 =
     super: sub: (sub.len >= super.len) && (canonicalize4 super).segs == (maskToLen4 sub super.len).segs;
 
-  # Set bit at index bitIndex in [0..31], where bitIndex=0 is MSB of first octet.
   setBit4 =
     segs: bitIndex:
     let
@@ -135,8 +129,6 @@ let
     in
     "${ip}/${toString c.len}";
 
-  # Subtract one blocked prefix b from one prefix p.
-  # Returns a list of remaining prefixes.
   subtractPrefix4 =
     p: b:
     let
@@ -144,10 +136,10 @@ let
       b' = canonicalize4 b;
     in
     if contains4 b' p' then
-      [ ] # fully blocked
+      [ ]
     else if contains4 p' b' then
       if p'.len == b'.len then
-        [ ] # exact match
+        [ ]
       else
         let
           halves = split4 p';
@@ -159,13 +151,13 @@ let
         else if contains4 right b' then
           (subtractPrefix4 right b') ++ [ left ]
         else
-          # should never happen for canonical CIDRs, but keep total
+
           [
             left
             right
           ]
     else
-      [ p' ]; # disjoint
+      [ p' ];
 
   subtractOne4 = acc: block: lib.flatten (map (p: subtractPrefix4 p block) acc);
 

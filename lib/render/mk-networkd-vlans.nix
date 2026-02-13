@@ -1,4 +1,3 @@
-# lib/mk-networkd-vlans.nix
 { lib, topo }:
 
 let
@@ -13,12 +12,9 @@ in
 }:
 
 {
-  ############################
-  # NETDEVS
-  ############################
+
   netdevs = lib.mkMerge (
 
-    # transit VLANs ONLY
     (map (vid: {
       "lan-vlan-${toString vid}" = {
         netdevConfig = {
@@ -36,7 +32,6 @@ in
       };
     }) transitVlans)
 
-    # wan VLAN
     ++ [
       {
         "wan-vlan-${toString wanVlan}" = {
@@ -57,12 +52,8 @@ in
     ]
   );
 
-  ############################
-  # NETWORKS
-  ############################
   networks = lib.mkMerge (
 
-    # attach transit VLANs to lan
     (map (vid: {
       "10-${lanIf}-transit-vlan-${toString vid}" = {
         matchConfig.Name = lanIf;
@@ -84,7 +75,6 @@ in
       };
     }) transitVlans)
 
-    # wan wiring
     ++ [
       {
         "40-${wanIf}-vlan" = {

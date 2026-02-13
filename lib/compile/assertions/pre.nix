@@ -1,4 +1,3 @@
-# ./lib/compile/assertions/pre.nix
 {
   lib,
   policyNodeName,

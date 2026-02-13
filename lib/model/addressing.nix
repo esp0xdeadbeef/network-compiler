@@ -1,4 +1,3 @@
-# ./lib/model/addressing.nix
 { lib }:
 
 let
@@ -75,8 +74,6 @@ let
         prefixLength = lib.toInt (builtins.elemAt parts 1);
       };
 
-  # ---------------- IPv4 ----------------
-
   parseOctet =
     s:
     let
@@ -126,8 +123,6 @@ let
       addr = intToIPv4 (baseInt + hostIndex);
     in
     "${addr}/${toString c.prefixLength}";
-
-  # ---------------- IPv6 (segment-based, no big ints) ----------------
 
   hexToInt = s: if s == "" then 0 else (builtins.fromTOML "x = 0x${s}").x;
 

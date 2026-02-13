@@ -28,7 +28,7 @@ in
       units = lib.mapAttrsToList (
         linkName: iface:
         mkUnits {
-          all = all'; # ← THIS WAS THE BUG
+          all = all';
           inherit nodeName linkName iface;
         }
       ) ifaces;

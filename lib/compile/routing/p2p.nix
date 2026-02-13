@@ -1,4 +1,3 @@
-# lib/routing/p2p.nix
 { lib }:
 
 {

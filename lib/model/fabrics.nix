@@ -5,8 +5,6 @@ let
 
   fabrics = [
 
-    # ---------- Real fabrics only ----------
-
     {
       key = "control";
       range = {

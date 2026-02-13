@@ -1,4 +1,3 @@
-# tests/cases/negative.nix
 { lib }:
 
 let

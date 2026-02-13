@@ -1,4 +1,3 @@
-# lib/routing/helpers.nix
 {
   lib,
   ulaPrefix,

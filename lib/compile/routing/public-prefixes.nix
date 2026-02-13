@@ -1,4 +1,3 @@
-# ./lib/compile/routing/public-prefixes.nix
 { lib }:
 
 let
@@ -16,7 +15,6 @@ topo:
 let
   defaultRouteMode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
 
-  # Only compute decomposed internet space when explicitly requested
   doComputed = defaultRouteMode == "computed";
 
   collectFromEndpoint =

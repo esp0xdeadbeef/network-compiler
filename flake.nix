@@ -1,4 +1,3 @@
-# ./flake.nix
 {
   description = "NixOS network topology compiler";
 
@@ -34,7 +33,6 @@
         net = baseLib.net;
       };
 
-      # FIX: pass required { lib } argument to eval.nix
       evalNetwork = import ./lib/eval.nix { lib = baseLib; };
 
       nixosModules.default = import ./modules/networkd-from-topology.nix;
@@ -81,7 +79,6 @@
               touch $out
             '';
 
-        # Restored: routing semantics / convergence invariants (positive)
         nixos-network-compiler-routing-semantics =
           pkgs.runCommand "nixos-network-compiler-routing-semantics" { }
             ''

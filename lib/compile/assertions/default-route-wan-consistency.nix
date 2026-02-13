@@ -1,4 +1,3 @@
-# ./lib/compile/assertions/default-route-wan-consistency.nix
 { lib }:
 
 topo:

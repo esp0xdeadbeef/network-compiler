@@ -1,4 +1,3 @@
-# ./lib/compile/assertions/post.nix
 {
   lib,
   policyNodeName,
@@ -47,7 +46,7 @@ let
   accessHasExpectedDefaults = lib.all (
     l:
     let
-      # access node is "the other member" of the p2p
+
       ms = l.members or [ ];
       accessNode = if lib.head ms == policyNodeName then builtins.elemAt ms 1 else lib.head ms;
       epA = getEp l accessNode;
@@ -60,15 +59,13 @@ let
       hasDefault4 = has0 (r: (r.dst or "") == "0.0.0.0/0") r4;
       hasDefault6 = has0 (r: (r.dst or "") == "::/0") r6;
 
-      # in computed mode, you expect *some* routes4 and routes6 (not necessarily /0),
-      # and in blackhole mode you expect none of the internet defaults (routes4 empty; routes6 still has ula48 from policy-access stage).
       ok =
         if mode == "default" then
           hasDefault4 && hasDefault6
         else if mode == "computed" then
           (r4 != [ ]) && (r6 != [ ])
         else
-          # blackhole
+
           (r4 == [ ]) && (!hasDefault6);
     in
     ok

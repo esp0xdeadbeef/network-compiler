@@ -1,11 +1,9 @@
-# lib/routing/wan-detection.nix
 { lib }:
 
 links:
 
 let
-  # Normalize an addr6 like "2001:db8:1234::2/48"
-  # into a pure /48 base: "2001:db8:1234"
+
   normalize48 =
     addr:
     let

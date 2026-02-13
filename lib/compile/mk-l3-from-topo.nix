@@ -1,4 +1,3 @@
-# lib/mk-l3-from-topo.nix
 {
   lib,
   pkgs,
@@ -12,7 +11,6 @@ let
   links = topo.links or { };
   addr = import ./addressing.nix { inherit lib; };
 
-  # MUST match mk-links-from-topo.nix exactly
   shortHash = s: builtins.substring 0 4 (builtins.hashString "sha256" s);
 
   kernelBridgeName =

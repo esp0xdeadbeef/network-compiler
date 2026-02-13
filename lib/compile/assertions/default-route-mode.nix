@@ -1,4 +1,3 @@
-# ./lib/compile/assertions/default-route-mode.nix
 { lib }:
 
 topo:

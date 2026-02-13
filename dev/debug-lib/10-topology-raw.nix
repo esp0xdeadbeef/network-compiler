@@ -15,4 +15,6 @@ import ../../lib/topology-gen.nix { inherit lib; } {
     ulaPrefix
     tenantV4Base
     ;
+
+  forbiddenVlanRanges = cfg.forbiddenVlanRanges or [ ];
 }

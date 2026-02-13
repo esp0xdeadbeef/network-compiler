@@ -23,3 +23,4 @@
 Should use the official nix.networking ipv6 addresses, not invent the wheel, never ever invent the wheel self. If you have a library, use it!
 
 
+grep -R for lan (dns names) 

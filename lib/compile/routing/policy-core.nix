@@ -1,4 +1,3 @@
-# ./lib/compile/routing/policy-core.nix
 {
   lib,
   ulaPrefix,
@@ -36,7 +35,6 @@ let
     ep:
     if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
 
-  # discover tenant VLANs by scanning policy-access links
   tenantVids = lib.unique (
     lib.filter (x: x != null) (
       lib.concatMap (
@@ -94,7 +92,6 @@ topo
         via4toPolicy = stripCidr epPolicy.addr4;
         via6toPolicy = stripCidr epPolicy.addr6;
 
-        # core must know how to reach every tenant via policy
         coreRoutes4 = map (vid: {
           dst = tenant4Dst vid;
           via4 = via4toPolicy;
@@ -104,7 +101,6 @@ topo
           via6 = via6toPolicy;
         }) tenantVids;
 
-        # policy's upstream defaults (or computed prefixes) go via core
         policyUp4 = map (r: r // { via4 = stripCidr epCore.addr4; }) policyDefaults4;
         policyUp6 = map (r: r // { via6 = stripCidr epCore.addr6; }) policyDefaults6;
       in

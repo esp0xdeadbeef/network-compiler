@@ -1,11 +1,10 @@
-# ./tests/evaluate-positive.nix
 { lib }:
 
 let
-  # Automatically load all positive test cases from ./tests/cases
+
   casesDir = ./cases;
 
-  caseNames = lib.filter (name: lib.hasSuffix ".nix" name) (
+  caseNames = lib.filter (name: lib.hasSuffix ".nix" name && name != "negative.nix") (
     builtins.attrNames (builtins.readDir casesDir)
   );
 

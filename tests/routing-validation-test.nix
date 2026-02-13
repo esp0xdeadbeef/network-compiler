@@ -86,7 +86,7 @@ let
     in
     {
       inherit name;
-      ok = !r.success; # must fail
+      ok = !r.success;
     };
 
   results = map (n: runOne n cases.${n}) (lib.attrNames cases);

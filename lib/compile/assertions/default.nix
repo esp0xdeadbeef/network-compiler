@@ -1,4 +1,3 @@
-# ./lib/compile/assertions/default.nix
 { lib }:
 
 topo:

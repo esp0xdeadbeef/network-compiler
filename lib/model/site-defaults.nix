@@ -1,8 +1,6 @@
-# lib/site-defaults.nix
 {
   domain = "lan.";
 
-  # fallback DNS if a WAN doesn't specify its own
   defaultWanDns = [
     "1.1.1.1"
     "9.9.9.9"

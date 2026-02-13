@@ -1,4 +1,3 @@
-# lib/get-attrs.nix
 { lib }:
 
 let
@@ -7,11 +6,10 @@ let
 
 in
 {
-  # addressing inputs (required, no more hidden globals)
+
   ulaPrefix,
   tenantV4Base,
 
-  # optional WAN defaults (can be overridden per WAN)
   defaultWan ? {
     ip4 = "10.255.255.2/29";
     gw4 = "10.255.255.1";
@@ -22,7 +20,6 @@ in
     dns = site.defaultWanDns;
   },
 
-  # selection
   lans ? [ ],
   wans ? [ ],
   transits ? [ ],
@@ -37,7 +34,7 @@ let
   mkTransit =
     { vlanId, node }:
     let
-      # keep your old "edge vs other side" behavior, but remove hardcoded prefixes
+
       v4 =
         if node == "edge" then
           "${tenantV4Base}.${toString vlanId}.1/31"

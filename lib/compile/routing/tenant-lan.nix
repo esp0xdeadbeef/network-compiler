@@ -1,4 +1,3 @@
-# ./lib/compile/routing/tenant-lan.nix
 { lib, ulaPrefix }:
 
 topo:

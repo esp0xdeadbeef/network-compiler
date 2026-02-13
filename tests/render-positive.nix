@@ -1,4 +1,3 @@
-# tests/render-positive.nix
 { lib }:
 
 let

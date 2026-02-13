@@ -1,4 +1,3 @@
-# ./tests/routing-semantics-positive.nix
 { lib }:
 
 let
@@ -30,14 +29,8 @@ let
     in
     lib.any pred routes;
 
-  # --------------------------
-  # 1) policy-core exists
-  # --------------------------
   policyCore = getLink "policy-core";
 
-  # --------------------------
-  # 2) core learns tenant routes via policy-core
-  # --------------------------
   coreEp = getEp policyCore coreNode;
 
   coreRoutes4 = if coreEp ? routes4 then coreEp.routes4 else [ ];
@@ -63,9 +56,6 @@ let
       - fd42:dead:beef:<vid>::/64
   '';
 
-  # --------------------------
-  # 3) policy receives upstream internet via policy-core (mode-aware)
-  # --------------------------
   policyEp = getEp policyCore policyNode;
 
   policyR4 = if policyEp ? routes4 then policyEp.routes4 else [ ];
@@ -93,9 +83,6 @@ let
       routes6 count = ${toString (lib.length policyR6)}
   '';
 
-  # --------------------------
-  # 4) access receives internet via policy-access-10 (mode-aware)
-  # --------------------------
   policyAccessLinkName = "policy-access-10";
   policyAccess = getLink policyAccessLinkName;
 
@@ -129,9 +116,6 @@ let
       has ula48      = ${toString accessHasUla48}
   '';
 
-  # --------------------------
-  # 5) WAN injects defaults when mode=default (debug semantics)
-  # --------------------------
   wanLinks = lib.filter (l: (if l ? kind then l.kind else null) == "wan") (lib.attrValues links);
 
   epHasDefault =

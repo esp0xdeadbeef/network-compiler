@@ -18,12 +18,11 @@ let
       ep = getEp l nodeName;
     in
     {
-      # link identity
+
       kind = l.kind or null;
       carrier = l.carrier or "lan";
       vlanId = l.vlanId or null;
 
-      # endpoint data
       tenant = ep.tenant or null;
       gateway = ep.gateway or false;
       export = ep.export or false;

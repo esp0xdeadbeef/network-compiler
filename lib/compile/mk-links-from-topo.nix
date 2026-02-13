@@ -7,10 +7,8 @@ let
   nodeIfs = node.ifs or (throw "topology: node '${nodeName}' missing ifs");
   links = topo.links or { };
 
-  # Stable short hash
   shortHash = s: builtins.substring 0 4 (builtins.hashString "sha256" s);
 
-  # Kernel-safe bridge name (<= 14 chars). Derived from *semantic* l.name.
   kernelBridgeName =
     l:
     let
@@ -25,9 +23,8 @@ let
         if l ? name then l.name else (throw "link missing semantic 'name' (topology.links.<x>.name)");
       h = shortHash ident;
     in
-    "${base}-${h}"; # e.g. br-ce-3f2a
+    "${base}-${h}";
 
-  # Return list of link attr names this node participates in
   linkNamesForNode = lib.filter (
     lname:
     let
@@ -36,7 +33,6 @@ let
     lib.elem nodeName (l.members or [ ])
   ) (lib.attrNames links);
 
-  # Physical carrier interface on this node
   carrierIf =
     l:
     let
@@ -62,7 +58,6 @@ let
     };
   };
 
-  # Attach VLAN subif to bridge (port)
   mkPortNetwork = l: {
     matchConfig.Name = vlanIfName l;
     networkConfig = {
@@ -72,7 +67,6 @@ let
     };
   };
 
-  # Tell the physical carrier to instantiate VLAN netdev(s)
   mkCarrierNetwork = carrier: vlanIfs: {
     matchConfig.Name = carrier;
     networkConfig = {
@@ -81,7 +75,6 @@ let
     };
   };
 
-  # Bridge base (L3 is applied in mk-l3-from-topo)
   carriersUsed = lib.unique (map (lname: carrierIf links.${lname}) linkNamesForNode);
 
   vlanIfsForCarrier =
@@ -107,7 +100,7 @@ in
     ));
 
   systemd.network.networks =
-    # Create VLAN netdev(s) on each used carrier
+
     (lib.listToAttrs (
       map (carrier: {
         name = "10-carrier-${carrier}";
@@ -115,7 +108,7 @@ in
       }) carriersUsed
     ))
     //
-      # Attach VLAN subif -> bridge
+
       (lib.listToAttrs (
         map (lname: {
           name = "15-port-${lname}";

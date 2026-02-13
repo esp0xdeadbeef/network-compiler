@@ -1,4 +1,3 @@
-# ./lib/compile/routing-gen.nix
 {
   lib,
   ulaPrefix,
@@ -15,18 +14,12 @@ let
       if topoResolved ? defaultRouteMode then topoResolved.defaultRouteMode else "default";
   };
 
-  # ------------------------------------------------------------
-  # Assertions (pre)
-  # ------------------------------------------------------------
   pre = import ./assertions/pre.nix { inherit lib policyNodeName coreNodeName; } topo0;
 
   _pre = lib.assertMsg (lib.all (a: a.assertion) pre.assertions) (
     lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) pre.assertions))
   );
 
-  # ------------------------------------------------------------
-  # Routing pipeline
-  # ------------------------------------------------------------
   step0 = import ./routing/upstreams.nix { inherit lib; } topo0;
 
   step1 = import ./routing/tenant-lan.nix {
@@ -59,9 +52,6 @@ let
       ;
   } step2;
 
-  # ------------------------------------------------------------
-  # Assertions (post)
-  # ------------------------------------------------------------
   post = import ./assertions/post.nix { inherit lib policyNodeName coreNodeName; } step3;
 
   _post = lib.assertMsg (lib.all (a: a.assertion) post.assertions) (
@@ -69,5 +59,5 @@ let
   );
 
 in
-# Force evaluation of assertions
+
 builtins.seq _pre (builtins.seq _post step3)

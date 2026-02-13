@@ -1,4 +1,3 @@
-# ./lib/compile/routing/policy-access.nix
 {
   lib,
   ulaPrefix,
@@ -12,10 +11,6 @@ let
   links = topo.links or { };
   policyNode = policyNodeName;
 
-  # NEW: optional default route mode
-  #  - "default"   → 0.0.0.0/0 + ::/0
-  #  - "computed"  → use topo._internet.{internet4,internet6}
-  #  - "blackhole" → no default routes
   defaultMode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
 
   isPolicyAccess =
@@ -27,7 +22,6 @@ let
   tenant4Dst = vid: "${tenantV4Base}.${toString vid}.0/24";
   tenant6DstUla = vid: "${ulaPrefix}:${toString vid}::/64";
 
-  # Aggregate ULA space (assumes ulaPrefix is /48 base like fd42:dead:beef)
   ula48 = "${ulaPrefix}::/48";
 
   getEp = l: n: (l.endpoints or { }).${n} or { };

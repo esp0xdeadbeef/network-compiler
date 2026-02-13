@@ -13,12 +13,7 @@
 
   domain ? "lan.",
   reservedVlans ? [ 1 ],
-  forbiddenVlanRanges ? [
-    {
-      from = 2;
-      to = 9;
-    }
-  ],
+  forbiddenVlanRanges ? null,
 
   ulaPrefix,
   tenantV4Base,
@@ -31,31 +26,48 @@ let
   policyNode = policyNodeName;
   coreNode = coreNodeName;
 
+  forbiddenRanges = if forbiddenVlanRanges == null then [ ] else forbiddenVlanRanges;
+
+  _assertForbiddenRanges =
+    lib.assertMsg
+      (
+        builtins.isList forbiddenRanges
+        && lib.all (
+          r: builtins.isAttrs r && r ? from && r ? to && builtins.isInt r.from && builtins.isInt r.to
+        ) forbiddenRanges
+      )
+      ''
+        forbiddenVlanRanges must be a list of attribute sets of the form:
+          { from = <int>; to = <int>; }
+
+        To disable, use:
+          forbiddenVlanRanges = [ ];
+      '';
+
   accessNodeFor = vid: "${accessNodePrefix}${toString vid}";
 
   accessTransitVlanFor = vid: policyAccessTransitBase + policyAccessOffset + vid;
 
+  baseIfs = {
+    lan = "lan";
+  };
+
   mkAccess = vid: {
     name = accessNodeFor vid;
     value = {
-      ifs = {
-        lan = "lan0";
+      ifs = baseIfs // {
+        "lan${toString vid}" = "lan-${toString vid}";
       };
     };
   };
 
   nodes = {
     "${coreNode}" = {
-      ifs = {
-        lan = "lan0";
-        wan = "wan0";
-      };
+      ifs = baseIfs;
     };
 
     "${policyNode}" = {
-      ifs = {
-        lan = "lan0";
-      };
+      ifs = baseIfs;
     };
   }
   // (lib.listToAttrs (map mkAccess tenantVlans));
@@ -205,10 +217,11 @@ let
     "tenantV4Base"
   ];
 in
-{
+builtins.seq _assertForbiddenRanges {
   inherit ulaPrefix tenantV4Base;
   inherit domain;
   inherit nodes links;
-  inherit reservedVlans forbiddenVlanRanges;
+  reservedVlans = reservedVlans;
+  forbiddenVlanRanges = forbiddenRanges;
 }
 // passthrough

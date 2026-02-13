@@ -3,9 +3,6 @@
 let
   links = model.links or { };
 
-  # Apply site VLAN policy only to non-WAN links.
-  # WAN handoff VLANs (e.g. 6, 7, 8) must not be rejected by
-  # internal forbidden ranges like 2..9.
   allVlans = lib.unique (
     lib.concatMap (
       l:
@@ -30,7 +27,6 @@ let
 
   badVlans = lib.filter (v: lib.elem v reserved || lib.any (r: inRange r v) forbiddenRanges) allVlans;
 
-  # Enforce P2P VLAN range only for policy-core transit (must fit ffXX hextet encoding)
   badPolicyCore = lib.filter (
     l:
     (l.kind or null) == "p2p"

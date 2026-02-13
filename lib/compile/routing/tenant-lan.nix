@@ -1,3 +1,4 @@
+# ./lib/compile/routing/tenant-lan.nix
 { lib, ulaPrefix }:
 
 topo:
@@ -5,9 +6,10 @@ topo:
 let
   links = topo.links or { };
 
-  getTenantVid = ep: if ep ? tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
+  getTenantVid =
+    ep:
+    if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
 
-  # Extract normalized delegated /48 base (same logic as wan-detection)
   delegatedV6 =
     let
       normalize48 =
@@ -64,7 +66,6 @@ topo
           "${n}" =
             ep
             // {
-              # Explicit connected routes for access routers
               routes4 = (ep.routes4 or [ ]) ++ lib.optional (vid != null) { dst = v4dst; };
 
               routes6 = (ep.routes6 or [ ]) ++ lib.optional (vid != null) { dst = ula64; };

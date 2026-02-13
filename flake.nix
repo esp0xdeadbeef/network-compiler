@@ -26,18 +26,16 @@
           in
           f pkgs
         );
+
+      baseLib = nixpkgs.lib;
     in
     {
-      lib =
-        let
-          baseLib = nixpkgs.lib;
-        in
-        baseLib
-        // {
-          net = baseLib.net;
-        };
+      lib = baseLib // {
+        net = baseLib.net;
+      };
 
-      evalNetwork = import ./lib/eval.nix { };
+      # FIX: pass required { lib } argument to eval.nix
+      evalNetwork = import ./lib/eval.nix { lib = baseLib; };
 
       nixosModules.default = import ./modules/networkd-from-topology.nix;
 
@@ -47,6 +45,55 @@
           bash ${nixpkgs}/lib/tests/network.sh
           touch $out
         '';
+
+        nixos-network-compiler-positive = pkgs.runCommand "nixos-network-compiler-positive" { } ''
+          ${pkgs.nix}/bin/nix eval --raw --impure --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              lib = flake.lib;
+            in
+              import ./tests/evaluate-positive.nix { inherit lib; }
+          ' > /dev/null
+          touch $out
+        '';
+
+        nixos-network-compiler-negative = pkgs.runCommand "nixos-network-compiler-negative" { } ''
+          ${pkgs.nix}/bin/nix eval --raw --impure --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              lib = flake.lib;
+            in
+              import ./tests/evaluate-negative.nix { inherit lib; }
+          ' > /dev/null
+          touch $out
+        '';
+
+        nixos-network-compiler-routing-validation =
+          pkgs.runCommand "nixos-network-compiler-routing-validation" { }
+            ''
+              ${pkgs.nix}/bin/nix eval --raw --impure --expr '
+                let
+                  flake = builtins.getFlake (toString ./.);
+                  lib = flake.lib;
+                in
+                  import ./tests/routing-validation-test.nix { inherit lib; }
+              ' > /dev/null
+              touch $out
+            '';
+
+        # Restored: routing semantics / convergence invariants (positive)
+        nixos-network-compiler-routing-semantics =
+          pkgs.runCommand "nixos-network-compiler-routing-semantics" { }
+            ''
+              ${pkgs.nix}/bin/nix eval --raw --impure --expr '
+                let
+                  flake = builtins.getFlake (toString ./.);
+                  lib = flake.lib;
+                in
+                  import ./tests/routing-semantics-positive.nix { inherit lib; }
+              ' > /dev/null
+              touch $out
+            '';
       });
     };
 }

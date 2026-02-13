@@ -22,7 +22,8 @@
 
   ulaPrefix,
   tenantV4Base,
-}:
+  ...
+}@args:
 
 let
   addr = import ./model/addressing.nix { inherit lib; };
@@ -189,6 +190,20 @@ let
       policy-core = (mkPolicyCore).value;
     };
 
+  passthrough = builtins.removeAttrs args [
+    "tenantVlans"
+    "policyAccessTransitBase"
+    "corePolicyTransitVlan"
+    "policyAccessOffset"
+    "policyNodeName"
+    "coreNodeName"
+    "accessNodePrefix"
+    "domain"
+    "reservedVlans"
+    "forbiddenVlanRanges"
+    "ulaPrefix"
+    "tenantV4Base"
+  ];
 in
 {
   inherit ulaPrefix tenantV4Base;
@@ -196,3 +211,4 @@ in
   inherit nodes links;
   inherit reservedVlans forbiddenVlanRanges;
 }
+// passthrough

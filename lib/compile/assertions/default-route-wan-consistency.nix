@@ -4,18 +4,17 @@
 topo:
 
 let
-  mode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
+  mode = topo.defaultRouteMode or "default";
 
   wanLinks = lib.filter (l: (l.kind or null) == "wan") (lib.attrValues (topo.links or { }));
 
-  wanHasDefault = lib.any (
-    l:
-    lib.any (
-      ep:
-      (lib.any (r: (r.dst or null) == "0.0.0.0/0") (ep.routes4 or [ ]))
-      || (lib.any (r: (r.dst or null) == "::/0") (ep.routes6 or [ ]))
-    ) (lib.attrValues (l.endpoints or { }))
-  ) wanLinks;
+  wanEndpoints = lib.concatMap (l: lib.attrValues (l.endpoints or { })) wanLinks;
+
+  wanDsts = lib.concatMap (
+    ep: (map (r: r.dst or null) (ep.routes4 or [ ])) ++ (map (r: r.dst or null) (ep.routes6 or [ ]))
+  ) wanEndpoints;
+
+  wanHasDefault = lib.elem "0.0.0.0/0" wanDsts || lib.elem "::/0" wanDsts;
 
 in
 {
@@ -30,10 +29,12 @@ in
     }
 
     {
-      assertion = !(mode == "default" && lib.length wanLinks > 0 && !wanHasDefault);
+      assertion = !(mode == "default" && !wanHasDefault);
       message = ''
-        defaultRouteMode = "default" requires at least one WAN link
-        to advertise 0.0.0.0/0 or ::/0.
+        defaultRouteMode = "default" requires at least one WAN endpoint to advertise
+        a default route (0.0.0.0/0 or ::/0).
+
+        No WAN endpoints include 0.0.0.0/0 or ::/0 in routes4/routes6.
       '';
     }
   ];

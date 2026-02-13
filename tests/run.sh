@@ -1,279 +1,142 @@
 # ./tests/run.sh
 #!/usr/bin/env bash
-
-# Unified test runner
-#
-# 1) Runs NEGATIVE validation tests (must FAIL)
-# 2) Evaluates debug pipeline artifacts in ./dev/debug-lib (must SUCCEED)
-# 3) Performs “manual sanity checks” on the debug model:
-#    - WAN injects internet routes to core (when expected)
-#    - policy-core propagates internet routes to policy
-#    - policy-access propagates internet routes to access
-#    - core has tenant routes back via policy-core
-#
-# Usage:
-#   ./tests/run.sh
-
 set -euo pipefail
-shopt -s inherit_errexit
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.."; pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
-die() {
-  echo >&2 "test case failed: $*"
+fail() {
+  echo
+  echo "============================================================"
+  echo "FAILED: $1"
+  echo "============================================================"
   exit 1
 }
 
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-work="$tmp/work"
-mkdir -p "$work"
-cd "$work"
-
-###############################################################################
-# Helpers
-###############################################################################
-
-# Evaluate an expression to JSON (strict) and print to stdout
-eval_json() {
-  local expr="$1"
-  nix-instantiate --eval --strict --json --show-trace --expr "$expr"
+section() {
+  echo
+  echo "============================================================"
+  echo "$1"
+  echo "============================================================"
 }
 
-# Evaluate an expression to a raw (non-JSON) nix value string (strict)
-eval_raw() {
-  local expr="$1"
-  nix-instantiate --eval --strict --show-trace --expr "$expr"
+run_negative_tests() {
+  section "Running negative routing validation tests (flake)"
+
+  nix flake check \
+    --no-build \
+    --print-build-logs \
+    --show-trace \
+    --all-systems \
+    || fail "flake checks failed"
+
+  echo "FLAKE CHECKS OK"
 }
 
-# Run an expression expecting it to fail
-expect_failure_expr() {
-  local name="$1"
-  local expr="$2"
-  if nix-instantiate --eval --strict --json --show-trace --expr "$expr" >"$work/out" 2>"$work/stderr"; then
-    die "$name evaluated successfully to $(cat "$work/out"), but it was expected to fail"
-  fi
-}
+run_eval_negative() {
+  section "Running negative eval tests"
 
-# Run an expression expecting it to succeed (JSON-able)
-expect_success_expr_json() {
-  local name="$1"
-  local expr="$2"
-  if ! nix-instantiate --eval --strict --json --show-trace --expr "$expr" >"$work/out" 2>"$work/stderr"; then
-    cat >&2 "$work/stderr"
-    die "$name failed to evaluate"
-  fi
-}
-
-# Assert a boolean expression is true
-assert_true() {
-  local name="$1"
-  local expr="$2"
-  local out
-  out="$(eval_raw "$expr" 2>"$work/stderr" || true)"
-  if [[ "$out" != "true" ]]; then
-    [[ -s "$work/stderr" ]] && cat >&2 "$work/stderr"
-    die "$name (expected true, got: $out)"
-  fi
-}
-
-###############################################################################
-# SECTION 1 — NEGATIVE VALIDATION TESTS (MUST FAIL)
-###############################################################################
-
-# Important: routing-validation-tests.nix already uses ../lib/eval.nix which
-# returns a sanitized attrset (JSON-able), so we can evaluate each test directly
-# and require failure.
-NEG_LIST_EXPR="
-  let
-    flake = builtins.getFlake (toString $ROOT);
-    lib = flake.lib;
-    tests = import $ROOT/tests/routing-validation-tests.nix { inherit lib; };
-  in lib.attrNames tests
-"
-
-# Get list of negative tests (as bash lines)
-mapfile -t NEG_TESTS < <(eval_json "$NEG_LIST_EXPR" | tr -d '[]"' | tr ',' '\n' | sed '/^[[:space:]]*$/d')
-
-for t in "${NEG_TESTS[@]}"; do
-  echo "Negative test: $t"
-  expect_failure_expr "$t" "
+  nix eval --show-trace --impure --raw --expr '
     let
-      flake = builtins.getFlake (toString $ROOT);
+      flake = builtins.getFlake (toString ./.);
       lib = flake.lib;
-      tests = import $ROOT/tests/routing-validation-tests.nix { inherit lib; };
-    in tests.\"$t\"
-  "
-done
+    in
+      import ./tests/evaluate-negative.nix { inherit lib; }
+  ' || fail "evaluate-negative.nix failed"
 
-###############################################################################
-# SECTION 2 — DEBUG PIPELINE (MUST SUCCEED)
-###############################################################################
-#
-# Your debug files are functions ({ sopsData ? {} }: ...), so we must APPLY them.
-# Also: “cannot convert a function to JSON” happens if we evaluate the function
-# itself instead of calling it.
+  echo
+  echo "NEGATIVE TESTS OK"
+}
 
-echo "Debug: 10-topology-raw"
-expect_success_expr_json "debug/10-topology-raw" "import $ROOT/dev/debug-lib/10-topology-raw.nix { }"
+run_eval_positive() {
+  section "Running positive eval tests"
 
-echo "Debug: 20-topology-resolved"
-expect_success_expr_json "debug/20-topology-resolved" "import $ROOT/dev/debug-lib/20-topology-resolved.nix { }"
+  nix eval --show-trace --impure --raw --expr '
+    let
+      flake = builtins.getFlake (toString ./.);
+      lib = flake.lib;
+    in
+      import ./tests/evaluate-positive.nix { inherit lib; }
+  ' || fail "evaluate-positive.nix failed"
 
-echo "Debug: 30-routing"
-expect_success_expr_json "debug/30-routing" "import $ROOT/dev/debug-lib/30-routing.nix { }"
+  echo
+  echo "POSITIVE TESTS OK"
+}
 
-echo "Debug: 40-node"
-expect_success_expr_json "debug/40-node" "import $ROOT/dev/debug-lib/40-node.nix { }"
+run_routing_validation_suite() {
+  section "Running routing validation suite"
 
-echo "Debug: 50-wan"
-expect_success_expr_json "debug/50-wan" "import $ROOT/dev/debug-lib/50-wan.nix { }"
+  nix eval --show-trace --impure --raw --expr '
+    let
+      flake = builtins.getFlake (toString ./.);
+      lib = flake.lib;
+    in
+      import ./tests/routing-validation-test.nix { inherit lib; }
+  ' || fail "routing-validation-test.nix failed"
 
-echo "Debug: 60-multi-wan"
-expect_success_expr_json "debug/60-multi-wan" "import $ROOT/dev/debug-lib/60-multi-wan.nix { }"
+  echo
+  echo "ROUTING VALIDATION TESTS OK"
+}
 
-echo "Debug: 70-render-networkd"
-expect_success_expr_json "debug/70-render-networkd" "import $ROOT/dev/debug-lib/70-render-networkd.nix { }"
+run_routing_semantics_suite() {
+  section "Running routing semantics (convergence invariants) suite"
 
-echo "Debug: 90-all"
-expect_success_expr_json "debug/90-all" "import $ROOT/dev/debug-lib/90-all.nix { }"
+  nix eval --show-trace --impure --raw --expr '
+    let
+      flake = builtins.getFlake (toString ./.);
+      lib = flake.lib;
+    in
+      import ./tests/routing-semantics-positive.nix { inherit lib; }
+  ' || fail "routing-semantics-positive.nix failed"
 
-echo "Debug: 95-routing-table"
-expect_success_expr_json "debug/95-routing-table" "import $ROOT/dev/debug-lib/95-routing-table.nix { }"
+  echo
+  echo "ROUTING SEMANTICS TESTS OK"
+}
 
-###############################################################################
-# SECTION 3 — “MANUAL CHECKS” ON DEBUG OUTPUT (BEST PRACTICES)
-###############################################################################
-#
-# This is the stuff you’re eyeballing:
-#  - “I added WAN, do we actually get internet routes?”
-#  - “Does policy route to access?”
-#  - “Does access get routes to internet via policy?”
-#  - “Does core know tenant routes via policy?”
-#
-# We validate those *semantically* from compiled routed.links endpoints.
+run_debug_targets() {
+  section "Running debug targets"
 
-ROUTED_EXPR="import $ROOT/dev/debug-lib/30-routing.nix { }"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/10-topology-raw.nix { }' >/dev/null \
+    || fail "10-topology-raw failed"
 
-# Extract mode from debug inputs (so the checks adapt)
-MODE_EXPR="
-  let cfg = import $ROOT/dev/debug-lib/inputs.nix { sopsData = { }; };
-  in cfg.defaultRouteMode
-"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/20-topology-resolved.nix { }' >/dev/null \
+    || fail "20-topology-resolved failed"
 
-# True if ANY wan endpoint advertises default v4 or v6
-HAS_WAN_DEFAULTS_EXPR="
-  let
-    flake = builtins.getFlake (toString $ROOT);
-    lib = flake.lib;
-    routed = $ROUTED_EXPR;
-    wans = lib.filter (l: (l.kind or null) == \"wan\") (lib.attrValues (routed.links or { }));
-    epHasDefault = ep:
-      (lib.any (r: (r.dst or null) == \"0.0.0.0/0\") (ep.routes4 or []))
-      || (lib.any (r: (r.dst or null) == \"::/0\") (ep.routes6 or []));
-  in
-    lib.any (l: lib.any epHasDefault (lib.attrValues (l.endpoints or { }))) wans
-"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/30-routing.nix { }' >/dev/null \
+    || fail "30-routing failed"
 
-# policy-core link must exist and both endpoints must have the expected directionality:
-# - policy endpoint routes default/computed via core (unless blackhole)
-# - core endpoint routes tenants via policy
-POLICY_CORE_EXISTS_EXPR="
-  let
-    routed = $ROUTED_EXPR;
-  in
-    (routed.links or { }) ? \"policy-core\"
-"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/40-node.nix { }' >/dev/null \
+    || fail "40-node failed"
 
-CORE_HAS_TENANT_ROUTES_VIA_POLICY_EXPR="
-  let
-    flake = builtins.getFlake (toString $ROOT);
-    lib = flake.lib;
-    routed = $ROUTED_EXPR;
-    l = (routed.links.\"policy-core\" or (throw \"missing policy-core\"));
-    ep = (l.endpoints.\"s-router-core-wan\" or {});
-    r4 = ep.routes4 or [];
-    r6 = ep.routes6 or [];
-    # tenant routes should include at least one 10.10.<vid>.0/24 and one fd42:dead:beef:<vid>::/64
-    hasTenant4 = lib.any (r: lib.hasPrefix \"10.10.\" (r.dst or \"\") && lib.hasSuffix \"/24\" (r.dst or \"\")) r4;
-    hasTenant6 = lib.any (r: lib.hasPrefix \"fd42:dead:beef:\" (r.dst or \"\") && lib.hasSuffix \"/64\" (r.dst or \"\")) r6;
-  in
-    hasTenant4 && hasTenant6
-"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/50-wan.nix { }' >/dev/null \
+    || fail "50-wan failed"
 
-POLICY_HAS_UPSTREAM_INTERNET_EXPR="
-  let
-    flake = builtins.getFlake (toString $ROOT);
-    lib = flake.lib;
-    mode = $MODE_EXPR;
-    routed = $ROUTED_EXPR;
-    l = (routed.links.\"policy-core\" or (throw \"missing policy-core\"));
-    ep = (l.endpoints.\"s-router-policy-only\" or {});
-    r4 = ep.routes4 or [];
-    r6 = ep.routes6 or [];
-    hasAny4 = r4 != [];
-    hasAny6 = r6 != [];
-    hasDefault4 = lib.any (r: (r.dst or \"\") == \"0.0.0.0/0\") r4;
-    hasDefault6 = lib.any (r: (r.dst or \"\") == \"::/0\") r6;
-  in
-    if mode == \"blackhole\" then
-      (!hasDefault4) && (!hasDefault6) && (!hasAny4) && (!hasAny6)
-    else if mode == \"computed\" then
-      hasAny4 && hasAny6
-    else
-      hasDefault4 && hasDefault6
-"
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/60-multi-wan.nix { }' >/dev/null \
+    || fail "60-multi-wan failed"
 
-ACCESS_HAS_INTERNET_VIA_POLICY_EXPR="
-  let
-    flake = builtins.getFlake (toString $ROOT);
-    lib = flake.lib;
-    mode = $MODE_EXPR;
-    routed = $ROUTED_EXPR;
-    l = (routed.links.\"policy-access-10\" or (throw \"missing policy-access-10\"));
-    ep = (l.endpoints.\"s-router-access-10\" or {});
-    r4 = ep.routes4 or [];
-    r6 = ep.routes6 or [];
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/70-render-networkd.nix { }' >/dev/null \
+    || fail "70-render-networkd failed"
 
-    hasAny4 = r4 != [];
-    hasAny6 = r6 != [];
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/90-all.nix { }' >/dev/null \
+    || fail "90-all failed"
 
-    hasDefault4 = lib.any (r: (r.dst or \"\") == \"0.0.0.0/0\") r4;
-    hasDefault6 = lib.any (r: (r.dst or \"\") == \"::/0\") r6;
+  nix eval --show-trace --impure --expr 'import ./dev/debug-lib/95-routing-table.nix { }' >/dev/null \
+    || fail "95-routing-table failed"
 
-    # always expect ULA aggregate route on access (policy-access adds ula48)
-    hasUla48 = lib.any (r: (r.dst or \"\") == \"fd42:dead:beef::/48\") r6;
-  in
-    if mode == \"blackhole\" then
-      (r4 == []) && (!hasDefault6) && hasUla48
-    else if mode == \"computed\" then
-      hasAny4 && hasAny6 && hasUla48
-    else
-      hasDefault4 && hasDefault6 && hasUla48
-"
+  echo "DEBUG TARGETS OK"
+}
 
-# WAN defaults are expected only if mode == default (your assertions enforce this)
-# BUT: your debug inputs.nix currently injects defaults into links only when mode == default.
-WAN_DEFAULTS_EXPECTED_EXPR="
-  let mode = $MODE_EXPR; in mode == \"default\"
-"
+echo "=== nixos-network-compiler test runner ==="
 
-echo "Checks: debug routing sanity"
+run_negative_tests
+run_eval_negative
+run_eval_positive
+run_routing_validation_suite
+run_routing_semantics_suite
+run_debug_targets
 
-assert_true "policy-core link exists" "$POLICY_CORE_EXISTS_EXPR"
-assert_true "core has tenant routes via policy-core" "$CORE_HAS_TENANT_ROUTES_VIA_POLICY_EXPR"
-assert_true "policy has upstream internet routes (mode-aware)" "$POLICY_HAS_UPSTREAM_INTERNET_EXPR"
-assert_true "access has internet routes via policy-access (mode-aware)" "$ACCESS_HAS_INTERNET_VIA_POLICY_EXPR"
-
-# WAN default checks only when expected by mode
-if [[ "$(eval_raw "$WAN_DEFAULTS_EXPECTED_EXPR")" == "true" ]]; then
-  assert_true "WAN advertises at least one default route (mode=default)" "$HAS_WAN_DEFAULTS_EXPR"
-else
-  echo "Checks: skipping WAN-default assertion (mode != default)"
-fi
-
-###############################################################################
-# DONE
-###############################################################################
-echo >&2 "ALL TESTS OK"
+echo
+echo "============================================================"
+echo "ALL TESTS OK"
+echo "============================================================"
 

@@ -1,3 +1,4 @@
+# ./lib/eval.nix
 { lib }:
 
 { topology }:
@@ -23,30 +24,5 @@ let
     model = resolved;
   };
 
-  sanitize =
-    x:
-    let
-      t = builtins.typeOf x;
-    in
-    if t == "lambda" || t == "primop" then
-      "<function>"
-    else if builtins.isList x then
-      map sanitize x
-    else if builtins.isAttrs x then
-      lib.mapAttrs (_: v: sanitize v) x
-    else if t == "path" then
-      toString x
-    else
-      x;
-
 in
-sanitize {
-  topology = {
-    domain = compiled.domain or null;
-    nodes = builtins.attrNames (compiled.nodes or { });
-    links = builtins.attrNames (compiled.links or { });
-  };
-
-  nodes = compiled.nodes or { };
-  links = compiled.links or { };
-}
+compiled

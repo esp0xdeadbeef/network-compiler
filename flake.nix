@@ -31,9 +31,8 @@
     {
       lib = baseLib // {
         net = baseLib.net;
+        evalNetwork = import ./lib/eval.nix { lib = baseLib; };
       };
-
-      evalNetwork = import ./lib/eval.nix { lib = baseLib; };
 
       nixosModules.default = import ./modules/networkd-from-topology.nix;
 

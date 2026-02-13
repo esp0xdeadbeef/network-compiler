@@ -1,3 +1,4 @@
+# ./dev/debug-lib/30-routing.nix
 {
   sopsData ? { },
 }:
@@ -19,6 +20,8 @@ let
     members = [ "s-router-core-wan" ];
     endpoints = {
       "s-router-core-wan" = {
+        # Core should always have upstream defaults if an upstream exists.
+        # defaultRouteMode affects propagation to policy/access, not core reachability.
         routes4 = lib.optional (wan ? ip4) { dst = "0.0.0.0/0"; };
         routes6 = lib.optional (wan ? ip6) { dst = "::/0"; };
       }
@@ -30,7 +33,11 @@ let
   wanLinks = if haveWan then lib.mapAttrs (name: wan: mkWanLink name wan) sopsData.wan else { };
 
   withWan = resolved // {
-    links = (resolved.links or { }) // wanLinks;
+    # propagate defaultRouteMode into compile pipeline
+    defaultRouteMode = cfg.defaultRouteMode or "default";
+
+    # include debug/example WAN links from cfg.links, plus optional sopsData WANs
+    links = (resolved.links or { }) // (cfg.links or { }) // wanLinks;
   };
 
 in

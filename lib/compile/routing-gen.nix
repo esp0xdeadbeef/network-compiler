@@ -1,3 +1,4 @@
+# ./lib/compile/routing-gen.nix
 {
   lib,
   ulaPrefix,
@@ -9,11 +10,35 @@
 topoResolved:
 
 let
-  step0 = import ./routing/upstreams.nix { inherit lib; } topoResolved;
+  topo0 = topoResolved // {
+    defaultRouteMode =
+      if topoResolved ? defaultRouteMode then topoResolved.defaultRouteMode else "default";
+  };
+
+  # ------------------------------------------------------------
+  # Assertions (pre)
+  # ------------------------------------------------------------
+  pre = import ./assertions/pre.nix { inherit lib policyNodeName coreNodeName; } topo0;
+
+  _pre = lib.assertMsg (lib.all (a: a.assertion) pre.assertions) (
+    lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) pre.assertions))
+  );
+
+  # ------------------------------------------------------------
+  # Routing pipeline
+  # ------------------------------------------------------------
+  step0 = import ./routing/upstreams.nix { inherit lib; } topo0;
 
   step1 = import ./routing/tenant-lan.nix {
     inherit lib ulaPrefix;
   } step0;
+
+  internet = import ./routing/public-prefixes.nix { inherit lib; } step1;
+
+  topoWithInternet = step1 // {
+    _internet = internet;
+    defaultRouteMode = topo0.defaultRouteMode;
+  };
 
   step2 = import ./routing/policy-access.nix {
     inherit
@@ -22,7 +47,7 @@ let
       tenantV4Base
       policyNodeName
       ;
-  } step1;
+  } topoWithInternet;
 
   step3 = import ./routing/policy-core.nix {
     inherit
@@ -34,24 +59,15 @@ let
       ;
   } step2;
 
-  # Compute "internet space" as: global space minus owned prefixes
-  internet = import ./routing/public-prefixes.nix { inherit lib; } step3;
+  # ------------------------------------------------------------
+  # Assertions (post)
+  # ------------------------------------------------------------
+  post = import ./assertions/post.nix { inherit lib policyNodeName coreNodeName; } step3;
 
-  # Attach it to the topo so later routing stages can consume it
-  step4 = step3 // {
-    _internet = internet;
-  };
-
-  # Now rewrite policy-core defaults using the computed internet space
-  step5 = import ./routing/policy-core.nix {
-    inherit
-      lib
-      ulaPrefix
-      tenantV4Base
-      policyNodeName
-      coreNodeName
-      ;
-  } step4;
+  _post = lib.assertMsg (lib.all (a: a.assertion) post.assertions) (
+    lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) post.assertions))
+  );
 
 in
-step5
+# Force evaluation of assertions
+builtins.seq _pre (builtins.seq _post step3)

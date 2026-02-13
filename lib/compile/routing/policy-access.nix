@@ -1,3 +1,4 @@
+# ./lib/compile/routing/policy-access.nix
 {
   lib,
   ulaPrefix,
@@ -10,6 +11,12 @@ topo:
 let
   links = topo.links or { };
   policyNode = policyNodeName;
+
+  # NEW: optional default route mode
+  #  - "default"   → 0.0.0.0/0 + ::/0
+  #  - "computed"  → use topo._internet.{internet4,internet6}
+  #  - "blackhole" → no default routes
+  defaultMode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
 
   isPolicyAccess =
     lname: l:
@@ -38,6 +45,18 @@ let
     ep:
     if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
 
+  computed4 =
+    if topo ? _internet && topo._internet ? internet4 then
+      map (p: { dst = p; }) topo._internet.internet4
+    else
+      [ ];
+
+  computed6 =
+    if topo ? _internet && topo._internet ? internet6 then
+      map (p: { dst = p; }) topo._internet.internet6
+    else
+      [ ];
+
 in
 topo
 // {
@@ -62,30 +81,42 @@ topo
         via4toAccess = stripCidr epAccess.addr4;
         via6toAccess = stripCidr epAccess.addr6;
 
-        # Access router:
-        #  - default IPv4 via policy
-        accessRoutes4 = [
-          {
-            dst = "0.0.0.0/0";
-            via4 = gw4;
-          }
-        ];
+        accessDefaults4 =
+          if defaultMode == "blackhole" then
+            [ ]
+          else if defaultMode == "computed" then
+            map (r: r // { via4 = gw4; }) computed4
+          else
+            [
+              {
+                dst = "0.0.0.0/0";
+                via4 = gw4;
+              }
+            ];
 
-        # Access router:
-        #  - route ALL internal ULAs to policy
-        #  - default IPv6 to policy
+        accessDefaults6 =
+          if defaultMode == "blackhole" then
+            [ ]
+          else if defaultMode == "computed" then
+            map (r: r // { via6 = gw6; }) computed6
+          else
+            [
+              {
+                dst = "::/0";
+                via6 = gw6;
+              }
+            ];
+
+        accessRoutes4 = accessDefaults4;
+
         accessRoutes6 = [
           {
             dst = ula48;
             via6 = gw6;
           }
-          {
-            dst = "::/0";
-            via6 = gw6;
-          }
-        ];
+        ]
+        ++ accessDefaults6;
 
-        # Policy router gets explicit per-tenant return routes
         policyRoutes4 = lib.optional (vid != null) {
           dst = tenant4Dst vid;
           via4 = via4toAccess;

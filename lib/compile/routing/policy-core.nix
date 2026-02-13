@@ -15,6 +15,8 @@ let
   policyNode = policyNodeName;
   coreNode = coreNodeName;
 
+  mode = topo.defaultRouteMode or "default";
+
   stripCidr = s: if s == null then null else builtins.elemAt (lib.splitString "/" s) 0;
 
   tenant4Dst = vid: "${tenantV4Base}.${toString vid}.0/24";
@@ -34,6 +36,7 @@ let
     ep:
     if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
 
+  # discover tenant VLANs by scanning policy-access links
   tenantVids = lib.unique (
     lib.filter (x: x != null) (
       lib.concatMap (
@@ -51,19 +54,27 @@ let
     )
   );
 
-  internet = topo._internet or null;
+  internet =
+    topo._internet or {
+      internet4 = [ "0.0.0.0/0" ];
+      internet6 = [ "::/0" ];
+    };
 
-  computedDefaults4 =
-    if internet != null && internet ? internet4 then
-      lib.filter (r: r.dst != "0.0.0.0/0") (map (p: { dst = p; }) internet.internet4)
+  policyDefaults4 =
+    if mode == "blackhole" then
+      [ ]
+    else if mode == "computed" then
+      map (p: { dst = p; }) internet.internet4
     else
-      [ ];
+      [ { dst = "0.0.0.0/0"; } ];
 
-  computedDefaults6 =
-    if internet != null && internet ? internet6 then
-      lib.filter (r: r.dst != "::/0") (map (p: { dst = p; }) internet.internet6)
+  policyDefaults6 =
+    if mode == "blackhole" then
+      [ ]
+    else if mode == "computed" then
+      map (p: { dst = p; }) internet.internet6
     else
-      [ ];
+      [ { dst = "::/0"; } ];
 
 in
 topo
@@ -83,27 +94,26 @@ topo
         via4toPolicy = stripCidr epPolicy.addr4;
         via6toPolicy = stripCidr epPolicy.addr6;
 
+        # core must know how to reach every tenant via policy
         coreRoutes4 = map (vid: {
           dst = tenant4Dst vid;
           via4 = via4toPolicy;
         }) tenantVids;
-
         coreRoutes6 = map (vid: {
           dst = tenant6DstUla vid;
           via6 = via6toPolicy;
         }) tenantVids;
 
-        policyDefaults4 = map (r: r // { via4 = stripCidr epCore.addr4; }) computedDefaults4;
-
-        policyDefaults6 = map (r: r // { via6 = stripCidr epCore.addr6; }) computedDefaults6;
-
+        # policy's upstream defaults (or computed prefixes) go via core
+        policyUp4 = map (r: r // { via4 = stripCidr epCore.addr4; }) policyDefaults4;
+        policyUp6 = map (r: r // { via6 = stripCidr epCore.addr6; }) policyDefaults6;
       in
       setEp
         (setEp l policyNode (
           epPolicy
           // {
-            routes4 = policyDefaults4;
-            routes6 = policyDefaults6;
+            routes4 = policyUp4;
+            routes6 = policyUp6;
           }
         ))
         coreNode

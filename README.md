@@ -1,3 +1,11 @@
+Work in progress, do not use as a library yet. The goal is to make my own setup working with this package, the machines include:
+https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-access
+https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-core
+https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-policy-only
+And potentially:
+https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-nebula
+
+
 # nixos-network-compiler
 
 A pure Nix network topology compiler.

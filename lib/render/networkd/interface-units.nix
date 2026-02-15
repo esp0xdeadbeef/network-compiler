@@ -1,3 +1,5 @@
+# ./lib/render/networkd/interface-units.nix
+# ./lib/render/networkd/interface-units.nix
 { lib }:
 
 {
@@ -15,6 +17,8 @@
 
 let
   needsBridge = iface.kind == "lan";
+  isWan = (iface.kind or null) == "wan";
+
   carrier = iface.carrier or "lan";
   vlanId = iface.vlanId;
 
@@ -35,6 +39,21 @@ let
   networkOn = if needsBridge then bname else vname;
 
   routeSections = map routes.mkRouteSection ((iface.routes4 or [ ]) ++ (iface.routes6 or [ ]));
+
+  dhcp = iface.dhcp or false;
+  acceptRA = iface.acceptRA or false;
+
+  dhcpMode =
+    if isWan && dhcp then
+      "yes"
+    else
+      "no";
+
+  raMode =
+    if isWan && acceptRA then
+      "yes"
+    else
+      "no";
 
 in
 {
@@ -66,11 +85,14 @@ in
       matchConfig.Name = networkOn;
       networkConfig = {
         Address = lib.filter (x: x != null) [
-          iface.addr4 or null
-          iface.addr6 or null
+          (iface.addr4 or null)
+          (iface.addr6 or null)
         ];
         IPForward = "yes";
-        IPv6AcceptRA = "no";
+
+        # Dynamic WAN support
+        DHCP = dhcpMode;
+        IPv6AcceptRA = raMode;
       };
       routes = routeSections;
     };
@@ -85,3 +107,4 @@ in
     };
   };
 }
+

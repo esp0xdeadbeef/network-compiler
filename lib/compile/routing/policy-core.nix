@@ -1,3 +1,4 @@
+# ./lib/compile/routing/policy-core.nix
 {
   lib,
   ulaPrefix,
@@ -92,14 +93,33 @@ topo
         via4toPolicy = stripCidr epPolicy.addr4;
         via6toPolicy = stripCidr epPolicy.addr6;
 
-        coreRoutes4 = map (vid: {
+        coreRoutes4Tenants = map (vid: {
           dst = tenant4Dst vid;
           via4 = via4toPolicy;
         }) tenantVids;
-        coreRoutes6 = map (vid: {
+
+        coreRoutes6Tenants = map (vid: {
           dst = tenant6DstUla vid;
           via6 = via6toPolicy;
         }) tenantVids;
+
+        # ALSO install upstream defaults on the core side (no via).
+        # nftables / policy routing will decide which WAN actually forwards.
+        coreDefaults4 =
+          if mode == "blackhole" then
+            [ ]
+          else if mode == "computed" then
+            map (p: { dst = p; }) internet.internet4
+          else
+            [ { dst = "0.0.0.0/0"; } ];
+
+        coreDefaults6 =
+          if mode == "blackhole" then
+            [ ]
+          else if mode == "computed" then
+            map (p: { dst = p; }) internet.internet6
+          else
+            [ { dst = "::/0"; } ];
 
         policyUp4 = map (r: r // { via4 = stripCidr epCore.addr4; }) policyDefaults4;
         policyUp6 = map (r: r // { via6 = stripCidr epCore.addr6; }) policyDefaults6;
@@ -116,11 +136,12 @@ topo
         (
           epCore
           // {
-            routes4 = coreRoutes4;
-            routes6 = coreRoutes6;
+            routes4 = coreRoutes4Tenants ++ coreDefaults4;
+            routes6 = coreRoutes6Tenants ++ coreDefaults6;
           }
         )
     else
       l
   ) links;
 }
+

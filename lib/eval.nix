@@ -1,4 +1,5 @@
 # ./lib/eval.nix
+# ./lib/eval.nix
 # FILE: ./lib/eval.nix
 { lib }:
 
@@ -11,6 +12,28 @@ let
       lib.mapAttrs (ctx: w:
         let
           coreCtx = "${coreNodeName}-${ctx}";
+
+          dhcp = w.dhcp or false;
+          acceptRA = w.acceptRA or false;
+
+          wantDefault4 = dhcp || (w ? routes4) || (w ? ip4);
+          wantDefault6 = dhcp || acceptRA || (w ? routes6) || (w ? ip6);
+
+          routes4 =
+            if w ? routes4 then
+              w.routes4
+            else if wantDefault4 then
+              [ { dst = "0.0.0.0/0"; } ]
+            else
+              [ ];
+
+          routes6 =
+            if w ? routes6 then
+              w.routes6
+            else if wantDefault6 then
+              [ { dst = "::/0"; } ]
+            else
+              [ ];
         in
         {
           kind = "wan";
@@ -24,8 +47,7 @@ let
 
           endpoints."${coreCtx}" =
             {
-              routes4 = lib.optional (w ? ip4) { dst = "0.0.0.0/0"; };
-              routes6 = lib.optional (w ? ip6) { dst = "::/0"; };
+              inherit routes4 routes6;
             }
             // lib.optionalAttrs (w ? ip4) { addr4 = w.ip4; }
             // lib.optionalAttrs (w ? ip6) { addr6 = w.ip6; }

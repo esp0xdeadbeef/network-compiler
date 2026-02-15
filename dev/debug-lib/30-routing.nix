@@ -1,4 +1,5 @@
 # ./dev/debug-lib/30-routing.nix
+# ./dev/debug-lib/30-routing.nix
 # FILE: ./dev/debug-lib/30-routing.nix
 {
   sopsData ? { },
@@ -23,6 +24,28 @@ let
     ctx: wan:
     let
       coreCtx = "${coreNodeName}-${ctx}";
+
+      dhcp = wan.dhcp or false;
+      acceptRA = wan.acceptRA or false;
+
+      wantDefault4 = dhcp || (wan ? routes4) || (wan ? ip4);
+      wantDefault6 = dhcp || acceptRA || (wan ? routes6) || (wan ? ip6);
+
+      routes4 =
+        if wan ? routes4 then
+          wan.routes4
+        else if wantDefault4 then
+          [ { dst = "0.0.0.0/0"; } ]
+        else
+          [ ];
+
+      routes6 =
+        if wan ? routes6 then
+          wan.routes6
+        else if wantDefault6 then
+          [ { dst = "::/0"; } ]
+        else
+          [ ];
     in
     {
       kind = "wan";
@@ -33,8 +56,7 @@ let
       endpoints = {
         "${coreCtx}" =
           {
-            routes4 = lib.optional (wan ? ip4) { dst = "0.0.0.0/0"; };
-            routes6 = lib.optional (wan ? ip6) { dst = "::/0"; };
+            inherit routes4 routes6;
           }
           // lib.optionalAttrs (wan ? ip4) { addr4 = wan.ip4; }
           // lib.optionalAttrs (wan ? ip6) { addr6 = wan.ip6; }

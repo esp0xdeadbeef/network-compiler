@@ -1,4 +1,3 @@
-# FILE: ./dev/debug-lib/inputs.nix
 {
   sopsData ? { },
 }:
@@ -23,10 +22,6 @@ let
 
     defaultRouteMode = "default";
 
-    # Optional: pick which routing-context node should be "core" for policy-core routing.
-    # If unset, routing-gen will try "${coreNodeName}-wan", else auto-pick a unique "${coreNodeName}-*".
-    # coreRoutingNodeName = "${coreNodeName}-isp-1";
-
     links = {
       isp-1 = {
         kind = "wan";
@@ -36,8 +31,9 @@ let
         members = [ coreNodeName ];
         endpoints = {
           "${coreNodeName}-isp-1" = {
-            addr4 = "10.11.0.40/24";
-            addr6 = "fd11:dead:beef:0::1337/64";
+            dhcp = true;
+            acceptRA = true;
+
             routes4 = [ { dst = "0.0.0.0/0"; } ];
             routes6 = [ { dst = "::/0"; } ];
           };
@@ -52,8 +48,9 @@ let
         members = [ coreNodeName ];
         endpoints = {
           "${coreNodeName}-isp-2" = {
-            addr4 = "10.13.0.40/24";
-            addr6 = "fd13:dead:beef:0::1337/64";
+            dhcp = true;
+            acceptRA = true;
+
             routes4 = [ { dst = "0.0.0.0/0"; } ];
             routes6 = [ { dst = "::/0"; } ];
           };
@@ -72,7 +69,7 @@ let
 
             routes4 =
               if defaultRouteMode == "default" then
-                [ { dst = "0.0.0.0/0"; } ]
+                [ { dst = "0.0.0.0/0"; via4 = "100.64.10.1"; } ]
               else
                 [ ];
           };

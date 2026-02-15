@@ -8,11 +8,7 @@ topo:
 
 let
   mode = topo.defaultRouteMode or "default";
-  okModes = [
-    "default"
-    "computed"
-    "blackhole"
-  ];
+  okModes = [ "default" "computed" "blackhole" ];
 
   nodes = topo.nodes or { };
 in
@@ -32,3 +28,4 @@ in
     }
   ];
 }
+

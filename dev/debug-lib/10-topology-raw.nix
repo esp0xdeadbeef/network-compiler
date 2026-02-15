@@ -14,7 +14,10 @@ import ../../lib/topology-gen.nix { inherit lib; } {
     corePolicyTransitVlan
     ulaPrefix
     tenantV4Base
+    policyNodeName
+    coreNodeName
     ;
 
   forbiddenVlanRanges = cfg.forbiddenVlanRanges or [ ];
 }
+

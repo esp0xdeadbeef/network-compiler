@@ -1,3 +1,4 @@
+# ./lib/topology-gen.nix
 { lib }:
 
 {
@@ -8,8 +9,8 @@
   policyAccessOffset ? 0,
 
   policyNodeName ? "s-router-policy-only",
-  coreNodeName ? "s-router-core-wan",
-  accessNodePrefix ? "s-router-access-",
+  coreNodeName ? "s-router-core",
+  accessNodePrefix ? "s-router-access",
 
   domain ? "lan.",
   reservedVlans ? [ 1 ],
@@ -44,7 +45,7 @@ let
           forbiddenVlanRanges = [ ];
       '';
 
-  accessNodeFor = vid: "${accessNodePrefix}${toString vid}";
+  accessNodeFor = vid: "${accessNodePrefix}-${toString vid}";
 
   accessTransitVlanFor = vid: policyAccessTransitBase + policyAccessOffset + vid;
 
@@ -221,7 +222,13 @@ builtins.seq _assertForbiddenRanges {
   inherit ulaPrefix tenantV4Base;
   inherit domain;
   inherit nodes links;
+
+  # Preserve the fabric host name so topology-resolve can auto-create
+  # "${coreNodeName}-<ctx>" nodes inheriting its ifs.
+  inherit coreNodeName;
+
   reservedVlans = reservedVlans;
   forbiddenVlanRanges = forbiddenRanges;
 }
 // passthrough
+

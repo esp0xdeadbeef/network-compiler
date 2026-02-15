@@ -2,7 +2,8 @@
   lib,
   ulaPrefix,
   tenantV4Base,
-  policyNodeName ? "s-router-policy-only",
+
+  policyNodeName,
 }:
 
 topo:

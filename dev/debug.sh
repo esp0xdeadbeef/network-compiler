@@ -1,12 +1,14 @@
+# ./dev/debug.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <config.nix>" >&2
+  echo "usage: $0 <config.nix> [site-name]" >&2
   exit 2
 fi
 
 CONFIG_PATH="$1"
+SITE_NAME="${2:-}"
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
@@ -19,14 +21,23 @@ else
   esac
 fi
 
-nix eval --impure --json --expr "
-  let
-    flake = builtins.getFlake (toString ./.);
-    lib = flake.lib;
-
-    main = import ./lib/main.nix { nix = flake; };
-    net = main.fromFile (builtins.toPath \"${CONFIG_ABS}\");
-  in
-    net.sites
-"
+if [[ -n "$SITE_NAME" ]]; then
+  nix eval --impure --json --expr "
+    let
+      flake = builtins.getFlake (toString ./.);
+      main = import ./lib/main.nix { nix = flake; };
+      net = main.fromFile (builtins.toPath \"${CONFIG_ABS}\");
+    in
+      net.sites.\"${SITE_NAME}\"
+  "
+else
+  nix eval --impure --json --expr "
+    let
+      flake = builtins.getFlake (toString ./.);
+      main = import ./lib/main.nix { nix = flake; };
+      net = main.fromFile (builtins.toPath \"${CONFIG_ABS}\");
+    in
+      net.sites
+  "
+fi
 

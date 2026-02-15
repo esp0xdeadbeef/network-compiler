@@ -12,14 +12,58 @@ let
 
   coreFabricNodeName = topoRaw.coreNodeName or null;
 
-  getEp = l: n: (l.endpoints or { }).${n} or { };
-
   membersOf = l: lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
+
+  endpointsOf = l: l.endpoints or { };
+
+  chooseEndpointKey =
+    linkName: l: nodeName:
+    let
+      eps = endpointsOf l;
+      keys = builtins.attrNames eps;
+
+      exact = if eps ? "${nodeName}" then nodeName else null;
+
+      byLinkName = "${nodeName}-${linkName}";
+      byLink = if eps ? "${byLinkName}" then byLinkName else null;
+
+      bySemanticName =
+        let
+          nm = l.name or null;
+          k = if nm == null then null else "${nodeName}-${nm}";
+        in
+        if k != null && eps ? "${k}" then k else null;
+
+      pref = "${nodeName}-";
+      prefKeys = lib.filter (k: lib.hasPrefix pref k) keys;
+
+      bySinglePrefix = if lib.length prefKeys == 1 then lib.head prefKeys else null;
+
+      bySortedPrefix = if prefKeys == [ ] then null else lib.head (lib.sort (a: b: a < b) prefKeys);
+    in
+    if exact != null then
+      exact
+    else if byLink != null then
+      byLink
+    else if bySemanticName != null then
+      bySemanticName
+    else if bySinglePrefix != null then
+      bySinglePrefix
+    else
+      bySortedPrefix;
+
+  getEp =
+    linkName: l: nodeName:
+    let
+      k = chooseEndpointKey linkName l nodeName;
+      eps = endpointsOf l;
+    in
+    if k == null then { } else (eps.${k} or { });
 
   mkIface =
     linkName: l: nodeName:
     let
-      ep = getEp l nodeName;
+      ep = getEp linkName l nodeName;
     in
     {
       kind = l.kind or null;
@@ -43,7 +87,16 @@ let
     };
 
   linkNamesForNode =
-    nodeName: lib.filter (lname: lib.elem nodeName (membersOf links.${lname})) (lib.attrNames links);
+    nodeName:
+    lib.filter (
+      lname:
+      let
+        l = links.${lname};
+        k = chooseEndpointKey lname l nodeName;
+      in
+
+      (lib.elem nodeName (membersOf l)) || (k != null)
+    ) (lib.attrNames links);
 
   interfacesForNode =
     nodeName:
@@ -123,7 +176,6 @@ let
         };
       }
     else
-
       {
         name = n;
         value = {

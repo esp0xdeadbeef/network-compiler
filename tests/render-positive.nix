@@ -9,6 +9,10 @@ let
     corePolicyTransitVlan = 200;
     ulaPrefix = "fd42:dead:beef";
     tenantV4Base = "10.10";
+
+    policyNodeName = "s-router-policy-only";
+    coreNodeName = "s-router-core";
+    accessNodePrefix = "s-router-access";
   };
 
   compiled = eval { topology = topo; };

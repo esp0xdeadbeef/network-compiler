@@ -19,8 +19,8 @@ let
 
     corePolicyTransitVlan = 200;
 
-    policyNodeName = "a-router-policy-only";
-    coreNodeName = "a-router-core";
+    policyNodeName = "site-a-s-router-policy-only";
+    coreNodeName = "site-a-s-router-core";
 
     defaultRouteMode = "default";
 

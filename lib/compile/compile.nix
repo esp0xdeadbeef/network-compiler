@@ -1,7 +1,6 @@
 { lib, model }:
 
 let
-
   validated = import ./validate.nix { inherit lib model; };
 
   defaultAssertions = import ./assertions/default.nix { inherit lib; } validated;
@@ -25,9 +24,16 @@ let
       throw "compile: missing required attribute 'tenantV4Base' in model";
 
   policyNodeName =
-    if validated ? policyNodeName then validated.policyNodeName else "s-router-policy-only";
+    if validated ? policyNodeName then
+      validated.policyNodeName
+    else
+      throw "compile: missing required attribute 'policyNodeName' in model";
 
-  coreNodeName = if validated ? coreNodeName then validated.coreNodeName else "s-router-core";
+  coreNodeName =
+    if validated ? coreNodeName then
+      validated.coreNodeName
+    else
+      throw "compile: missing required attribute 'coreNodeName' in model";
 
   routed = import ./routing-gen.nix {
     inherit
@@ -41,5 +47,4 @@ let
   } validated;
 
 in
-
 builtins.seq _defaultAssert routed

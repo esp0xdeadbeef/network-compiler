@@ -15,7 +15,11 @@ let
   chosen =
     if nodeName != null then
       nodeName
+    else if routed ? coreRoutingNodeName && routed.coreRoutingNodeName != null then
+      routed.coreRoutingNodeName
+    else if cfg ? coreNodeName && builtins.isString cfg.coreNodeName then
+      cfg.coreNodeName
     else
-      routed.coreRoutingNodeName or cfg.coreNodeName or "s-router-core";
+      throw "debug-lib/40-node: missing required cfg.coreNodeName (no internal default)";
 in
 q chosen

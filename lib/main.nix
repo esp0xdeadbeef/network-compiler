@@ -11,7 +11,15 @@ let
 
   evalNetwork = import ./eval.nix { inherit lib; };
 
-  isSingleInput = x: builtins.isAttrs x && x ? tenantVlans && x ? ulaPrefix && x ? tenantV4Base;
+  isSingleInput =
+    x:
+    builtins.isAttrs x
+    && x ? tenantVlans
+    && x ? ulaPrefix
+    && x ? tenantV4Base
+    && x ? policyNodeName
+    && x ? coreNodeName
+    && x ? accessNodePrefix;
 
   isResolvedTopo =
     x:
@@ -47,6 +55,7 @@ let
       routing-table = import ./query/routing-table.nix { inherit lib routed; };
     };
   };
+
 in
 {
   fromFile =
@@ -60,19 +69,21 @@ in
       routedBySite = lib.mapAttrs (
         _: siteCfg: if isResolvedTopo siteCfg then siteCfg else evalNetwork siteCfg
       ) sites;
+
+      cleanedBySite = routedBySite;
     in
     {
-      sites = routedBySite;
+      sites = cleanedBySite;
 
       query = {
-        all-sites = builtins.attrNames routedBySite;
+        all-sites = builtins.attrNames cleanedBySite;
 
-        all-nodes = lib.mapAttrs (_: r: builtins.attrNames r.nodes) routedBySite;
+        all-nodes = lib.mapAttrs (_: r: builtins.attrNames r.nodes) cleanedBySite;
 
         site =
           siteName:
-          if routedBySite ? "${siteName}" then
-            mkSiteResult routedBySite.${siteName}
+          if cleanedBySite ? "${siteName}" then
+            mkSiteResult cleanedBySite.${siteName}
           else
             throw "unknown site '${siteName}'";
       };

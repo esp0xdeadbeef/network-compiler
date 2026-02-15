@@ -20,6 +20,9 @@ let
       nebulaAddr4 = "172.16.${toString nebulaBaseOctet}.2/31";
       nebulaGw4 = "172.16.${toString nebulaBaseOctet}.1";
 
+      nebulaAddr6 = "${cfg.ulaPrefix}:ffff::2/127";
+      nebulaGw6 = "${cfg.ulaPrefix}:ffff::1";
+
       tenantLinks = builtins.listToAttrs (
         map (
           vlan:
@@ -52,6 +55,28 @@ let
         ) cfg.tenantVlans
       );
 
+      nebulaRoutes4 = map (
+        vlan:
+        let
+          vStr = toString vlan;
+        in
+        {
+          dst = "${cfg.tenantV4Base}.${vStr}.0/24";
+          via4 = nebulaGw4;
+        }
+      ) cfg.tenantVlans;
+
+      nebulaRoutes6 = map (
+        vlan:
+        let
+          vStr = toString vlan;
+        in
+        {
+          dst = "${cfg.ulaPrefix}:${vStr}::/64";
+          via6 = nebulaGw6;
+        }
+      ) cfg.tenantVlans;
+
       nebulaLink = {
         nebula = {
           kind = "wan";
@@ -62,12 +87,9 @@ let
           endpoints = {
             "${cfg.coreNodeName}-nebula" = {
               addr4 = nebulaAddr4;
-              routes4 = [
-                {
-                  dst = "0.0.0.0/0";
-                  via4 = nebulaGw4;
-                }
-              ];
+              addr6 = nebulaAddr6;
+              routes4 = nebulaRoutes4;
+              routes6 = nebulaRoutes6;
             };
           };
         };

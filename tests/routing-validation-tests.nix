@@ -1,5 +1,3 @@
-# ./tests/routing-validation-tests.nix
-# FILE: ./tests/routing-validation-tests.nix
 { lib }:
 
 let
@@ -11,7 +9,10 @@ let
     corePolicyTransitVlan = 200;
     ulaPrefix = "fd42:dead:beef";
     tenantV4Base = "10.10";
+
     coreNodeName = "s-router-core";
+    policyNodeName = "s-router-policy-only";
+    accessNodePrefix = "s-router-access";
   };
 
   coreNodeName = baseInputs.coreNodeName;
@@ -128,4 +129,3 @@ in
     );
   };
 }
-

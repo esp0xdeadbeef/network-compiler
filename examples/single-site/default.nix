@@ -20,8 +20,8 @@ let
 
     policyAccessTransitBase = 100;
     policyAccessOffset = 0;
-
     corePolicyTransitVlan = 200;
+    accessNodePrefix = "s-router-access";
 
     policyNodeName = "s-router-policy-only";
     coreNodeName = "s-router-core";

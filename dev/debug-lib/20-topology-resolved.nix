@@ -1,13 +1,11 @@
-{
-  sopsData ? { },
-}:
-let
-  common = import ./common.nix { inherit sopsData; };
-  inherit (common) lib cfg;
+{ cfg }:
 
-  raw = import ./10-topology-raw.nix { inherit sopsData; };
+let
+  common = import ./common.nix { inherit cfg; };
+  inherit (common) lib;
+
+  raw = import ./10-topology-raw.nix { inherit cfg; };
 in
-import ../../lib/topology-resolve.nix {
-  inherit lib;
-  inherit (cfg) ulaPrefix tenantV4Base;
-} raw
+import ../../lib/topology/20-topology-resolved.nix {
+  inherit lib cfg raw;
+}

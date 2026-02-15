@@ -1,46 +1,9 @@
-# ./lib/query/multi-wan.nix
-{ lib }:
-
-routed:
+{ lib, routed }:
 
 let
-  sanitize = import ./sanitize.nix { inherit lib; };
-
-  wanLinks = lib.filterAttrs (_: l: (l.kind or null) == "wan") (routed.links or { });
-
-  nodes = builtins.attrNames (routed.nodes or { });
-
-  wanForNode =
-    node:
-    lib.concatMap (
-      l:
-      if (l.endpoints or { }) ? "${node}" then
-        let
-          ep = l.endpoints.${node};
-        in
-        [
-          {
-            link = l.name or null;
-            vlanId = l.vlanId or null;
-            carrier = l.carrier or null;
-
-            addr4 = ep.addr4 or null;
-            addr6 = ep.addr6 or null;
-            routes4 = ep.routes4 or [ ];
-            routes6 = ep.routes6 or [ ];
-          }
-        ]
-      else
-        [ ]
-    ) (lib.attrValues wanLinks);
-
+  wans = lib.filterAttrs (_: l: (l.kind or null) == "wan") routed.links;
 in
-sanitize {
-  nodes = lib.listToAttrs (
-    map (n: {
-      name = n;
-      value = wanForNode n;
-    }) nodes
-  );
+{
+  count = lib.length (lib.attrNames wans);
+  links = wans;
 }
-

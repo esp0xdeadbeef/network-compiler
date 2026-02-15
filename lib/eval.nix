@@ -1,6 +1,3 @@
-# ./lib/eval.nix
-# ./lib/eval.nix
-# FILE: ./lib/eval.nix
 { lib }:
 
 let
@@ -9,7 +6,8 @@ let
     if wan == null then
       { }
     else
-      lib.mapAttrs (ctx: w:
+      lib.mapAttrs (
+        ctx: w:
         let
           coreCtx = "${coreNodeName}-${ctx}";
 
@@ -40,19 +38,14 @@ let
           carrier = "wan";
           vlanId = w.vlanId or 6;
           name = "wan-${ctx}";
-
-          # members can remain the fabric host; topology-resolve treats endpoint keys
-          # as implicit members and creates the coreCtx node inheriting ifs.
           members = [ coreNodeName ];
-
-          endpoints."${coreCtx}" =
-            {
-              inherit routes4 routes6;
-            }
-            // lib.optionalAttrs (w ? ip4) { addr4 = w.ip4; }
-            // lib.optionalAttrs (w ? ip6) { addr6 = w.ip6; }
-            // lib.optionalAttrs (w ? acceptRA) { acceptRA = w.acceptRA; }
-            // lib.optionalAttrs (w ? dhcp) { dhcp = w.dhcp; };
+          endpoints."${coreCtx}" = {
+            inherit routes4 routes6;
+          }
+          // lib.optionalAttrs (w ? ip4) { addr4 = w.ip4; }
+          // lib.optionalAttrs (w ? ip6) { addr6 = w.ip6; }
+          // lib.optionalAttrs (w ? acceptRA) { acceptRA = w.acceptRA; }
+          // lib.optionalAttrs (w ? dhcp) { dhcp = w.dhcp; };
         }
       ) wan;
 
@@ -66,10 +59,7 @@ let
 
       policyAccessOffset ? 0,
       policyNodeName ? "s-router-policy-only",
-
-      # Fabric host
       coreNodeName ? "s-router-core",
-
       accessNodePrefix ? "s-router-access",
       domain ? "lan.",
       reservedVlans ? [ 1 ],
@@ -77,8 +67,6 @@ let
       defaultRouteMode ? "default",
       links ? { },
       wan ? null,
-
-      # Optional explicit routing core node (context)
       coreRoutingNodeName ? null,
       ...
     }:
@@ -121,7 +109,9 @@ in
 
 args:
 let
-  topoInput = if args ? topology then args.topology else args;
+  topoInputRaw = if args ? topology then args.topology else args;
+
+  topoInput = if builtins.isFunction topoInputRaw then topoInputRaw { } else topoInputRaw;
 
   isResolved =
     topoInput ? nodes
@@ -138,4 +128,3 @@ if isResolved then
   }
 else
   evalFromInput topoInput
-

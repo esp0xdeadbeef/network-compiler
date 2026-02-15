@@ -1,47 +1,11 @@
-{
-  sopsData ? { },
-}:
+{ cfg }:
+
 let
-  common = import ./common.nix { inherit sopsData; };
-  inherit (common) lib cfg;
+  common = import ./common.nix { inherit cfg; };
+  inherit (common) lib;
 
-  raw = import ../../lib/topology-gen.nix { inherit lib; } {
-    inherit (cfg)
-      tenantVlans
-      policyAccessTransitBase
-      corePolicyTransitVlan
-      ulaPrefix
-      tenantV4Base
-      ;
-  };
-
-  resolved = import ../../lib/topology-resolve.nix {
-    inherit lib;
-    inherit (cfg) ulaPrefix tenantV4Base;
-  } raw;
-
-  resolvedWithDebugLinks = resolved // {
-    links = (resolved.links or { }) // (cfg.links or { });
-  };
-
-  routed = import ../../lib/compile/routing-gen.nix {
-    inherit lib;
-    inherit (cfg) ulaPrefix tenantV4Base;
-  } resolvedWithDebugLinks;
-
+  all = import ./90-all.nix { inherit cfg; };
 in
 {
-  topology = {
-    domain = routed.domain;
-    nodes = lib.attrNames routed.nodes;
-    links = lib.attrNames routed.links;
-  };
-
-  nodes = lib.mapAttrs (
-    n: _:
-    import ./view-node.nix {
-      inherit lib;
-      inherit (cfg) ulaPrefix tenantV4Base;
-    } n routed
-  ) routed.nodes;
+  inherit all;
 }

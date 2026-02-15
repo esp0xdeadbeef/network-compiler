@@ -1,20 +1,9 @@
-{
-  sopsData ? { },
-}:
-let
-  common = import ./common.nix { inherit sopsData; };
-  inherit (common) lib cfg;
-in
-import ../../lib/topology-gen.nix { inherit lib; } {
-  inherit (cfg)
-    tenantVlans
-    policyAccessTransitBase
-    corePolicyTransitVlan
-    ulaPrefix
-    tenantV4Base
-    policyNodeName
-    coreNodeName
-    ;
+{ cfg }:
 
-  forbiddenVlanRanges = cfg.forbiddenVlanRanges or [ ];
+let
+  common = import ./common.nix { inherit cfg; };
+  inherit (common) lib;
+in
+import ../../lib/10-topology-raw.nix {
+  inherit lib cfg;
 }

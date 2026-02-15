@@ -1,11 +1,11 @@
-{
-  sopsData ? { },
-}:
+{ cfg }:
+
 let
-  common = import ./common.nix { inherit sopsData; };
+  common = import ./common.nix { inherit cfg; };
   inherit (common) lib;
 
-  routed = import ./30-routing.nix { inherit sopsData; };
-  q = import ../../lib/query/routing-table.nix { inherit lib; };
+  eval = import ../../lib/eval.nix { inherit lib; };
+  routed = eval cfg;
+
 in
-q routed
+import ../../lib/query/routing-table.nix { inherit lib routed; }

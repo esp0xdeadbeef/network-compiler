@@ -11,3 +11,7 @@ nix eval \
   --impure \
   --expr "let sopsData = {}; in import ./dev/debug-lib/91-node-context.nix { inherit sopsData; nodeName = \"s-router-access-20\"; }" \
   --json | jq
+nix eval \
+  --impure \
+  --expr "let sopsData = {}; in import ./dev/debug-lib/91-node-context.nix { inherit sopsData; nodeName = \"s-router-core-nebula-20\"; }" \
+  --json | jq

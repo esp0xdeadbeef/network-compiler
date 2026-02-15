@@ -1,4 +1,3 @@
-# ./lib/topology-gen.nix
 { lib }:
 
 {
@@ -223,12 +222,9 @@ builtins.seq _assertForbiddenRanges {
   inherit domain;
   inherit nodes links;
 
-  # Preserve the fabric host name so topology-resolve can auto-create
-  # "${coreNodeName}-<ctx>" nodes inheriting its ifs.
-  inherit coreNodeName;
+  inherit coreNodeName policyNodeName;
 
   reservedVlans = reservedVlans;
   forbiddenVlanRanges = forbiddenRanges;
 }
 // passthrough
-

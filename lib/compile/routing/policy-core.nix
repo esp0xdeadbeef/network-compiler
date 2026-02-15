@@ -9,113 +9,243 @@
 topo:
 
 let
-  links = topo.links or { };
+  links0 = topo.links or { };
 
-  policyCore =
-    if links ? "policy-core" then links."policy-core" else throw "policy-core link is required";
+  isPolicyCore =
+    lname: l:
+    (l.kind or null) == "p2p"
+    && (
+      lname == "policy-core"
+      || lib.hasPrefix "policy-core-" lname
+      || (l.name or "") == "policy-core"
+      || lib.hasPrefix "policy-core-" (l.name or "")
+    )
+    && lib.elem policyNodeName (l.members or [ ]);
 
-  endpoints0 = policyCore.endpoints or { };
+  policyCoreLinks = lib.filterAttrs isPolicyCore links0;
 
-  coreEp = if endpoints0 ? "${coreNodeName}" then endpoints0.${coreNodeName} else { };
+  _assertHavePolicyCore = lib.assertMsg (policyCoreLinks != { }) ''
+    Missing required p2p policy-core link(s) between '${policyNodeName}' and core context node(s).
 
-  policyEp = if endpoints0 ? "${policyNodeName}" then endpoints0.${policyNodeName} else { };
+    Expected at least one link named:
+      - policy-core-<ctx>   (preferred)
+    or legacy:
+      - policy-core
+  '';
 
   stripCidr = s: builtins.elemAt (lib.splitString "/" s) 0;
 
-  coreAddr4 = if coreEp ? addr4 && coreEp.addr4 != null then stripCidr coreEp.addr4 else null;
-
-  coreAddr6 = if coreEp ? addr6 && coreEp.addr6 != null then stripCidr coreEp.addr6 else null;
-
-  policyAddr4 = if policyEp ? addr4 && policyEp.addr4 != null then stripCidr policyEp.addr4 else null;
-
-  policyAddr6 = if policyEp ? addr6 && policyEp.addr6 != null then stripCidr policyEp.addr6 else null;
-
   defaultRouteMode = topo.defaultRouteMode or "default";
 
-  tenantVids = lib.unique (
-    lib.concatMap (
-      lname:
-      let
-        l = links.${lname};
-      in
-      lib.concatMap (
-        ep:
-        if builtins.isAttrs ep && ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then
-          [ ep.tenant.vlanId ]
-        else
-          [ ]
-      ) (builtins.attrValues (l.endpoints or { }))
-    ) (builtins.attrNames links)
-  );
+  rc = import ./route-classes.nix { inherit lib; };
+  caps = topo._routingMaps.capabilities or (import ./capabilities.nix { inherit lib; } topo);
 
-  mkTenant4 = vid: "${tenantV4Base}.${toString vid}.0/24";
-  mkTenant6 = vid: "${ulaPrefix}:${toString vid}::/64";
+  intent0 = topo.policyIntent or { };
+  _intentClassesOk = builtins.seq (rc.assertClasses "policyIntent.upstreamClasses" (
+    intent0.upstreamClasses or [ ]
+  )) (rc.assertClasses "policyIntent.advertiseClasses" (intent0.advertiseClasses or [ ]));
 
-  coreTenantRoutes4 =
-    if policyAddr4 == null then
-      [ ]
+  upstreamClasses = rc.normalize (intent0.upstreamClasses or [ ]);
+  haveCaps = caps.allCaps or [ ];
+
+  haveClass = c: lib.elem c haveCaps;
+  wantClass = c: lib.elem c upstreamClasses;
+
+  upstreamAllowed = c: wantClass c && haveClass c;
+
+  overlayClassesWanted = lib.filter (c: lib.hasPrefix "overlay:" c) upstreamClasses;
+
+  linkOrder = lib.sort (a: b: a < b) (builtins.attrNames policyCoreLinks);
+
+  firstPolicyCoreName = if linkOrder == [ ] then null else lib.head linkOrder;
+
+  ctxForPolicyCoreLink =
+    lname:
+    if lib.hasPrefix "policy-core-" lname then
+      lib.removePrefix "policy-core-" lname
+    else if lib.hasPrefix "policy-core-" (policyCoreLinks.${lname}.name or "") then
+      lib.removePrefix "policy-core-" (policyCoreLinks.${lname}.name or "")
     else
-      builtins.map (vid: {
-        dst = mkTenant4 vid;
-        via4 = policyAddr4;
-      }) tenantVids;
+      null;
 
-  coreTenantRoutes6 =
-    if policyAddr6 == null then
+  pickLinkForOverlay =
+    ov:
+    let
+      nm = lib.removePrefix "overlay:" ov;
+      exact = "policy-core-${nm}";
+    in
+    if policyCoreLinks ? "${exact}" then exact else firstPolicyCoreName;
+
+  getEp = l: n: (l.endpoints or { }).${n} or { };
+
+  otherMember =
+    l:
+    let
+      ms = l.members or [ ];
+      a = if lib.length ms > 0 then lib.head ms else null;
+      b = if lib.length ms > 1 then builtins.elemAt ms 1 else null;
+    in
+    if a == policyNodeName then b else a;
+
+  coreEpAddrForLink4 =
+    lname:
+    let
+      l = policyCoreLinks.${lname};
+      core = otherMember l;
+      ep = getEp l core;
+    in
+    if ep ? addr4 && ep.addr4 != null then stripCidr ep.addr4 else null;
+
+  coreEpAddrForLink6 =
+    lname:
+    let
+      l = policyCoreLinks.${lname};
+      core = otherMember l;
+      ep = getEp l core;
+    in
+    if ep ? addr6 && ep.addr6 != null then stripCidr ep.addr6 else null;
+
+  policyEpAddrForLink4 =
+    lname:
+    let
+      l = policyCoreLinks.${lname};
+      ep = getEp l policyNodeName;
+    in
+    if ep ? addr4 && ep.addr4 != null then stripCidr ep.addr4 else null;
+
+  policyEpAddrForLink6 =
+    lname:
+    let
+      l = policyCoreLinks.${lname};
+      ep = getEp l policyNodeName;
+    in
+    if ep ? addr6 && ep.addr6 != null then stripCidr ep.addr6 else null;
+
+  defaultLink = firstPolicyCoreName;
+
+  nhDefault4 = if defaultLink == null then null else coreEpAddrForLink4 defaultLink;
+  nhDefault6 = if defaultLink == null then null else coreEpAddrForLink6 defaultLink;
+
+  mkPolicyUpstream4 =
+    class:
+    if defaultRouteMode == "blackhole" then
       [ ]
-    else
-      builtins.map (vid: {
-        dst = mkTenant6 vid;
-        via6 = policyAddr6;
-      }) tenantVids;
-
-  coreRoutes4 = coreTenantRoutes4;
-  coreRoutes6 = coreTenantRoutes6;
-
-  policyUpstream4 =
-    if defaultRouteMode == "default" && coreAddr4 != null then
+    else if defaultRouteMode == "computed" then
+      if class == "internet" && upstreamAllowed "internet" && nhDefault4 != null then
+        (map (p: {
+          dst = p;
+          via4 = nhDefault4;
+        }) (topo._internet.internet4 or [ ]))
+      else
+        [ ]
+    else if class == "default" && upstreamAllowed "default" && nhDefault4 != null then
       [
         {
           dst = "0.0.0.0/0";
-          via4 = coreAddr4;
+          via4 = nhDefault4;
         }
       ]
+    else if lib.hasPrefix "overlay:" class && upstreamAllowed class then
+      let
+        ln = pickLinkForOverlay class;
+        nh = if ln == null then null else coreEpAddrForLink4 ln;
+      in
+      if nh == null then
+        [ ]
+      else
+        [
+          {
+            dst = "0.0.0.0/0";
+            via4 = nh;
+          }
+        ]
     else
       [ ];
 
-  policyUpstream6 =
-    if defaultRouteMode == "default" && coreAddr6 != null then
+  mkPolicyUpstream6 =
+    class:
+    if defaultRouteMode == "blackhole" then
+      [ ]
+    else if defaultRouteMode == "computed" then
+      if class == "internet" && upstreamAllowed "internet" && nhDefault6 != null then
+        (map (p: {
+          dst = p;
+          via6 = nhDefault6;
+        }) (topo._internet.internet6 or [ ]))
+      else
+        [ ]
+    else if class == "default" && upstreamAllowed "default" && nhDefault6 != null then
       [
         {
           dst = "::/0";
-          via6 = coreAddr6;
+          via6 = nhDefault6;
         }
       ]
+    else if lib.hasPrefix "overlay:" class && upstreamAllowed class then
+      let
+        ln = pickLinkForOverlay class;
+        nh = if ln == null then null else coreEpAddrForLink6 ln;
+      in
+      if nh == null then
+        [ ]
+      else
+        [
+          {
+            dst = "::/0";
+            via6 = nh;
+          }
+        ]
     else
       [ ];
 
-  policyRoutes4 = policyUpstream4;
-  policyRoutes6 = policyUpstream6;
+  policyUpstream4 = lib.flatten (
+    (mkPolicyUpstream4 "default")
+    ++ (mkPolicyUpstream4 "internet")
+    ++ (lib.concatMap mkPolicyUpstream4 overlayClassesWanted)
+  );
 
-  endpoints1 = endpoints0 // {
-    "${coreNodeName}" = coreEp // {
-      routes4 = coreRoutes4;
-      routes6 = coreRoutes6;
-    };
+  policyUpstream6 = lib.flatten (
+    (mkPolicyUpstream6 "default")
+    ++ (mkPolicyUpstream6 "internet")
+    ++ (lib.concatMap mkPolicyUpstream6 overlayClassesWanted)
+  );
 
-    "${policyNodeName}" = policyEp // {
-      routes4 = policyRoutes4;
-      routes6 = policyRoutes6;
-    };
-  };
+  mkCoreRoutes4 = policyAddr4: lib.optional (policyAddr4 != null) { dst = "${policyAddr4}/32"; };
+  mkCoreRoutes6 = policyAddr6: lib.optional (policyAddr6 != null) { dst = "${policyAddr6}/128"; };
 
-  policyCore1 = policyCore // {
-    endpoints = endpoints1;
-  };
+  rewriteOne =
+    lname: l:
+    let
+      core = otherMember l;
 
-  links1 = links // {
-    "policy-core" = policyCore1;
-  };
+      p4 = policyEpAddrForLink4 lname;
+      p6 = policyEpAddrForLink6 lname;
+
+      coreEp0 = getEp l core;
+      policyEp0 = getEp l policyNodeName;
+
+      endpoints1 = (l.endpoints or { }) // {
+        "${core}" = coreEp0 // {
+          routes4 = mkCoreRoutes4 p4;
+          routes6 = mkCoreRoutes6 p6;
+        };
+
+        "${policyNodeName}" = policyEp0 // {
+          routes4 = policyUpstream4;
+          routes6 = policyUpstream6;
+        };
+      };
+    in
+    l // { endpoints = endpoints1; };
+
+  links1 = lib.mapAttrs rewriteOne policyCoreLinks;
 
 in
-topo // { links = links1; }
+builtins.seq _assertHavePolicyCore (
+  builtins.seq _intentClassesOk (
+    topo
+    // {
+      links = links0 // links1;
+    }
+  )
+)

@@ -12,7 +12,22 @@ let
   links = topo.links or { };
   policyNode = policyNodeName;
 
-  defaultMode = if topo ? defaultRouteMode then topo.defaultRouteMode else "default";
+  defaultMode = topo.defaultRouteMode or "default";
+
+  rc = import ./route-classes.nix { inherit lib; };
+
+  intent0 = topo.policyIntent or { };
+
+  _intentClassesOk = rc.assertClasses "policyIntent.advertiseClasses" (
+    intent0.advertiseClasses or [ ]
+  );
+
+  advertiseClasses = rc.normalize (intent0.advertiseClasses or [ ]);
+  advertises = c: lib.elem c advertiseClasses;
+
+  exitTenants0 = intent0.exitTenants or [ ];
+  exitTenants = if exitTenants0 == null then [ ] else exitTenants0;
+  tenantMayExit = vid: vid != null && lib.elem vid exitTenants;
 
   isPolicyAccess =
     lname: l:
@@ -52,91 +67,105 @@ let
     else
       [ ];
 
-in
-topo
-// {
-  links = lib.mapAttrs (
-    lname: l:
-    if !(isPolicyAccess lname l) then
-      l
+  mkAccessAdv4 =
+    { gw4, allowExit }:
+    if !allowExit then
+      [ ]
+    else if defaultMode == "blackhole" then
+      [ ]
+    else if defaultMode == "computed" then
+      if advertises "internet" then map (r: r // { via4 = gw4; }) computed4 else [ ]
+    else if advertises "default" then
+      [
+        {
+          dst = "0.0.0.0/0";
+          via4 = gw4;
+        }
+      ]
     else
-      let
-        ms = l.members or [ ];
+      [ ];
 
-        accessNode = if lib.head ms == policyNode then builtins.elemAt ms 1 else lib.head ms;
+  mkAccessAdv6 =
+    { gw6, allowExit }:
+    if !allowExit then
+      [ ]
+    else if defaultMode == "blackhole" then
+      [ ]
+    else if defaultMode == "computed" then
+      if advertises "internet" then map (r: r // { via6 = gw6; }) computed6 else [ ]
+    else if advertises "default" then
+      [
+        {
+          dst = "::/0";
+          via6 = gw6;
+        }
+      ]
+    else
+      [ ];
 
-        epAccess = getEp l accessNode;
-        epPolicy = getEp l policyNode;
+in
+builtins.seq _intentClassesOk (
+  topo
+  // {
+    links = lib.mapAttrs (
+      lname: l:
+      if !(isPolicyAccess lname l) then
+        l
+      else
+        let
+          ms = l.members or [ ];
 
-        vid = getTenantVid epAccess;
+          accessNode = if lib.head ms == policyNode then builtins.elemAt ms 1 else lib.head ms;
 
-        gw4 = stripCidr epPolicy.addr4;
-        gw6 = stripCidr epPolicy.addr6;
+          epAccess = getEp l accessNode;
+          epPolicy = getEp l policyNode;
 
-        via4toAccess = stripCidr epAccess.addr4;
-        via6toAccess = stripCidr epAccess.addr6;
+          vid = getTenantVid epAccess;
 
-        accessDefaults4 =
-          if defaultMode == "blackhole" then
-            [ ]
-          else if defaultMode == "computed" then
-            map (r: r // { via4 = gw4; }) computed4
-          else
-            [
-              {
-                dst = "0.0.0.0/0";
-                via4 = gw4;
-              }
-            ];
+          gw4 = stripCidr epPolicy.addr4;
+          gw6 = stripCidr epPolicy.addr6;
 
-        accessDefaults6 =
-          if defaultMode == "blackhole" then
-            [ ]
-          else if defaultMode == "computed" then
-            map (r: r // { via6 = gw6; }) computed6
-          else
-            [
-              {
-                dst = "::/0";
-                via6 = gw6;
-              }
-            ];
+          via4toAccess = stripCidr epAccess.addr4;
+          via6toAccess = stripCidr epAccess.addr6;
 
-        accessRoutes4 = accessDefaults4;
+          allowExit = tenantMayExit vid;
 
-        accessRoutes6 = [
-          {
-            dst = ula48;
-            via6 = gw6;
-          }
-        ]
-        ++ accessDefaults6;
+          accessRoutes4 = mkAccessAdv4 { inherit gw4 allowExit; };
 
-        policyRoutes4 = lib.optional (vid != null) {
-          dst = tenant4Dst vid;
-          via4 = via4toAccess;
-        };
+          accessRoutes6 = [
+            {
+              dst = ula48;
+              via6 = gw6;
+            }
+          ]
+          ++ (mkAccessAdv6 { inherit gw6 allowExit; });
 
-        policyRoutes6 = lib.optional (vid != null) {
-          dst = tenant6DstUla vid;
-          via6 = via6toAccess;
-        };
-      in
-      setEp
-        (setEp l accessNode (
-          epAccess
-          // {
-            routes4 = (epAccess.routes4 or [ ]) ++ accessRoutes4;
-            routes6 = (epAccess.routes6 or [ ]) ++ accessRoutes6;
-          }
-        ))
-        policyNode
-        (
-          epPolicy
-          // {
-            routes4 = (epPolicy.routes4 or [ ]) ++ policyRoutes4;
-            routes6 = (epPolicy.routes6 or [ ]) ++ policyRoutes6;
-          }
-        )
-  ) links;
-}
+          policyRoutes4 = lib.optional (vid != null) {
+            dst = tenant4Dst vid;
+            via4 = via4toAccess;
+          };
+
+          policyRoutes6 = lib.optional (vid != null) {
+            dst = tenant6DstUla vid;
+            via6 = via6toAccess;
+          };
+        in
+        setEp
+          (setEp l accessNode (
+            epAccess
+            // {
+              routes4 = (epAccess.routes4 or [ ]) ++ accessRoutes4;
+              routes6 = (epAccess.routes6 or [ ]) ++ accessRoutes6;
+            }
+          ))
+          policyNode
+          (
+            epPolicy
+            // {
+              routes4 = (epPolicy.routes4 or [ ]) ++ policyRoutes4;
+              routes6 = (epPolicy.routes6 or [ ]) ++ policyRoutes6;
+            }
+          )
+    ) links;
+  }
+)

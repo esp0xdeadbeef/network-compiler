@@ -17,43 +17,11 @@ let
 
       nebulaBaseOctet = siteHash.x;
 
-      nebulaAddr4 = "172.16.${toString nebulaBaseOctet}.2/31";
-      nebulaGw4 = "172.16.${toString nebulaBaseOctet}.1";
+      nebulaAddr4 = "172.16.${toString nebulaBaseOctet}.3/31";
+      nebulaGw4 = "172.16.${toString nebulaBaseOctet}.3";
 
-      nebulaAddr6 = "${cfg.ulaPrefix}:ffff::2/127";
-      nebulaGw6 = "${cfg.ulaPrefix}:ffff::1";
-
-      tenantLinks = builtins.listToAttrs (
-        map (
-          vlan:
-          let
-            vStr = toString vlan;
-          in
-          {
-            name = "tenant-${vStr}";
-            value = {
-              kind = "lan";
-              carrier = "fabric";
-              vlanId = vlan;
-              name = "tenant-${vStr}";
-              members = [
-                cfg.coreNodeName
-                cfg.policyNodeName
-              ];
-              endpoints = {
-                "${cfg.coreNodeName}-tenant-${vStr}" = {
-                  addr4 = "${cfg.tenantV4Base}.${vStr}.1/24";
-                  addr6 = "${cfg.ulaPrefix}:${vStr}::1/64";
-                };
-                "${cfg.policyNodeName}-tenant-${vStr}" = {
-                  addr4 = "${cfg.tenantV4Base}.${vStr}.254/24";
-                  addr6 = "${cfg.ulaPrefix}:${vStr}::fe/64";
-                };
-              };
-            };
-          }
-        ) cfg.tenantVlans
-      );
+      nebulaAddr6 = "${cfg.ulaPrefix}:ffff::3/127";
+      nebulaGw6 = "${cfg.ulaPrefix}:ffff::3";
 
       nebulaLink = {
         nebula = {
@@ -87,7 +55,7 @@ let
     in
     cfg
     // {
-      links = nebulaLink // (cfg.links or { }) // tenantLinks;
+      links = nebulaLink // (cfg.links or { });
     };
 in
 builtins.mapAttrs mkSite sites

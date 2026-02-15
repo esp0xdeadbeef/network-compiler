@@ -69,8 +69,11 @@ let
 
   interfaces = lib.mapAttrs (_: iface: sanitizeTenantRoutes (rewriteVlanId iface)) ifaces0;
 
+  routingMaps = topo._routingMaps or null;
+
 in
 sanitize {
   node = nodeName;
   interfaces = interfaces;
+  routing = routingMaps;
 }

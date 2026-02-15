@@ -28,6 +28,21 @@ let
 
     defaultRouteMode = "default";
 
+    policyIntent = {
+
+      exitTenants = tenantVlans;
+
+      upstreamClasses = [
+        "default"
+        "internet"
+      ];
+
+      advertiseClasses = [
+        "default"
+        "internet"
+      ];
+    };
+
     links = {
       isp-1 = {
         kind = "wan";

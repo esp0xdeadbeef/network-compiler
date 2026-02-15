@@ -3,7 +3,24 @@
 let
   evalNetwork = import ../lib/eval.nix { inherit lib; };
 
-  inputs = import ../examples/single-site { sopsData = { }; };
+  inputs0 = import ../examples/single-site { sopsData = { }; };
+
+  inputs = inputs0 // {
+
+    policyIntent =
+      inputs0.policyIntent or {
+        exitTenants = inputs0.tenantVlans or [ 10 ];
+        upstreamClasses = [
+          "default"
+          "internet"
+        ];
+        advertiseClasses = [
+          "default"
+          "internet"
+        ];
+      };
+  };
+
   mode = if inputs ? defaultRouteMode then inputs.defaultRouteMode else "default";
 
   routed = evalNetwork inputs;
@@ -18,13 +35,13 @@ let
     else
       throw "routing-semantics: missing policyNodeName in inputs/routed";
 
-  coreNode =
-    if routed ? coreRoutingNodeName && builtins.isString routed.coreRoutingNodeName then
-      routed.coreRoutingNodeName
-    else if inputs ? coreNodeName then
+  coreHost =
+    if inputs ? coreNodeName then
       inputs.coreNodeName
+    else if routed ? coreNodeName then
+      routed.coreNodeName
     else
-      throw "routing-semantics: missing coreNodeName in inputs";
+      throw "routing-semantics: missing coreNodeName in inputs/routed";
 
   accessPrefix =
     if inputs ? accessNodePrefix then
@@ -54,9 +71,29 @@ let
     in
     lib.any pred routes;
 
-  policyCore = getLink "policy-core";
+  policyCoreNames = lib.sort (a: b: a < b) (
+    lib.filter (n: n == "policy-core" || lib.hasPrefix "policy-core-" n) (builtins.attrNames links)
+  );
 
-  coreEp = getEp policyCore coreNode;
+  policyCoreLinkName =
+    if policyCoreNames == [ ] then
+      throw "routing-semantics: missing policy-core link(s)"
+    else
+      lib.head policyCoreNames;
+
+  policyCore = getLink policyCoreLinkName;
+
+  members = policyCore.members or [ ];
+
+  coreMember =
+    if lib.length members != 2 then
+      throw "routing-semantics: policy-core must be p2p (2 members)"
+    else if lib.head members == policyNode then
+      builtins.elemAt members 1
+    else
+      lib.head members;
+
+  coreEp = getEp policyCore coreMember;
 
   coreRoutes4 = if coreEp ? routes4 then coreEp.routes4 else [ ];
   coreRoutes6 = if coreEp ? routes6 then coreEp.routes6 else [ ];
@@ -73,14 +110,15 @@ let
     && lib.hasSuffix "/64" (if r ? dst then r.dst else "")
   ) coreRoutes6;
 
-  _assertCoreTenants = lib.assertMsg (coreHasTenant4 && coreHasTenant6) ''
-    routing-semantics: core is missing tenant routes on policy-core.
+  _assertCoreNoTenants = lib.assertMsg (!coreHasTenant4 && !coreHasTenant6) ''
+    routing-semantics: core must NOT contain tenant routes on policy-core.
 
-    coreRoutingNodeName = "${coreNode}"
+    coreHost = "${coreHost}"
+    coreMember (selected) = "${coreMember}"
 
-    Expected at least one:
-      - 10.10.<vid>.0/24
-      - fd42:dead:beef:<vid>::/64
+    Observed:
+      tenant v4 routes present = ${toString coreHasTenant4}
+      tenant v6 routes present = ${toString coreHasTenant6}
   '';
 
   policyEp = getEp policyCore policyNode;
@@ -165,7 +203,7 @@ let
   '';
 
 in
-builtins.seq _assertCoreTenants (
+builtins.seq _assertCoreNoTenants (
   builtins.seq _assertPolicyInternet (
     builtins.seq _assertAccessInternet (builtins.seq _assertWanDefault "ROUTING SEMANTICS OK")
   )

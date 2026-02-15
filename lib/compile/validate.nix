@@ -27,12 +27,13 @@ let
 
   badVlans = lib.filter (v: lib.elem v reserved || lib.any (r: inRange r v) forbiddenRanges) allVlans;
 
-  badPolicyCore = lib.filter (
+  isPolicyCoreName =
     l:
     (l.kind or null) == "p2p"
-    && (l.name or "") == "policy-core"
-    && (l ? vlanId)
-    && (l.vlanId < 0 || l.vlanId > 255)
+    && ((l.name or "") == "policy-core" || lib.hasPrefix "policy-core-" (l.name or ""));
+
+  badPolicyCore = lib.filter (
+    l: isPolicyCoreName l && (l ? vlanId) && (l.vlanId < 0 || l.vlanId > 255)
   ) (lib.attrValues links);
 
 in

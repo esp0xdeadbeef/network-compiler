@@ -34,6 +34,19 @@ let
         in
         if k != null && eps ? "${k}" then k else null;
 
+      parts = lib.splitString "-" nodeName;
+      lastPart = if parts == [ ] then "" else lib.last parts;
+
+      hasNumericSuffix = builtins.match "^[0-9]+$" lastPart != null;
+
+      baseName =
+        if hasNumericSuffix && (lib.length parts) > 1 then
+          lib.concatStringsSep "-" (lib.init parts)
+        else
+          null;
+
+      byBaseSuffix = if baseName != null && eps ? "${baseName}" then baseName else null;
+
       pref = "${nodeName}-";
       prefKeys = lib.filter (k: lib.hasPrefix pref k) keys;
 
@@ -47,6 +60,8 @@ let
       byLink
     else if bySemanticName != null then
       bySemanticName
+    else if byBaseSuffix != null then
+      byBaseSuffix
     else if bySinglePrefix != null then
       bySinglePrefix
     else
@@ -94,7 +109,6 @@ let
         l = links.${lname};
         k = chooseEndpointKey lname l nodeName;
       in
-
       (lib.elem nodeName (membersOf l)) || (k != null)
     ) (lib.attrNames links);
 

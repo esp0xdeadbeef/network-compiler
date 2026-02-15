@@ -22,9 +22,13 @@ let
 
   stripCidr = s: builtins.elemAt (lib.splitString "/" s) 0;
 
-  coreVia4 = if coreEp ? addr4 && coreEp.addr4 != null then stripCidr coreEp.addr4 else null;
+  coreAddr4 = if coreEp ? addr4 && coreEp.addr4 != null then stripCidr coreEp.addr4 else null;
 
-  coreVia6 = if coreEp ? addr6 && coreEp.addr6 != null then stripCidr coreEp.addr6 else null;
+  coreAddr6 = if coreEp ? addr6 && coreEp.addr6 != null then stripCidr coreEp.addr6 else null;
+
+  policyAddr4 = if policyEp ? addr4 && policyEp.addr4 != null then stripCidr policyEp.addr4 else null;
+
+  policyAddr6 = if policyEp ? addr6 && policyEp.addr6 != null then stripCidr policyEp.addr6 else null;
 
   defaultRouteMode = topo.defaultRouteMode or "default";
 
@@ -47,36 +51,51 @@ let
   mkTenant4 = vid: "${tenantV4Base}.${toString vid}.0/24";
   mkTenant6 = vid: "${ulaPrefix}:${toString vid}::/64";
 
-  coreTenantRoutes4 = builtins.map (vid: { dst = mkTenant4 vid; }) tenantVids;
-  coreTenantRoutes6 = builtins.map (vid: { dst = mkTenant6 vid; }) tenantVids;
+  coreTenantRoutes4 =
+    if policyAddr4 == null then
+      [ ]
+    else
+      builtins.map (vid: {
+        dst = mkTenant4 vid;
+        via4 = policyAddr4;
+      }) tenantVids;
 
-  coreRoutes4 = (coreEp.routes4 or [ ]) ++ coreTenantRoutes4;
-  coreRoutes6 = (coreEp.routes6 or [ ]) ++ coreTenantRoutes6;
+  coreTenantRoutes6 =
+    if policyAddr6 == null then
+      [ ]
+    else
+      builtins.map (vid: {
+        dst = mkTenant6 vid;
+        via6 = policyAddr6;
+      }) tenantVids;
+
+  coreRoutes4 = coreTenantRoutes4;
+  coreRoutes6 = coreTenantRoutes6;
 
   policyUpstream4 =
-    if defaultRouteMode == "default" && coreVia4 != null then
+    if defaultRouteMode == "default" && coreAddr4 != null then
       [
         {
           dst = "0.0.0.0/0";
-          via4 = coreVia4;
+          via4 = coreAddr4;
         }
       ]
     else
       [ ];
 
   policyUpstream6 =
-    if defaultRouteMode == "default" && coreVia6 != null then
+    if defaultRouteMode == "default" && coreAddr6 != null then
       [
         {
           dst = "::/0";
-          via6 = coreVia6;
+          via6 = coreAddr6;
         }
       ]
     else
       [ ];
 
-  policyRoutes4 = (policyEp.routes4 or [ ]) ++ policyUpstream4;
-  policyRoutes6 = (policyEp.routes6 or [ ]) ++ policyUpstream6;
+  policyRoutes4 = policyUpstream4;
+  policyRoutes6 = policyUpstream6;
 
   endpoints1 = endpoints0 // {
     "${coreNodeName}" = coreEp // {

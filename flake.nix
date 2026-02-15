@@ -1,3 +1,4 @@
+# ./flake.nix
 {
   description = "NixOS network topology compiler";
 
@@ -32,6 +33,8 @@
       lib = baseLib // {
         net = baseLib.net;
         evalNetwork = import ./lib/eval.nix { lib = baseLib; };
+
+        query = import ./lib/query/default.nix { lib = baseLib; };
       };
 
       nixosModules.default = import ./modules/networkd-from-topology.nix;
@@ -93,3 +96,4 @@
       });
     };
 }
+

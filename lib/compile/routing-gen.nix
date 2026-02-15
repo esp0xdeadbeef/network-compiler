@@ -87,7 +87,9 @@ let
 
   step0 = import ./routing/upstreams.nix { inherit lib; } topo0;
 
-  step0b = import ./routing/wan-runtime.nix { inherit lib; } step0;
+  step0b = import ./routing/wan-runtime.nix {
+    inherit lib ulaPrefix tenantV4Base;
+  } step0;
 
   step1 = import ./routing/tenant-lan.nix {
     inherit lib ulaPrefix;

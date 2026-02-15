@@ -37,13 +37,13 @@ let
 
       v4 =
         if node == "edge" then
-          "${tenantV4Base}.${toString vlanId}.1/31"
+          "${tenantV4Base}.${toString vlanId}.3/31"
         else
           "${tenantV4Base}.${toString vlanId}.2/31";
 
       v6 =
         if node == "edge" then
-          "${ulaPrefix}:${toString vlanId}::1/127"
+          "${ulaPrefix}:${toString vlanId}::3/127"
         else
           "${ulaPrefix}:${toString vlanId}::2/127";
     in

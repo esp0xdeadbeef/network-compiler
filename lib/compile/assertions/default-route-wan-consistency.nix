@@ -1,10 +1,12 @@
-# ./lib/compile/assertions/default-route-wan-consistency.nix
 { lib }:
 
 topo:
 
 let
   mode = topo.defaultRouteMode or "default";
+
+  tenantV4Base = topo.tenantV4Base or null;
+  ulaPrefix = topo.ulaPrefix or null;
 
   wanLinks = lib.filter (l: (l.kind or null) == "wan") (lib.attrValues (topo.links or { }));
 
@@ -16,8 +18,6 @@ let
 
   wanHasDefault = lib.elem "0.0.0.0/0" wanDsts || lib.elem "::/0" wanDsts;
 
-  # Require a usable next-hop when a WAN endpoint advertises a default route,
-  # unless it's explicitly learned via DHCP/RA.
   epHasUsableDefault =
     ep:
     let
@@ -40,8 +40,23 @@ let
     in
     ok4 && ok6;
 
-  wanDefaultsHaveNextHop =
-    lib.all epHasUsableDefault wanEndpoints;
+  wanDefaultsHaveNextHop = lib.all epHasUsableDefault wanEndpoints;
+
+  isTenant4 =
+    dst:
+    if tenantV4Base == null || dst == null then
+      false
+    else
+      lib.hasPrefix "${tenantV4Base}." dst && lib.hasSuffix "/24" dst;
+
+  isTenant6 =
+    dst:
+    if ulaPrefix == null || dst == null then
+      false
+    else
+      (lib.hasPrefix "${ulaPrefix}:" dst && lib.hasSuffix "/64" dst) || dst == "${ulaPrefix}::/48";
+
+  wanHasTenantReachability = lib.any (dst: isTenant4 dst || isTenant6 dst) wanDsts;
 
 in
 {
@@ -77,6 +92,14 @@ in
         Or enable DHCP / IPv6 RA learning on that WAN endpoint (dhcp=true / acceptRA=true).
       '';
     }
+
+    {
+      assertion = !wanHasTenantReachability;
+      message = ''
+        WAN endpoints must NOT advertise or install tenant/internal reachability (no /24 tenant v4, no /64 tenant ULA, no ULA /48).
+
+        Fix by removing tenant-specific routes from WAN endpoints (WAN must be default-only).
+      '';
+    }
   ];
 }
-

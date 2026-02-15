@@ -71,7 +71,7 @@ let
         members = [ coreNodeName ];
         endpoints = {
           "${coreNodeName}-nebula" = {
-            addr4 = "100.64.10.2/32";
+            addr4 = "100.64.10.2/30";
 
             routes4 =
               if defaultRouteMode == "default" then

@@ -1,10 +1,12 @@
 { lib }:
 
 let
-  inputs = import ../dev/debug-lib/inputs.nix { sopsData = { }; };
+  evalNetwork = import ../lib/eval.nix { inherit lib; };
+
+  inputs = import ../examples/single-site { sopsData = { }; };
   mode = if inputs ? defaultRouteMode then inputs.defaultRouteMode else "default";
 
-  routed = import ../dev/debug-lib/30-routing.nix { sopsData = { }; };
+  routed = evalNetwork inputs;
 
   links = if routed ? links then routed.links else { };
 
@@ -20,10 +22,7 @@ let
 
   getLink =
     name:
-    if links ? "${name}" then
-      links.${name}
-    else
-      throw "routing-semantics: missing link '${name}'";
+    if links ? "${name}" then links.${name} else throw "routing-semantics: missing link '${name}'";
 
   getEp =
     l: n:
@@ -155,4 +154,3 @@ builtins.seq _assertCoreTenants (
     builtins.seq _assertAccessInternet (builtins.seq _assertWanDefault "ROUTING SEMANTICS OK")
   )
 )
-

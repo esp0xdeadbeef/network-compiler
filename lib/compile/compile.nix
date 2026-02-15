@@ -24,8 +24,20 @@ let
     else
       throw "compile: missing required attribute 'tenantV4Base' in model";
 
+  policyNodeName =
+    if validated ? policyNodeName then validated.policyNodeName else "s-router-policy-only";
+
+  coreNodeName = if validated ? coreNodeName then validated.coreNodeName else "s-router-core";
+
   routed = import ./routing-gen.nix {
-    inherit lib ulaPrefix tenantV4Base;
+    inherit
+      lib
+      ulaPrefix
+      tenantV4Base
+      policyNodeName
+      coreNodeName
+      ;
+    coreRoutingNodeName = validated.coreRoutingNodeName or null;
   } validated;
 
 in

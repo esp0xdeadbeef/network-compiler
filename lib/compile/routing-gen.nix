@@ -4,10 +4,8 @@
   tenantV4Base,
   policyNodeName ? "s-router-policy-only",
 
-  # coreNodeName is the *fabric host* (bridge host).
   coreNodeName ? "s-router-core",
 
-  # Optional explicit routing core node (context)
   coreRoutingNodeName ? null,
 }:
 
@@ -24,12 +22,9 @@ let
 
   policyCoreLink = links."policy-core" or null;
 
-  hasPolicyCoreEndpoint =
-    n:
-    policyCoreLink != null && ((policyCoreLink.endpoints or { }) ? "${n}");
+  hasPolicyCoreEndpoint = n: policyCoreLink != null && ((policyCoreLink.endpoints or { }) ? "${n}");
 
-  candidates =
-    lib.filter (n: lib.hasPrefix "${coreNodeName}-" n) (builtins.attrNames nodes);
+  candidates = lib.filter (n: lib.hasPrefix "${coreNodeName}-" n) (builtins.attrNames nodes);
 
   sortedCandidates = lib.sort (a: b: a < b) candidates;
 
@@ -60,11 +55,13 @@ let
       "${coreNodeName}-wan"
     else if pickFromCandidates != null then
       pickFromCandidates
-    else if nodes ? "${coreNodeName}" && (policyCoreLink == null || hasPolicyCoreEndpoint coreNodeName) then
-      # Default/fabric-host routing core when policy-core terminates on the fabric host.
+    else if
+      nodes ? "${coreNodeName}" && (policyCoreLink == null || hasPolicyCoreEndpoint coreNodeName)
+    then
+
       coreNodeName
     else if sortedCandidates != [ ] then
-      # Deterministic fallback (no policy-core link to guide selection).
+
       lib.head sortedCandidates
     else if nodes ? "${coreNodeName}" then
       coreNodeName
@@ -92,9 +89,11 @@ let
 
   step0 = import ./routing/upstreams.nix { inherit lib; } topo0;
 
+  step0b = import ./routing/wan-runtime.nix { inherit lib; } step0;
+
   step1 = import ./routing/tenant-lan.nix {
     inherit lib ulaPrefix;
-  } step0;
+  } step0b;
 
   internet = import ./routing/public-prefixes.nix { inherit lib; } step1;
 
@@ -137,4 +136,3 @@ let
 
 in
 builtins.seq _pre (builtins.seq _post out)
-

@@ -1,24 +1,26 @@
-{
-  sopsData ? { },
-}:
-
 let
   base = rec {
+    siteName = "site-b";
     tenantVlans = [
-      10 20 30 40 50 60 70 80
+      10
+      20
+      30
+      40
+      50
+      60
+      70
+      80
     ];
-
-    ulaPrefix = "fd42:dead:beef";
-    tenantV4Base = "10.10";
+    ulaPrefix = "fd42:dead:beef:a";
+    tenantV4Base = "10.20";
 
     policyAccessTransitBase = 100;
     policyAccessOffset = 0;
 
     corePolicyTransitVlan = 200;
 
-    # fabric host (bridge box)
-    policyNodeName = "s-router-policy-only";
-    coreNodeName = "s-router-core";
+    policyNodeName = "a-router-policy-only";
+    coreNodeName = "a-router-core";
 
     defaultRouteMode = "default";
 
@@ -33,7 +35,6 @@ let
           "${coreNodeName}-isp-1" = {
             dhcp = true;
             acceptRA = true;
-
             routes4 = [ { dst = "0.0.0.0/0"; } ];
             routes6 = [ { dst = "::/0"; } ];
           };
@@ -50,33 +51,12 @@ let
           "${coreNodeName}-isp-2" = {
             dhcp = true;
             acceptRA = true;
-
             routes4 = [ { dst = "0.0.0.0/0"; } ];
             routes6 = [ { dst = "::/0"; } ];
-          };
-        };
-      };
-
-      nebula = {
-        kind = "wan";
-        carrier = "wan";
-        vlanId = 8;
-        name = "nebula";
-        members = [ coreNodeName ];
-        endpoints = {
-          "${coreNodeName}-nebula" = {
-            addr4 = "100.64.10.2/32";
-
-            routes4 =
-              if defaultRouteMode == "default" then
-                [ { dst = "0.0.0.0/0"; via4 = "100.64.10.1"; } ]
-              else
-                [ ];
           };
         };
       };
     };
   };
 in
-base // sopsData
-
+base

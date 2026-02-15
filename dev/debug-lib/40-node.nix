@@ -1,14 +1,21 @@
 {
-  sopsData ? { },
+  cfg,
+  nodeName ? null,
 }:
-let
-  common = import ./common.nix { inherit sopsData; };
-  inherit (common) lib cfg;
 
-  node = "s-router-access-10";
-  routed = import ./30-routing.nix { inherit sopsData; };
+let
+  common = import ./common.nix { inherit cfg; };
+  inherit (common) lib;
+
+  eval = import ../../lib/eval.nix { inherit lib; };
+  routed = eval cfg;
+
+  q = import ../../lib/query/node.nix { inherit lib routed; };
+
+  chosen =
+    if nodeName != null then
+      nodeName
+    else
+      routed.coreRoutingNodeName or cfg.coreNodeName or "s-router-core";
 in
-import ./view-node.nix {
-  inherit lib;
-  inherit (cfg) ulaPrefix tenantV4Base;
-} node routed
+q chosen

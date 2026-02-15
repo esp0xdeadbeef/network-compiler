@@ -1,17 +1,17 @@
-{
-  sopsData ? { },
-}:
+{ cfg }:
+
 let
-  common = import ./common.nix { inherit sopsData; };
+  common = import ./common.nix { inherit cfg; };
   inherit (common) lib;
 
-  all = import ./90-all.nix { inherit sopsData; };
-  topoRaw = import ./10-topology-raw.nix { inherit sopsData; };
-
-  renderer = import ../../lib/render/networkd/default.nix { inherit lib; };
+  all = import ./90-all.nix { inherit cfg; };
+  topoRaw = import ./10-topology-raw.nix { inherit cfg; };
 in
-renderer.render {
-  inherit all;
-  topologyRaw = topoRaw;
-  nodeName = "s-router-access-10";
+import ../../lib/render/70-render-networkd.nix {
+  inherit
+    lib
+    cfg
+    all
+    topoRaw
+    ;
 }

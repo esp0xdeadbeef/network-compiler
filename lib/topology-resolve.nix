@@ -10,18 +10,11 @@ let
   links = topoRaw.links or { };
   nodes0 = topoRaw.nodes or { };
 
-  # The "fabric host" name (bridge host). We keep it on the model so we can
-  # create virtual routing-context nodes that inherit its ifs.
   coreFabricNodeName = topoRaw.coreNodeName or null;
 
   getEp = l: n: (l.endpoints or { }).${n} or { };
 
-  # BUGFIX:
-  # Treat endpoint keys as implicit members, so nodes like "${coreNodeName}-isp-1"
-  # participate even if links.members only contains coreFabricNodeName.
-  membersOf =
-    l:
-    lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
+  membersOf = l: lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
 
   mkIface =
     linkName: l: nodeName:
@@ -50,8 +43,7 @@ let
     };
 
   linkNamesForNode =
-    nodeName:
-    lib.filter (lname: lib.elem nodeName (membersOf links.${lname})) (lib.attrNames links);
+    nodeName: lib.filter (lname: lib.elem nodeName (membersOf links.${lname})) (lib.attrNames links);
 
   interfacesForNode =
     nodeName:
@@ -62,19 +54,64 @@ let
       }) (linkNamesForNode nodeName)
     );
 
-  # Collect all endpoint-declared nodes that may not exist in topoRaw.nodes.
-  endpointNodes =
-    lib.unique (
-      lib.concatMap (l: builtins.attrNames (l.endpoints or { })) (lib.attrValues links)
-    );
+  endpointNodes = lib.unique (
+    lib.concatMap (l: builtins.attrNames (l.endpoints or { })) (lib.attrValues links)
+  );
 
-  # Create missing nodes. If the node name starts with "${coreNodeName}-",
-  # inherit ifs from the fabric host "${coreNodeName}" (same physical box).
+  tenantVids = lib.unique (
+    lib.filter (x: x != null) (
+      lib.concatMap (
+        l:
+        lib.concatMap (
+          ep:
+          let
+            t = ep.tenant or null;
+          in
+          if builtins.isAttrs t && t ? vlanId then [ t.vlanId ] else [ ]
+        ) (lib.attrValues (l.endpoints or { }))
+      ) (lib.attrValues links)
+    )
+  );
+
+  isNonNumericLast =
+    n:
+    let
+      ps = lib.splitString "-" n;
+      last = if ps == [ ] then "" else lib.last ps;
+    in
+    builtins.match "^[0-9]+$" last == null;
+
+  coreCtxBases = lib.filter (
+    n: coreFabricNodeName != null && lib.hasPrefix "${coreFabricNodeName}-" n && isNonNumericLast n
+  ) endpointNodes;
+
+  mkTenantCtxNodes =
+    base:
+    let
+      ctx = lib.removePrefix "${coreFabricNodeName}-" base;
+    in
+    map (
+      vid:
+      let
+        name = "${coreFabricNodeName}-${ctx}-${toString vid}";
+      in
+      if nodes0 ? "${name}" then
+        null
+      else
+        {
+          inherit name;
+          value = {
+            ifs = nodes0.${coreFabricNodeName}.ifs;
+          };
+        }
+    ) tenantVids;
+
   mkMissingNode =
     n:
     if nodes0 ? "${n}" then
       null
-    else if coreFabricNodeName != null
+    else if
+      coreFabricNodeName != null
       && lib.hasPrefix "${coreFabricNodeName}-" n
       && nodes0 ? "${coreFabricNodeName}"
       && (nodes0.${coreFabricNodeName} ? ifs)
@@ -86,21 +123,37 @@ let
         };
       }
     else
-      # Generic fallback: create node with only lan carrier.
+
       {
         name = n;
         value = {
-          ifs = { lan = "lan"; };
+          ifs = {
+            lan = "lan";
+          };
         };
       };
 
-  missingNodes = lib.filter (x: x != null) (map mkMissingNode endpointNodes);
+  missingFromEndpoints = lib.filter (x: x != null) (map mkMissingNode endpointNodes);
+
+  tenantCtxNodes =
+    if
+      coreFabricNodeName != null
+      && nodes0 ? "${coreFabricNodeName}"
+      && (nodes0.${coreFabricNodeName} ? ifs)
+      && tenantVids != [ ]
+    then
+      lib.filter (x: x != null) (lib.concatMap mkTenantCtxNodes coreCtxBases)
+    else
+      [ ];
+
+  missingNodes = missingFromEndpoints ++ tenantCtxNodes;
 
   nodes1 = nodes0 // (lib.listToAttrs missingNodes);
 
   nodes' = lib.mapAttrs (
     n: node:
-    node // {
+    node
+    // {
       interfaces = interfacesForNode n;
     }
   ) nodes1;
@@ -111,4 +164,3 @@ topoRaw
   inherit ulaPrefix tenantV4Base;
   nodes = nodes';
 }
-

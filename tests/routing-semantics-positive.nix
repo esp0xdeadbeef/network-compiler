@@ -10,15 +10,31 @@ let
 
   links = if routed ? links then routed.links else { };
 
-  policyNode = "s-router-policy-only";
+  policyNode =
+    if inputs ? policyNodeName then
+      inputs.policyNodeName
+    else if routed ? policyNodeName then
+      routed.policyNodeName
+    else
+      throw "routing-semantics: missing policyNodeName in inputs/routed";
 
   coreNode =
     if routed ? coreRoutingNodeName && builtins.isString routed.coreRoutingNodeName then
       routed.coreRoutingNodeName
+    else if inputs ? coreNodeName then
+      inputs.coreNodeName
     else
-      inputs.coreNodeName or "s-router-core";
+      throw "routing-semantics: missing coreNodeName in inputs";
 
-  accessNode = "s-router-access-10";
+  accessPrefix =
+    if inputs ? accessNodePrefix then
+      inputs.accessNodePrefix
+    else if routed ? accessNodePrefix then
+      routed.accessNodePrefix
+    else
+      throw "routing-semantics: missing accessNodePrefix in inputs/routed";
+
+  accessNode = "${accessPrefix}-10";
 
   getLink =
     name:

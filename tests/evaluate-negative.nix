@@ -1,32 +1,43 @@
 { lib }:
 
 let
-  evalNetwork = import ../lib/eval.nix { inherit lib; };
+  discovered = if builtins.pathExists ./negative then builtins.readDir ./negative else { };
 
-  cases = import ./cases/negative.nix { inherit lib; };
-
-  runOne =
-    name: topo:
+  testFiles = lib.filter (
+    name:
     let
-      r = builtins.tryEval (evalNetwork {
-        topology = topo;
-      });
+      t = discovered.${name};
+    in
+    t == "regular" && lib.hasSuffix ".nix" name
+  ) (builtins.attrNames discovered);
+
+  tests = builtins.map (name: {
+    name = lib.removeSuffix ".nix" name;
+    path = ./negative + "/${name}";
+  }) testFiles;
+
+  results = builtins.map (
+    t:
+    let
+      attempt = builtins.tryEval (import t.path);
     in
     {
-      inherit name;
-      ok = !r.success;
-    };
+      inherit (t) name;
+      success = attempt.success or false;
+    }
+  ) tests;
 
-  results = map (n: runOne n cases.${n}) (lib.attrNames cases);
+  failed = builtins.filter (r: r.success) results;
 
-  failures = lib.filter (r: !r.ok) results;
+  failedNames = builtins.map (r: r.name) failed;
 
 in
-if failures != [ ] then
-  throw ''
-    Negative tests FAILED (they evaluated successfully but should not):
-
-    ${lib.concatStringsSep "\n" (map (r: " - " + r.name) failures)}
-  ''
-else
+if failedNames == [ ] then
   "NEGATIVE TESTS OK"
+else
+  throw ''
+    NEGATIVE TESTS FAILED
+
+    The following tests unexpectedly evaluated successfully:
+    ${lib.concatStringsSep "\n" failedNames}
+  ''

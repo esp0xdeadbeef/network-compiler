@@ -11,16 +11,16 @@ let
       70
       80
     ];
-    ulaPrefix = "fd42:dead:beef:a";
-    tenantV4Base = "10.20";
+    ulaPrefix = "fd42:dead:beef:b";
+    tenantV4Base = "10.30";
 
     policyAccessTransitBase = 100;
     policyAccessOffset = 0;
 
     corePolicyTransitVlan = 200;
 
-    policyNodeName = "a-router-policy-only";
-    coreNodeName = "a-router-core";
+    policyNodeName = "site-b-s-router-policy-only";
+    coreNodeName = "site-b-s-router-core";
 
     defaultRouteMode = "default";
 

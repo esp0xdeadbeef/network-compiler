@@ -12,6 +12,12 @@ let
   routed = import ./30-routing.nix { inherit cfg; };
 
   q = import ../../lib/query/node-context.nix { inherit lib; };
+
+  fabricHost =
+    if cfg ? coreNodeName && builtins.isString cfg.coreNodeName then
+      cfg.coreNodeName
+    else
+      throw "debug-lib/91-node-context: missing required cfg.coreNodeName (no internal default)";
 in
 q {
   inherit
@@ -20,5 +26,5 @@ q {
     nodeName
     linkName
     ;
-  fabricHost = "s-router-core";
+  inherit fabricHost;
 }

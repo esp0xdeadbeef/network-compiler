@@ -5,11 +5,19 @@
   routed,
   nodeName ? null,
   linkName ? null,
-  fabricHost ? "s-router-core",
+  fabricHost ? null,
 }:
 
 let
   sanitize = import ./sanitize.nix { inherit lib; };
+
+  fabricHostResolved =
+    if fabricHost != null then
+      fabricHost
+    else if routed ? coreNodeName && builtins.isString routed.coreNodeName then
+      routed.coreNodeName
+    else
+      throw "node-context: missing required routed.coreNodeName (fabric host)";
 
   requestedNode =
     if nodeName != null then
@@ -17,36 +25,11 @@ let
     else if routed ? coreRoutingNodeName && builtins.isString routed.coreRoutingNodeName then
       routed.coreRoutingNodeName
     else
-      fabricHost;
+      fabricHostResolved;
 
-  links = routed.links or { };
+  nodes = routed.nodes or { };
 
-  membersOf = l: lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
-
-  getEp = l: n: (l.endpoints or { }).${n} or { };
-
-  mkIface = l: ep: {
-    kind = l.kind or null;
-    carrier = l.carrier or null;
-    vlanId = l.vlanId or null;
-
-    tenant = ep.tenant or null;
-    gateway = ep.gateway or false;
-    export = ep.export or false;
-
-    addr4 = ep.addr4 or null;
-    addr6 = ep.addr6 or null;
-    addr6Public = ep.addr6Public or null;
-
-    routes4 = ep.routes4 or [ ];
-    routes6 = ep.routes6 or [ ];
-    ra6Prefixes = ep.ra6Prefixes or [ ];
-
-    acceptRA = ep.acceptRA or false;
-    dhcp = ep.dhcp or false;
-  };
-
-  corePrefix = "${fabricHost}-";
+  corePrefix = "${fabricHostResolved}-";
   isCoreContext = lib.hasPrefix corePrefix requestedNode;
 
   parts = lib.splitString "-" requestedNode;
@@ -58,7 +41,7 @@ let
 
   _assertContextSuffix =
     if isCoreContext && (lib.length parts) >= 4 && !haveVidSuffix then
-      throw "node-context: invalid core context node '${requestedNode}': expected numeric vlan suffix, e.g. '${fabricHost}-<ctx>-<vid>'"
+      throw "node-context: invalid core context node '${requestedNode}': expected numeric vlan suffix, e.g. '${fabricHostResolved}-<ctx>-<vid>'"
     else
       true;
 
@@ -104,28 +87,20 @@ let
 
   rewriteVlanId =
     iface:
-    if vid != null && iface.kind == "p2p" && iface.vlanId != null then
+    if vid != null && (iface.kind or null) == "p2p" && (iface.vlanId or null) != null then
       iface // { vlanId = iface.vlanId + vid; }
     else
       iface;
 
-  directLinks = lib.filterAttrs (_: l: lib.elem requestedNode (membersOf l)) links;
-
-  inheritedP2pLinks =
-    if isCoreContext then
-      lib.filterAttrs (_: l: (l.kind or null) == "p2p" && lib.elem fabricHost (membersOf l)) links
+  ifaces0 =
+    if nodes ? "${requestedNode}" && (nodes.${requestedNode} ? interfaces) then
+      nodes.${requestedNode}.interfaces
     else
       { };
 
-  directIfaces = lib.mapAttrs (
-    _: l: sanitizeIface (scopeTenantRoutes (rewriteVlanId (mkIface l (getEp l requestedNode))))
-  ) directLinks;
-
-  inheritedIfaces = lib.mapAttrs (
-    _: l: sanitizeIface (scopeTenantRoutes (rewriteVlanId (mkIface l (getEp l fabricHost))))
-  ) inheritedP2pLinks;
-
-  enrichedInterfaces = inheritedIfaces // directIfaces;
+  enrichedInterfaces = lib.mapAttrs (
+    _: iface: sanitizeIface (scopeTenantRoutes (rewriteVlanId iface))
+  ) ifaces0;
 
   selected =
     if linkName == null then

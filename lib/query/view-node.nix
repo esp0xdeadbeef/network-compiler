@@ -5,15 +5,14 @@ nodeName: topo:
 let
   sanitize = import ./sanitize.nix { inherit lib; };
 
-  links0 = topo.links or { };
+  nodes = topo.nodes or { };
 
-  getTenantVid =
-    ep:
-    if ep ? tenant && builtins.isAttrs ep.tenant && ep.tenant ? vlanId then ep.tenant.vlanId else null;
+  fabricHost =
+    if topo ? coreNodeName && builtins.isString topo.coreNodeName then
+      topo.coreNodeName
+    else
+      throw "view-node: missing required topo.coreNodeName (fabric host)";
 
-  membersOf = l: lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
-
-  fabricHost = topo.coreNodeName or "s-router-core";
   corePrefix = "${fabricHost}-";
   isCoreContext = lib.hasPrefix corePrefix nodeName;
 
@@ -23,33 +22,6 @@ let
   haveVidSuffix = isCoreContext && (builtins.match "^[0-9]+$" lastPart != null);
 
   vid = if haveVidSuffix then lib.toInt lastPart else null;
-
-  directLinks = lib.filterAttrs (_: l: lib.elem nodeName (membersOf l)) links0;
-
-  inheritedP2pLinks =
-    if vid != null then
-      lib.filterAttrs (_: l: (l.kind or null) == "p2p" && lib.elem fabricHost (membersOf l)) links0
-    else
-      { };
-
-  mkIfaceFrom = l: ep: {
-    kind = l.kind or null;
-    scope = l.scope or null;
-    vlanId = l.vlanId or null;
-
-    tenantVlanId = getTenantVid ep;
-
-    addr4 = ep.addr4 or null;
-    addr6 = ep.addr6 or null;
-
-    routes4 = ep.routes4 or [ ];
-    routes6 = ep.routes6 or [ ];
-    ra6Prefixes = ep.ra6Prefixes or [ ];
-
-    gateway = ep.gateway or false;
-    acceptRA = ep.acceptRA or false;
-    dhcp = ep.dhcp or false;
-  };
 
   keepRoute4 =
     r:
@@ -84,28 +56,18 @@ let
 
   rewriteVlanId =
     iface:
-    if vid != null && iface.kind == "p2p" && iface.vlanId != null then
+    if vid != null && (iface.kind or null) == "p2p" && (iface.vlanId or null) != null then
       iface // { vlanId = iface.vlanId + vid; }
     else
       iface;
 
-  directIfaces = lib.mapAttrs (
-    _lname: l:
-    let
-      ep = (l.endpoints or { }).${nodeName} or { };
-    in
-    sanitizeTenantRoutes (mkIfaceFrom l ep)
-  ) directLinks;
+  ifaces0 =
+    if nodes ? "${nodeName}" && (nodes.${nodeName} ? interfaces) then
+      nodes.${nodeName}.interfaces
+    else
+      { };
 
-  inheritedIfaces = lib.mapAttrs (
-    _lname: l:
-    let
-      ep = (l.endpoints or { }).${fabricHost} or { };
-    in
-    sanitizeTenantRoutes (rewriteVlanId (mkIfaceFrom l ep))
-  ) inheritedP2pLinks;
-
-  interfaces = inheritedIfaces // directIfaces;
+  interfaces = lib.mapAttrs (_: iface: sanitizeTenantRoutes (rewriteVlanId iface)) ifaces0;
 
 in
 sanitize {

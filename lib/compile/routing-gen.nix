@@ -2,9 +2,9 @@
   lib,
   ulaPrefix,
   tenantV4Base,
-  policyNodeName ? "s-router-policy-only",
 
-  coreNodeName ? "s-router-core",
+  policyNodeName,
+  coreNodeName,
 
   coreRoutingNodeName ? null,
 }:
@@ -58,10 +58,8 @@ let
     else if
       nodes ? "${coreNodeName}" && (policyCoreLink == null || hasPolicyCoreEndpoint coreNodeName)
     then
-
       coreNodeName
     else if sortedCandidates != [ ] then
-
       lib.head sortedCandidates
     else if nodes ? "${coreNodeName}" then
       coreNodeName
@@ -130,7 +128,11 @@ let
     lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) post.assertions))
   );
 
-  out = step3 // {
+  materialized = import ../topology-resolve.nix {
+    inherit lib ulaPrefix tenantV4Base;
+  } step3;
+
+  out = materialized // {
     coreRoutingNodeName = derivedCoreRouting;
   };
 

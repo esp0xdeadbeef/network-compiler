@@ -21,6 +21,7 @@ for f in $changed; do
     [ -f "$f" ] || continue
     nix-instantiate --parse "$f" >/dev/null
     sed 's/^#.*//g' -i $f
+    sed 's/# .*//g' -i $f
 done
 
 echo "[hook] done"

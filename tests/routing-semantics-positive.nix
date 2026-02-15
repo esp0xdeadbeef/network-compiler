@@ -9,18 +9,28 @@ let
   links = if routed ? links then routed.links else { };
 
   policyNode = "s-router-policy-only";
-  coreNode = "s-router-core-wan";
+
+  coreNode =
+    if routed ? coreRoutingNodeName && builtins.isString routed.coreRoutingNodeName then
+      routed.coreRoutingNodeName
+    else
+      inputs.coreNodeName or "s-router-core";
+
   accessNode = "s-router-access-10";
 
   getLink =
-    name: if links ? ${name} then links.${name} else throw "routing-semantics: missing link '${name}'";
+    name:
+    if links ? "${name}" then
+      links.${name}
+    else
+      throw "routing-semantics: missing link '${name}'";
 
   getEp =
     l: n:
     let
       eps = if l ? endpoints then l.endpoints else { };
     in
-    if eps ? ${n} then eps.${n} else { };
+    if eps ? "${n}" then eps.${n} else { };
 
   hasRoute =
     pred: rs:
@@ -50,6 +60,8 @@ let
 
   _assertCoreTenants = lib.assertMsg (coreHasTenant4 && coreHasTenant6) ''
     routing-semantics: core is missing tenant routes on policy-core.
+
+    coreRoutingNodeName = "${coreNode}"
 
     Expected at least one:
       - 10.10.<vid>.0/24
@@ -143,3 +155,4 @@ builtins.seq _assertCoreTenants (
     builtins.seq _assertAccessInternet (builtins.seq _assertWanDefault "ROUTING SEMANTICS OK")
   )
 )
+

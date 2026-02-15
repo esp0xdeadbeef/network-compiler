@@ -1,3 +1,5 @@
+# ./tests/routing-validation-tests.nix
+# FILE: ./tests/routing-validation-tests.nix
 { lib }:
 
 let
@@ -9,11 +11,13 @@ let
     corePolicyTransitVlan = 200;
     ulaPrefix = "fd42:dead:beef";
     tenantV4Base = "10.10";
+    coreNodeName = "s-router-core";
   };
+
+  coreNodeName = baseInputs.coreNodeName;
 
 in
 {
-
   invalid-defaultRouteMode = eval {
     topology = import ../lib/topology-gen.nix { inherit lib; } (
       baseInputs
@@ -40,8 +44,8 @@ in
         kind = "wan";
         vlanId = 6;
         carrier = "wan";
-        members = [ "s-router-core-wan" ];
-        endpoints."s-router-core-wan" = {
+        members = [ coreNodeName ];
+        endpoints."${coreNodeName}" = {
           addr6 = "2001:db8:1::2/48";
           routes6 = [ { dst = "::/0"; } ];
         };
@@ -57,8 +61,8 @@ in
         kind = "wan";
         vlanId = 6;
         carrier = "wan";
-        members = [ "s-router-core-wan" ];
-        endpoints."s-router-core-wan" = {
+        members = [ coreNodeName ];
+        endpoints."${coreNodeName}" = {
           addr6 = "2001:db8:1::2/48";
           routes6 = [ ];
         };
@@ -92,8 +96,8 @@ in
         kind = "wan";
         vlanId = 6;
         carrier = "wan";
-        members = [ "s-router-core-wan" ];
-        endpoints."s-router-core-wan" = {
+        members = [ coreNodeName ];
+        endpoints."${coreNodeName}" = {
           addr4 = "300.0.0.1/24";
           routes4 = [ { dst = "300.0.0.0/24"; } ];
         };
@@ -107,8 +111,8 @@ in
         kind = "wan";
         vlanId = 6;
         carrier = "wan";
-        members = [ "s-router-core-wan" ];
-        endpoints."s-router-core-wan" = {
+        members = [ coreNodeName ];
+        endpoints."${coreNodeName}" = {
           addr6 = "gggg::1/64";
         };
       };
@@ -123,5 +127,5 @@ in
       }
     );
   };
-
 }
+

@@ -3,7 +3,12 @@
   ulaPrefix,
   tenantV4Base,
   policyNodeName ? "s-router-policy-only",
-  coreNodeName ? "s-router-core-wan",
+
+  # coreNodeName is the *fabric host* (bridge host).
+  coreNodeName ? "s-router-core",
+
+  # Optional explicit routing core node (context)
+  coreRoutingNodeName ? null,
 }:
 
 topoResolved:
@@ -14,7 +19,72 @@ let
       if topoResolved ? defaultRouteMode then topoResolved.defaultRouteMode else "default";
   };
 
-  pre = import ./assertions/pre.nix { inherit lib policyNodeName coreNodeName; } topo0;
+  nodes = topo0.nodes or { };
+  links = topo0.links or { };
+
+  policyCoreLink = links."policy-core" or null;
+
+  hasPolicyCoreEndpoint =
+    n:
+    policyCoreLink != null && ((policyCoreLink.endpoints or { }) ? "${n}");
+
+  candidates =
+    lib.filter (n: lib.hasPrefix "${coreNodeName}-" n) (builtins.attrNames nodes);
+
+  sortedCandidates = lib.sort (a: b: a < b) candidates;
+
+  pickFromCandidates =
+    if policyCoreLink == null then
+      null
+    else
+      let
+        eligible = lib.filter hasPolicyCoreEndpoint sortedCandidates;
+      in
+      if eligible == [ ] then null else lib.head eligible;
+
+  derivedCoreRouting =
+    if coreRoutingNodeName != null then
+      if !(nodes ? "${coreRoutingNodeName}") then
+        throw ''
+          routing-gen: coreRoutingNodeName "${coreRoutingNodeName}" does not exist in topology nodes.
+        ''
+      else if policyCoreLink != null && !hasPolicyCoreEndpoint coreRoutingNodeName then
+        throw ''
+          routing-gen: coreRoutingNodeName "${coreRoutingNodeName}" is not an endpoint of link "policy-core".
+
+          Add an endpoint for "${coreRoutingNodeName}" on "policy-core", or unset coreRoutingNodeName.
+        ''
+      else
+        coreRoutingNodeName
+    else if nodes ? "${coreNodeName}-wan" && hasPolicyCoreEndpoint "${coreNodeName}-wan" then
+      "${coreNodeName}-wan"
+    else if pickFromCandidates != null then
+      pickFromCandidates
+    else if nodes ? "${coreNodeName}" && (policyCoreLink == null || hasPolicyCoreEndpoint coreNodeName) then
+      # Default/fabric-host routing core when policy-core terminates on the fabric host.
+      coreNodeName
+    else if sortedCandidates != [ ] then
+      # Deterministic fallback (no policy-core link to guide selection).
+      lib.head sortedCandidates
+    else if nodes ? "${coreNodeName}" then
+      coreNodeName
+    else
+      throw ''
+        routing-gen: cannot pick a core routing node.
+
+        coreNodeName (fabric host) = "${coreNodeName}"
+
+        Expected one of:
+          - set coreRoutingNodeName explicitly
+          - define node "${coreNodeName}-wan"
+          - define at least one node matching "${coreNodeName}-*"
+          - or ensure node "${coreNodeName}" exists
+      '';
+
+  pre = import ./assertions/pre.nix {
+    inherit lib policyNodeName;
+    coreNodeName = derivedCoreRouting;
+  } topo0;
 
   _pre = lib.assertMsg (lib.all (a: a.assertion) pre.assertions) (
     lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) pre.assertions))
@@ -48,16 +118,23 @@ let
       ulaPrefix
       tenantV4Base
       policyNodeName
-      coreNodeName
       ;
+    coreNodeName = derivedCoreRouting;
   } step2;
 
-  post = import ./assertions/post.nix { inherit lib policyNodeName coreNodeName; } step3;
+  post = import ./assertions/post.nix {
+    inherit lib policyNodeName;
+    coreNodeName = derivedCoreRouting;
+  } step3;
 
   _post = lib.assertMsg (lib.all (a: a.assertion) post.assertions) (
     lib.concatStringsSep "\n" (map (a: a.message) (lib.filter (a: !a.assertion) post.assertions))
   );
 
-in
+  out = step3 // {
+    coreRoutingNodeName = derivedCoreRouting;
+  };
 
-builtins.seq _pre (builtins.seq _post step3)
+in
+builtins.seq _pre (builtins.seq _post out)
+

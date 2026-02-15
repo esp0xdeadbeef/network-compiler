@@ -46,7 +46,6 @@ let
   accessHasExpectedDefaults = lib.all (
     l:
     let
-
       ms = l.members or [ ];
       accessNode = if lib.head ms == policyNodeName then builtins.elemAt ms 1 else lib.head ms;
       epA = getEp l accessNode;
@@ -65,7 +64,6 @@ let
         else if mode == "computed" then
           (r4 != [ ]) && (r6 != [ ])
         else
-
           (r4 == [ ]) && (!hasDefault6);
     in
     ok
@@ -88,3 +86,4 @@ in
     }
   ];
 }
+

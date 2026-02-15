@@ -1,24 +1,38 @@
+# ./lib/eval.nix
+# FILE: ./lib/eval.nix
 { lib }:
 
 let
   mkWanLinks =
-    wan:
+    coreNodeName: wan:
     if wan == null then
       { }
     else
-      lib.mapAttrs (name: w: {
-        kind = "wan";
-        carrier = "wan";
-        vlanId = w.vlanId or 6;
-        name = "wan-${name}";
-        members = [ "s-router-core-wan" ];
-        endpoints."s-router-core-wan" = {
-          routes4 = lib.optional (w ? ip4) { dst = "0.0.0.0/0"; };
-          routes6 = lib.optional (w ? ip6) { dst = "::/0"; };
+      lib.mapAttrs (ctx: w:
+        let
+          coreCtx = "${coreNodeName}-${ctx}";
+        in
+        {
+          kind = "wan";
+          carrier = "wan";
+          vlanId = w.vlanId or 6;
+          name = "wan-${ctx}";
+
+          # members can remain the fabric host; topology-resolve treats endpoint keys
+          # as implicit members and creates the coreCtx node inheriting ifs.
+          members = [ coreNodeName ];
+
+          endpoints."${coreCtx}" =
+            {
+              routes4 = lib.optional (w ? ip4) { dst = "0.0.0.0/0"; };
+              routes6 = lib.optional (w ? ip6) { dst = "::/0"; };
+            }
+            // lib.optionalAttrs (w ? ip4) { addr4 = w.ip4; }
+            // lib.optionalAttrs (w ? ip6) { addr6 = w.ip6; }
+            // lib.optionalAttrs (w ? acceptRA) { acceptRA = w.acceptRA; }
+            // lib.optionalAttrs (w ? dhcp) { dhcp = w.dhcp; };
         }
-        // lib.optionalAttrs (w ? ip4) { addr4 = w.ip4; }
-        // lib.optionalAttrs (w ? ip6) { addr6 = w.ip6; };
-      }) wan;
+      ) wan;
 
   evalFromInput =
     {
@@ -30,14 +44,20 @@ let
 
       policyAccessOffset ? 0,
       policyNodeName ? "s-router-policy-only",
-      coreNodeName ? "s-router-core-wan",
-      accessNodePrefix ? "s-router-access-",
+
+      # Fabric host
+      coreNodeName ? "s-router-core",
+
+      accessNodePrefix ? "s-router-access",
       domain ? "lan.",
       reservedVlans ? [ 1 ],
       forbiddenVlanRanges ? [ ],
       defaultRouteMode ? "default",
       links ? { },
       wan ? null,
+
+      # Optional explicit routing core node (context)
+      coreRoutingNodeName ? null,
       ...
     }:
 
@@ -60,8 +80,8 @@ let
       };
 
       topoWithLinks = topoRaw // {
-        inherit defaultRouteMode;
-        links = (topoRaw.links or { }) // links // (mkWanLinks wan);
+        inherit defaultRouteMode coreRoutingNodeName;
+        links = (topoRaw.links or { }) // links // (mkWanLinks coreNodeName wan);
       };
 
       topoResolved = import ./topology-resolve.nix {
@@ -96,3 +116,4 @@ if isResolved then
   }
 else
   evalFromInput topoInput
+

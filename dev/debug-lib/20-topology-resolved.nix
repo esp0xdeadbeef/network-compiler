@@ -2,10 +2,8 @@
   sopsData ? { },
 }:
 let
-  pkgs = null;
-  flake = builtins.getFlake (toString ../../.);
-  lib = flake.lib;
-  cfg = import ./inputs.nix { inherit sopsData; };
+  common = import ./common.nix { inherit sopsData; };
+  inherit (common) lib cfg;
 
   raw = import ./10-topology-raw.nix { inherit sopsData; };
 in

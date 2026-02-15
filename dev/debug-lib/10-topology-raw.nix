@@ -2,10 +2,8 @@
   sopsData ? { },
 }:
 let
-  pkgs = null;
-  flake = builtins.getFlake (toString ../../.);
-  lib = flake.lib;
-  cfg = import ./inputs.nix { inherit sopsData; };
+  common = import ./common.nix { inherit sopsData; };
+  inherit (common) lib cfg;
 in
 import ../../lib/topology-gen.nix { inherit lib; } {
   inherit (cfg)
@@ -20,4 +18,3 @@ import ../../lib/topology-gen.nix { inherit lib; } {
 
   forbiddenVlanRanges = cfg.forbiddenVlanRanges or [ ];
 }
-

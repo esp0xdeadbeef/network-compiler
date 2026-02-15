@@ -2,14 +2,10 @@
   sopsData ? { },
 }:
 let
-  pkgs = null;
-  flake = builtins.getFlake (toString ../../.);
-  lib = flake.lib;
-
-  cfg = import ./inputs.nix { inherit sopsData; };
+  common = import ./common.nix { inherit sopsData; };
+  inherit (common) lib cfg;
 
   routed = import ./30-routing.nix { inherit sopsData; };
-
 in
 {
   topology = {
@@ -21,7 +17,7 @@ in
   nodes = builtins.mapAttrs (
     n: _:
     import ./view-node.nix {
-      inherit lib pkgs;
+      inherit lib;
       inherit (cfg) ulaPrefix tenantV4Base;
     } n routed
   ) routed.nodes;

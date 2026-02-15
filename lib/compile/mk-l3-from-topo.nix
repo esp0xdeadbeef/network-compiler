@@ -1,3 +1,4 @@
+# ./lib/compile/mk-l3-from-topo.nix
 {
   lib,
   pkgs,
@@ -30,19 +31,25 @@ let
 
   stripCidr = s: if s == null then null else builtins.elemAt (lib.splitString "/" s) 0;
 
+  # Treat endpoint keys as implicit members, so context nodes like
+  # "${coreNodeName}-isp-1" participate even if links.members omits them.
+  membersOf =
+    l:
+    lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
+
   linkNames = lib.filter (
     lname:
     let
       l = links.${lname};
     in
-    lib.elem nodeName (l.members or [ ]) && builtins.hasAttr nodeName (l.endpoints or { })
+    lib.elem nodeName (membersOf l) && builtins.hasAttr nodeName (l.endpoints or { })
   ) (lib.attrNames links);
 
   endpoint =
     l:
     let
       ep = l.endpoints.${nodeName} or { };
-      members = l.members or [ ];
+      members = membersOf l;
       isGw = ep.gateway or false;
     in
     {
@@ -148,3 +155,4 @@ in
     ) linkNames
   );
 }
+

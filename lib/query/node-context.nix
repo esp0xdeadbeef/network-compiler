@@ -24,27 +24,44 @@ let
 
   allNodes = if all != null && all ? nodes then all.nodes else { };
 
+  routedNodes = routed.nodes or { };
+  routedLinks = routed.links or { };
+
   # Prefer compiled view (all.nodes), then routed.nodes
   nodeSource =
     if allNodes ? "${requestedNode}" then
       allNodes.${requestedNode}
-    else if (routed.nodes or { }) ? "${requestedNode}" then
-      routed.nodes.${requestedNode}
+    else if routedNodes ? "${requestedNode}" then
+      routedNodes.${requestedNode}
     else
       throw "node-context: node '${requestedNode}' not found";
 
   # Detect fabric context nodes like "s-router-core-isp-2"
   isFabricContext =
     lib.hasPrefix "${fabricHost}-" requestedNode
-    && (routed.nodes or { }) ? "${requestedNode}";
+    && routedNodes ? "${requestedNode}";
 
-  enrichedInterfaces =
+  # Base interfaces (what this node directly owns)
+  baseInterfaces =
     if isFabricContext then
-      (routed.nodes.${requestedNode}.interfaces or { })
+      (routedNodes.${requestedNode}.interfaces or { })
     else if nodeSource ? interfaces then
       nodeSource.interfaces
     else
       { };
+
+  # Merge in fabric-host p2p links (e.g. policy-core) so context nodes
+  # also expose the core’s transit context.
+  inheritedP2p =
+    if isFabricContext && routedNodes ? "${fabricHost}" then
+      let
+        fabricIfs = routedNodes.${fabricHost}.interfaces or { };
+      in
+      lib.filterAttrs (_: iface: (iface.kind or null) == "p2p") fabricIfs
+    else
+      { };
+
+  enrichedInterfaces = inheritedP2p // baseInterfaces;
 
   selected =
     if linkName == null then

@@ -1,10 +1,18 @@
 # ./lib/query/view-node.nix
+# ./lib/query/view-node.nix
 { lib }:
 
 nodeName: topo:
 
 let
-  links = lib.filterAttrs (_: l: lib.elem nodeName (l.members or [ ])) (topo.links or { });
+  # Treat endpoint keys as implicit members so fabric context nodes
+  # (e.g. "${coreNodeName}-isp-1") see their WAN links even if members
+  # only lists the fabric host.
+  membersOf =
+    l:
+    lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
+
+  links = lib.filterAttrs (_: l: lib.elem nodeName (membersOf l)) (topo.links or { });
 
   sanitize = import ./sanitize.nix { inherit lib; };
 

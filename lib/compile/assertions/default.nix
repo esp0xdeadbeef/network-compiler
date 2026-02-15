@@ -1,11 +1,24 @@
+# FILE: ./lib/compile/assertions/default.nix
 { lib }:
 
 topo:
 
 let
-  a1 = import ./default-route-mode.nix { inherit lib; } topo;
-  a2 = import ./default-route-wan-consistency.nix { inherit lib; } topo;
+  mode = topo.defaultRouteMode or "default";
+
+  wanConsistency =
+    import ./default-route-wan-consistency.nix { inherit lib; } topo;
 in
 {
-  assertions = (a1.assertions or [ ]) ++ (a2.assertions or [ ]);
+  assertions =
+    [
+      {
+        assertion = !(mode == "computed");
+        message = ''
+          defaultRouteMode = "computed" is not supported without explicit internet computation context.
+        '';
+      }
+    ]
+    ++ (wanConsistency.assertions or [ ]);
 }
+

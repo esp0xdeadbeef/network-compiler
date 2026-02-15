@@ -1,3 +1,4 @@
+# ./lib/compile/mk-links-from-topo.nix
 { lib }:
 
 nodeName: topo:
@@ -25,12 +26,18 @@ let
     in
     "${base}-${h}";
 
+  # Treat endpoint keys as implicit members, so context nodes like
+  # "${coreNodeName}-isp-1" participate even if links.members omits them.
+  membersOf =
+    l:
+    lib.unique ((l.members or [ ]) ++ (builtins.attrNames (l.endpoints or { })));
+
   linkNamesForNode = lib.filter (
     lname:
     let
       l = links.${lname};
     in
-    lib.elem nodeName (l.members or [ ])
+    lib.elem nodeName (membersOf l)
   ) (lib.attrNames links);
 
   carrierIf =
@@ -100,19 +107,17 @@ in
     ));
 
   systemd.network.networks =
-
     (lib.listToAttrs (
       map (carrier: {
         name = "10-carrier-${carrier}";
         value = mkCarrierNetwork carrier (vlanIfsForCarrier carrier);
       }) carriersUsed
     ))
-    //
-
-      (lib.listToAttrs (
-        map (lname: {
-          name = "15-port-${lname}";
-          value = mkPortNetwork links.${lname};
-        }) linkNamesForNode
-      ));
+    // (lib.listToAttrs (
+      map (lname: {
+        name = "15-port-${lname}";
+        value = mkPortNetwork links.${lname};
+      }) linkNamesForNode
+    ));
 }
+

@@ -14,14 +14,13 @@ let
       cfg = siteCfg;
 
       siteHash = builtins.fromTOML "x = 0x${builtins.substring 0 2 (builtins.hashString "sha256" name)}";
-
       nebulaBaseOctet = siteHash.x;
 
       nebulaAddr4 = "172.16.${toString nebulaBaseOctet}.3/31";
-      nebulaGw4 = "172.16.${toString nebulaBaseOctet}.3";
+      nebulaGw4 = "172.16.${toString nebulaBaseOctet}.2";
 
       nebulaAddr6 = "${cfg.ulaPrefix}:ffff::3/127";
-      nebulaGw6 = "${cfg.ulaPrefix}:ffff::3";
+      nebulaGw6 = "${cfg.ulaPrefix}:ffff::2";
 
       nebulaLink = {
         nebula = {

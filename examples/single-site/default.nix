@@ -27,6 +27,12 @@ let
     coreNodeName = "s-router-core";
 
     defaultRouteMode = "default";
+    forbiddenVlanRanges = [
+      {
+        from = 2;
+        to = 9;
+      }
+    ];
 
     policyIntent = {
 

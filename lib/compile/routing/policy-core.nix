@@ -59,15 +59,6 @@ let
 
   firstPolicyCoreName = if linkOrder == [ ] then null else lib.head linkOrder;
 
-  ctxForPolicyCoreLink =
-    lname:
-    if lib.hasPrefix "policy-core-" lname then
-      lib.removePrefix "policy-core-" lname
-    else if lib.hasPrefix "policy-core-" (policyCoreLinks.${lname}.name or "") then
-      lib.removePrefix "policy-core-" (policyCoreLinks.${lname}.name or "")
-    else
-      null;
-
   pickLinkForOverlay =
     ov:
     let
@@ -121,94 +112,117 @@ let
     in
     if ep ? addr6 && ep.addr6 != null then stripCidr ep.addr6 else null;
 
-  defaultLink = firstPolicyCoreName;
-
-  nhDefault4 = if defaultLink == null then null else coreEpAddrForLink4 defaultLink;
-  nhDefault6 = if defaultLink == null then null else coreEpAddrForLink6 defaultLink;
-
-  mkPolicyUpstream4 =
-    class:
+  mkPolicyUpstream4ForLink =
+    lname: class:
+    let
+      nh4 = coreEpAddrForLink4 lname;
+      overlayLink = if lib.hasPrefix "overlay:" class then pickLinkForOverlay class else null;
+      onOverlayLink = overlayLink != null && lname == overlayLink;
+    in
     if defaultRouteMode == "blackhole" then
       [ ]
+    else if nh4 == null then
+      [ ]
     else if defaultRouteMode == "computed" then
-      if class == "internet" && upstreamAllowed "internet" && nhDefault4 != null then
-        (map (p: {
+      if class == "internet" && upstreamAllowed "internet" then
+        map (p: {
           dst = p;
-          via4 = nhDefault4;
-        }) (topo._internet.internet4 or [ ]))
+          via4 = nh4;
+        }) (topo._internet.internet4 or [ ])
+      else if lib.hasPrefix "overlay:" class && upstreamAllowed class && onOverlayLink then
+        map (p: {
+          dst = p;
+          via4 = nh4;
+        }) (topo._internet.internet4 or [ ])
       else
         [ ]
-    else if class == "default" && upstreamAllowed "default" && nhDefault4 != null then
+    else if class == "default" && upstreamAllowed "default" then
       [
         {
           dst = "0.0.0.0/0";
-          via4 = nhDefault4;
+          via4 = nh4;
         }
       ]
-    else if lib.hasPrefix "overlay:" class && upstreamAllowed class then
-      let
-        ln = pickLinkForOverlay class;
-        nh = if ln == null then null else coreEpAddrForLink4 ln;
-      in
-      if nh == null then
-        [ ]
-      else
-        [
-          {
-            dst = "0.0.0.0/0";
-            via4 = nh;
-          }
-        ]
+    else if class == "internet" && upstreamAllowed "internet" then
+      [
+        {
+          dst = "0.0.0.0/0";
+          via4 = nh4;
+        }
+      ]
+    else if lib.hasPrefix "overlay:" class && upstreamAllowed class && onOverlayLink then
+      [
+        {
+          dst = "0.0.0.0/0";
+          via4 = nh4;
+        }
+      ]
     else
       [ ];
 
-  mkPolicyUpstream6 =
-    class:
+  mkPolicyUpstream6ForLink =
+    lname: class:
+    let
+      nh6 = coreEpAddrForLink6 lname;
+      overlayLink = if lib.hasPrefix "overlay:" class then pickLinkForOverlay class else null;
+      onOverlayLink = overlayLink != null && lname == overlayLink;
+    in
     if defaultRouteMode == "blackhole" then
       [ ]
+    else if nh6 == null then
+      [ ]
     else if defaultRouteMode == "computed" then
-      if class == "internet" && upstreamAllowed "internet" && nhDefault6 != null then
-        (map (p: {
+      if class == "internet" && upstreamAllowed "internet" then
+        map (p: {
           dst = p;
-          via6 = nhDefault6;
-        }) (topo._internet.internet6 or [ ]))
+          via6 = nh6;
+        }) (topo._internet.internet6 or [ ])
+      else if lib.hasPrefix "overlay:" class && upstreamAllowed class && onOverlayLink then
+        map (p: {
+          dst = p;
+          via6 = nh6;
+        }) (topo._internet.internet6 or [ ])
       else
         [ ]
-    else if class == "default" && upstreamAllowed "default" && nhDefault6 != null then
+    else if class == "default" && upstreamAllowed "default" then
       [
         {
           dst = "::/0";
-          via6 = nhDefault6;
+          via6 = nh6;
         }
       ]
-    else if lib.hasPrefix "overlay:" class && upstreamAllowed class then
-      let
-        ln = pickLinkForOverlay class;
-        nh = if ln == null then null else coreEpAddrForLink6 ln;
-      in
-      if nh == null then
-        [ ]
-      else
-        [
-          {
-            dst = "::/0";
-            via6 = nh;
-          }
-        ]
+    else if class == "internet" && upstreamAllowed "internet" then
+      [
+        {
+          dst = "::/0";
+          via6 = nh6;
+        }
+      ]
+    else if lib.hasPrefix "overlay:" class && upstreamAllowed class && onOverlayLink then
+      [
+        {
+          dst = "::/0";
+          via6 = nh6;
+        }
+      ]
     else
       [ ];
 
-  policyUpstream4 = lib.flatten (
-    (mkPolicyUpstream4 "default")
-    ++ (mkPolicyUpstream4 "internet")
-    ++ (lib.concatMap mkPolicyUpstream4 overlayClassesWanted)
-  );
+  mkPolicyRoutes4ForLink =
+    lname:
+    lib.flatten (
+      (mkPolicyUpstream4ForLink lname "default")
+      ++ (mkPolicyUpstream4ForLink lname "internet")
+      ++ (lib.concatMap (c: mkPolicyUpstream4ForLink lname c) overlayClassesWanted)
+    );
 
-  policyUpstream6 = lib.flatten (
-    (mkPolicyUpstream6 "default")
-    ++ (mkPolicyUpstream6 "internet")
-    ++ (lib.concatMap mkPolicyUpstream6 overlayClassesWanted)
-  );
+  mkPolicyRoutes6ForLink =
+    lname:
+    lib.flatten (
+      (mkPolicyUpstream6ForLink lname "default")
+      ++ (mkPolicyUpstream6ForLink lname "internet")
+      ++ (lib.concatMap (c: mkPolicyUpstream6ForLink lname c) overlayClassesWanted)
+    );
 
   mkCoreRoutes4 = policyAddr4: lib.optional (policyAddr4 != null) { dst = "${policyAddr4}/32"; };
   mkCoreRoutes6 = policyAddr6: lib.optional (policyAddr6 != null) { dst = "${policyAddr6}/128"; };
@@ -224,15 +238,20 @@ let
       coreEp0 = getEp l core;
       policyEp0 = getEp l policyNodeName;
 
+      policyRoutes4 = mkPolicyRoutes4ForLink lname;
+      policyRoutes6 = mkPolicyRoutes6ForLink lname;
+
       endpoints1 = (l.endpoints or { }) // {
         "${core}" = coreEp0 // {
+
           routes4 = mkCoreRoutes4 p4;
           routes6 = mkCoreRoutes6 p6;
         };
 
         "${policyNodeName}" = policyEp0 // {
-          routes4 = policyUpstream4;
-          routes6 = policyUpstream6;
+
+          routes4 = policyRoutes4;
+          routes6 = policyRoutes6;
         };
       };
     in

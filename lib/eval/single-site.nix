@@ -67,7 +67,23 @@ let
 
   domain = input.domain or "lan.";
   reservedVlans = input.reservedVlans or [ 1 ];
-  forbiddenVlanRanges = input.forbiddenVlanRanges or [ ];
+  forbiddenVlanRanges =
+    if !(input ? forbiddenVlanRanges) then
+      throw ''
+        Missing required attribute: forbiddenVlanRanges
+
+        This compiler does NOT invent forbidden VLAN policy defaults.
+
+        Fix: set an explicit policy in your inputs, e.g.
+
+          forbiddenVlanRanges = [ ];
+
+        Or provide ranges:
+
+          forbiddenVlanRanges = [ { from = 2; to = 9; } ];
+      ''
+    else
+      input.forbiddenVlanRanges;
   defaultRouteMode = input.defaultRouteMode or "default";
   extraLinks = input.links or { };
   wan = input.wan or null;

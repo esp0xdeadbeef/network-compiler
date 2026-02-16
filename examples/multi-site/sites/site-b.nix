@@ -1,6 +1,14 @@
 let
   base = rec {
     siteName = "site-b";
+
+    forbiddenVlanRanges = [
+      {
+        from = 2;
+        to = 9;
+      }
+    ];
+
     tenantVlans = [
       10
       20

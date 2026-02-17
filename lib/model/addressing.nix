@@ -198,7 +198,7 @@ let
 
 in
 {
-  inherit transitHextet;
+  inherit transitHextet hostCidr;
 
   mkTenantV4 = { v4Base, vlanId }: hostCidr 1 "${v4Base}.${toString vlanId}.0/24";
 

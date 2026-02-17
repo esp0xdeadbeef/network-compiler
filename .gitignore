@@ -1,1 +1,5 @@
 .aider*
+*.qcow2
+#nixos.qcow2
+clab-fabric*
+clab-fabric/*

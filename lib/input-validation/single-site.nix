@@ -51,7 +51,6 @@ let
         }
       ) wan;
 
-  tenantVlans = input.tenantVlans;
   policyAccessTransitBase = input.policyAccessTransitBase;
   corePolicyTransitVlan = input.corePolicyTransitVlan;
   ulaPrefix = input.ulaPrefix;
@@ -93,7 +92,6 @@ let
     input
     // {
       inherit
-        tenantVlans
         policyAccessTransitBase
         corePolicyTransitVlan
         policyAccessOffset

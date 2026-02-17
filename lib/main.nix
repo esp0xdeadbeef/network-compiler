@@ -9,26 +9,18 @@ let
     else
       throw "lib/main.nix: could not resolve nixpkgs lib";
 
-  evalNetwork = import ./eval.nix { inherit lib; };
+  evalNetwork = import ./input-validation { inherit lib; };
 
   isSingleInput =
     x:
     builtins.isAttrs x
-    && x ? tenantVlans
+    && x ? policyAccessTransitBase
+    && x ? corePolicyTransitVlan
     && x ? ulaPrefix
-    && x ? tenantV4Base
-    && x ? policyNodeName
-    && x ? coreNodeName
-    && x ? accessNodePrefix;
+    && x ? tenantV4Base;
 
   isResolvedTopo =
-    x:
-    builtins.isAttrs x
-    && x ? nodes
-    && x ? links
-    && x ? ulaPrefix
-    && x ? tenantV4Base
-    && !(x ? tenantVlans);
+    x: builtins.isAttrs x && x ? nodes && x ? links && x ? ulaPrefix && x ? tenantV4Base;
 
   normalize =
     raw:

@@ -1,22 +1,30 @@
 {
-  description = "NixOS network topology compiler";
+  description = "Containerlab VM host";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   };
 
   outputs =
     { self, nixpkgs }:
     let
-      lib = nixpkgs.lib;
+      system = "x86_64-linux";
     in
     {
-      lib = lib // {
-        net = lib.net;
-        evalNetwork = import ./lib/eval.nix { inherit lib; };
-        query = import ./lib/query/default.nix { inherit lib; };
+      nixosConfigurations.lab = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [ ./vm.nix ];
       };
 
-      nixosModules.default = import ./modules/networkd-from-topology.nix;
+      apps.${system}.lab = {
+        type = "app";
+        program = toString (
+          nixpkgs.legacyPackages.${system}.writeShellScript "run-lab" ''
+            set -e
+            nix build .
+            ./result/bin/run-lab-vm
+          ''
+        );
+      };
     };
 }

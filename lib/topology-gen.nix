@@ -1,7 +1,6 @@
 { lib }:
 
 args@{
-  tenantVlans,
   policyAccessTransitBase,
   corePolicyTransitVlan,
   policyAccessOffset ? 0,
@@ -18,6 +17,18 @@ args@{
 
 let
   addr = import ./model/addressing.nix { inherit lib; };
+
+  tenantVlans =
+    if args ? tenantVlans && builtins.isList args.tenantVlans then
+      args.tenantVlans
+    else if
+      args ? policyIntent
+      && builtins.isAttrs args.policyIntent
+      && builtins.isList (args.policyIntent.exitTenants or null)
+    then
+      args.policyIntent.exitTenants
+    else
+      [ ];
 
   _ = import ./topology/assertions.nix { inherit lib; } {
     inherit

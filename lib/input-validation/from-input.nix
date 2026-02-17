@@ -11,17 +11,10 @@ let
 
   has = name: isAttrs && builtins.hasAttr name topoInput;
 
-  isResolved =
-    isAttrs
-    && has "nodes"
-    && has "links"
-    && has "ulaPrefix"
-    && has "tenantV4Base"
-    && !(has "tenantVlans");
+  isResolved = isAttrs && has "nodes" && has "links" && has "ulaPrefix" && has "tenantV4Base";
 
   isSingleSite =
     isAttrs
-    && has "tenantVlans"
     && has "policyAccessTransitBase"
     && has "corePolicyTransitVlan"
     && has "ulaPrefix"

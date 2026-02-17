@@ -6,7 +6,6 @@ let
   isSingleSiteInput =
     x:
     builtins.isAttrs x
-    && x ? tenantVlans
     && x ? policyAccessTransitBase
     && x ? corePolicyTransitVlan
     && x ? ulaPrefix

@@ -1,156 +1,263 @@
-Work in progress, do not use as a library yet. The goal is to make my own setup working with this package, the machines include:
-https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-access
-https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-core
-https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-router-policy-only
-And potentially:
-https://github.com/esp0xdeadbeef/nixos/tree/main/nixos/virtual-machine/nixos-shell-vm/s-nebula
+# Network Compiler Architecture (S88-style, human readable)
 
+This document defines how the network compiler is structured.
 
-# nixos-network-compiler
+It does NOT describe Linux configuration.
+It describes the logic that produces it.
 
-A pure Nix network topology compiler.
-
-This repository defines a deterministic pipeline:
-
-topology → resolution → routing → rendering
-
-It produces structured network graphs and systemd-networkd
-configurations without builds, without runtime state, and without
-impure evaluation.
-
-There is no legacy compatibility layer.
-There is no historical migration logic.
-There is no implicit behavior.
-
-Everything is explicit and reproducible.
+The goal:
+A single input model produces deterministic routing behavior for every node.
 
 ---
 
-## Design Principles
+# 1. Core Rule
 
-- Pure evaluation
-- Deterministic outputs
-- No file I/O inside the library
-- No environment variable reads
-- No hidden defaults
-- No legacy abstractions
+The compiler builds a **site routing system first**.
 
-The compiler operates entirely on data structures.
+Individual routers do not define the network.
+Routers implement the network.
 
----
+So the flow is:
 
-## Pipeline
+```
+inputs → site model → verified behavior → per-node configs
+```
 
-### 1. Topology
+NOT:
 
-`lib/topology-gen.nix`
-
-Defines:
-
-- Nodes
-- Links
-- VLAN allocation
-- Address allocation
-
-Links use:
-
-- `kind = "lan"` for broadcast segments
-- `kind = "p2p"` for point-to-point links
-- `carrier = "lan" | "wan" | "nebula"`
-- `scope = "internal" | "external"`
+```
+inputs → per-node configs that hopefully work together
+```
 
 ---
 
-### 2. Resolution
+# 2. Structural Levels
 
-`lib/topology-resolve.nix`
+We use simplified ISA-88 levels only as responsibility boundaries.
 
-Normalizes and enriches topology:
+## Enterprise
 
-- Expands endpoints
-- Computes interface structures
-- Prepares for routing stage
+Container for everything.
 
----
+Example:
 
-### 3. Routing
+```
+esp0xdeadbeef-fabric
+```
 
-`lib/compile/routing-gen.nix`
-
-Adds:
-
-- Default routes
-- Tenant subnet routes
-- Core routing rules
-- RA prefixes
-
-No routing logic exists in topology.
-No topology logic exists in routing.
+Has no logic. Only groups sites.
 
 ---
 
-### 4. Rendering
+## Site
 
-`lib/render/networkd`
+A routing domain.
 
-Transforms compiled graph into systemd-networkd definitions.
+Examples:
 
-Rendering is mechanical.
-No routing decisions are made here.
+```
+site-a
+site-b
+laptop
+lab
+```
 
----
+A site is a failure boundary and an addressing scope.
 
-## Debugging
-
-Debug output is pure.
-
-Run:
-
-    ./dev/debug.sh
-
-Optional secrets injection:
-
-    ./dev/debug.sh ../../secrets/file.yaml
-
-Secrets are passed as JSON.
-The compiler never reads files.
-The compiler never reads environment variables.
+Nothing outside a site is trusted unless explicitly allowed.
 
 ---
 
-## Topology Model
+## Process Cell (the important level)
 
-### Nodes
+The complete routing system of a site.
 
-    {
-      ifs = {
-        lan = "lan0";
-        wan = "wan0";
-      };
-    }
+It includes:
 
-### Links
+* access routers
+* policy router
+* core router
+* uplinks
+* overlays
 
-    {
-      kind = "lan" | "p2p";
-      scope = "internal" | "external";
-      carrier = "...";
-      vlanId = 123;
-      members = [ "node-a" "node-b" ];
-      endpoints = { ... };
-    }
+Think of this as:
+
+> the network behavior of the site
+
+This is what the compiler actually builds and verifies.
 
 ---
 
-## What This Repository Is Not
+## Unit (a machine)
 
-- Not a deployment framework
-- Not a secrets manager
-- Not a runtime orchestrator
-- Not a legacy migration layer
+A physical or virtual host.
 
-It is a compiler.
+Examples:
 
-## License
+```
+site-a-s-router-core
+site-a-s-router-policy-only
+site-a-s-router-access-10
+laptop
+backup-host
+```
 
-MIT
+A unit implements part of the site routing system.
+
+Units do not decide policy — they execute it.
+
+---
+
+## Equipment Modules (capabilities inside a unit)
+
+These describe what a node *does*, not what it is.
+
+Examples:
+
+| Module            | Meaning                              |
+| ----------------- | ------------------------------------ |
+| access-gateway    | provides a local network             |
+| policy-engine     | enforces traffic rules               |
+| transit-forwarder | forwards traffic but does not decide |
+| wan-uplink        | connects to ISP                      |
+| overlay-peer      | connects sites together              |
+
+A unit can have multiple modules.
+
+---
+
+## Control Modules (actual OS configuration)
+
+These are generated outputs:
+
+* networkd interfaces
+* routes
+* nftables rules
+* sysctl flags
+
+These are never written manually.
+
+---
+
+# 3. Compiler Phases
+
+The compiler runs these steps in order.
+
+Each phase must succeed before continuing.
+
+---
+
+## Phase 1 — Input Validation
+
+Input files must define:
+
+* sites
+* nodes
+* roles
+* allowed reachability
+
+No routing behavior is guessed.
+
+If ambiguous → compilation fails.
+
+Output:
+Validated intent model
+
+---
+
+## Phase 2 — Build Site Routing Graph
+
+Create a logical routing graph per site:
+
+* nodes
+* connections
+* authorities
+* allowed directions
+
+No IP addresses yet.
+
+This defines *how traffic is allowed to move*.
+
+Output:
+Site routing model
+
+---
+
+## Phase 3 — Address Allocation
+
+Assign deterministic IPv4 and IPv6.
+
+Rules:
+
+* stable across rebuilds
+* extendable without renumbering
+* based on identity, not interface names
+
+Addresses exist to implement the model, not define it.
+
+Output:
+Addressed routing model
+
+---
+
+## Phase 4 — Policy Compilation
+
+Convert intent into enforceable behavior:
+
+* who may talk to whom
+* default exits
+* overlay routing
+* packet marks
+* routing tables
+
+This produces the truth of the network.
+
+Output:
+Verified routing behavior
+
+---
+
+## Phase 5 — Rendering Per Node
+
+Each unit extracts only what it must enforce.
+
+Generate:
+
+* networkd config
+* nftables rules
+* sysctls
+
+Nodes do not need global knowledge.
+
+Output:
+Host configuration artifacts
+
+---
+
+# 4. Behavioral Guarantees
+
+The compiler must be able to prove:
+
+* tenants cannot bypass policy
+* core does not become a routing authority
+* overlays do not leak default routes
+* each prefix has one authority
+* internet reachability follows declared intent
+
+If these cannot be proven → compilation fails.
+
+---
+
+# 5. What Is NOT Part of the Model
+
+The following are implementation details and must not affect routing logic:
+
+* VLAN numbers
+* interface names
+* Linux device ordering
+* kernel routing quirks
+
+Changing them must not change behavior.
+
+
+These are part of the Physical model.

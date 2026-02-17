@@ -83,7 +83,6 @@ let
     {
       kind = l.kind or null;
       carrier = l.carrier or "lan";
-      vlanId = l.vlanId or null;
 
       tenant = ep.tenant or null;
       gateway = ep.gateway or false;
@@ -134,7 +133,7 @@ let
           let
             t = ep.tenant or null;
           in
-          if builtins.isAttrs t && t ? vlanId then [ t.vlanId ] else [ ]
+          [ ]
         ) (lib.attrValues (l.endpoints or { }))
       ) (lib.attrValues links)
     )

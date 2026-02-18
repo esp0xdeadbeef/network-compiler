@@ -14,225 +14,180 @@ let
         prefix = lib.toInt (builtins.elemAt parts 1);
       };
 
-  isRole = role: n: ((n.role or "") == role);
-
-  nodeNamesByRole = role: nodes: builtins.attrNames (lib.filterAttrs (_: n: isRole role n) nodes);
-
-  linksForNode =
-    node: links:
-    lib.filter (
-      lname:
-      let
-        l = links.${lname};
-        eps = l.endpoints or { };
-      in
-      eps ? "${node}"
-    ) (builtins.attrNames links);
-
-  p2pLinksForNode =
-    node: links:
-    lib.filter (
-      lname:
-      let
-        l = links.${lname};
-        eps = l.endpoints or { };
-      in
-      (l.kind or null) == "p2p" && (eps ? "${node}")
-    ) (builtins.attrNames links);
-
-  otherEnd =
-    node: linkName: link:
+  parseOctet =
+    s:
     let
-      eps = link.endpoints or { };
-      ns = builtins.attrNames eps;
+      n = lib.toInt s;
     in
-    if builtins.length ns != 2 then
-      throw "invariants: link '${linkName}' kind=p2p must have exactly 2 endpoints (has ${toString (builtins.length ns)})"
-    else if !(lib.elem node ns) then
-      throw "invariants: link '${linkName}' does not include node '${node}'"
-    else if builtins.elemAt ns 0 == node then
-      builtins.elemAt ns 1
+    if n < 0 || n > 255 then throw "invariants: bad IPv4 octet '${s}'" else n;
+
+  parseV4 =
+    s:
+    let
+      p = lib.splitString "." s;
+    in
+    if builtins.length p != 4 then throw "invariants: bad IPv4 '${s}'" else map parseOctet p;
+
+  v4ToInt =
+    o:
+    (((builtins.elemAt o 0) * 256 + (builtins.elemAt o 1)) * 256 + (builtins.elemAt o 2)) * 256
+    + (builtins.elemAt o 3);
+
+  hexToInt = s: if s == "" then 0 else (builtins.fromTOML "x = 0x${s}").x;
+
+  parseHextet =
+    s:
+    let
+      n = hexToInt s;
+    in
+    if n < 0 || n > 65535 then throw "invariants: bad IPv6 hextet '${s}'" else n;
+
+  expandIPv6 =
+    s:
+    let
+      parts = lib.splitString "::" s;
+    in
+    if builtins.length parts == 1 then
+      map parseHextet (lib.splitString ":" s)
+    else if builtins.length parts == 2 then
+      let
+        left = if builtins.elemAt parts 0 == "" then [ ] else lib.splitString ":" (builtins.elemAt parts 0);
+        right =
+          if builtins.elemAt parts 1 == "" then [ ] else lib.splitString ":" (builtins.elemAt parts 1);
+        missing = 8 - (builtins.length left + builtins.length right);
+      in
+      (map parseHextet left) ++ (builtins.genList (_: 0) missing) ++ (map parseHextet right)
     else
-      builtins.elemAt ns 0;
+      throw "invariants: bad IPv6 '${s}'";
+
+  v6ToInt128 = segs: builtins.foldl' (acc: x: acc * 65536 + x) 0 segs;
+
+  cidrRange =
+    cidr:
+    let
+      c = splitCidr cidr;
+    in
+    if lib.hasInfix "." c.ip then
+      let
+        base = v4ToInt (parseV4 c.ip);
+        size = builtins.pow 2 (32 - c.prefix);
+      in
+      {
+        family = 4;
+        start = base;
+        end = base + size - 1;
+        prefix = c.prefix;
+      }
+    else
+      let
+        segs = expandIPv6 c.ip;
+        base = v6ToInt128 segs;
+        size = builtins.pow 2 (128 - c.prefix);
+      in
+      {
+        family = 6;
+        start = base;
+        end = base + size - 1;
+        prefix = c.prefix;
+      };
+
+  overlaps = a: b: a.family == b.family && !(a.end < b.start || b.end < a.start);
 
   assert_ = cond: msg: if cond then true else throw msg;
 
-  checkP2PAddrs =
-    policyName: links:
+  collectUserPrefixes =
+    site:
     let
-      p2ps = lib.filterAttrs (_: l: (l.kind or null) == "p2p") links;
+      nodes = site.nodes or { };
 
-      checkOne =
-        lname: l:
+      perNode = lib.concatMap (
+        name:
         let
-          eps = l.endpoints or { };
-          ns = builtins.attrNames eps;
-
-          _len =
-            assert_ (builtins.length ns == 2)
-              "invariants: p2p link '${lname}' must have exactly 2 endpoints (has ${toString (builtins.length ns)})";
-
-          a = builtins.elemAt ns 0;
-          b = builtins.elemAt ns 1;
-
-          ea = eps.${a} or { };
-          eb = eps.${b} or { };
-
-          a4 = ea.addr4 or null;
-          b4 = eb.addr4 or null;
-          a6 = ea.addr6 or null;
-          b6 = eb.addr6 or null;
-
-          _have4 = assert_ (
-            a4 != null && b4 != null
-          ) "invariants: p2p link '${lname}' endpoints must both have addr4";
-
-          _have6 = assert_ (
-            a6 != null && b6 != null
-          ) "invariants: p2p link '${lname}' endpoints must both have addr6";
-
-          p4a = (splitCidr a4).prefix;
-          p4b = (splitCidr b4).prefix;
-          p6a = (splitCidr a6).prefix;
-          p6b = (splitCidr b6).prefix;
-
-          _p4 =
-            assert_ (p4a == 31 && p4b == 31)
-              "invariants: p2p link '${lname}' addr4 must be /31 on both ends (got ${toString p4a} and ${toString p4b})";
-
-          _p6 =
-            assert_ (p6a == 127 && p6b == 127)
-              "invariants: p2p link '${lname}' addr6 must be /127 on both ends (got ${toString p6a} and ${toString p6b})";
-
-          _adj =
-            assert_ (a == policyName || b == policyName)
-              "invariants: illegal p2p adjacency on '${lname}': '${a}' <-> '${b}' (p2p must include '${policyName}')";
+          n = nodes.${name};
+          nets = n.networks or null;
         in
-        true;
-
-    in
-    lib.all (x: x) (lib.mapAttrsToList checkOne p2ps);
-
-  checkAccessNetworks =
-    nodes:
-    let
-      offenders = lib.filter (
-        n: (nodes.${n}.networks or null) != null && ((nodes.${n}.role or "") != "access")
+        if nets == null then
+          [ ]
+        else
+          lib.flatten [
+            (lib.optional (nets ? ipv4) {
+              cidr = nets.ipv4;
+              owner = "node '${name}' ipv4";
+            })
+            (lib.optional (nets ? ipv6) {
+              cidr = nets.ipv6;
+              owner = "node '${name}' ipv6";
+            })
+          ]
       ) (builtins.attrNames nodes);
     in
-    assert_ (offenders == [ ])
-      "invariants: only access nodes may define networks; offenders: ${lib.concatStringsSep ", " offenders}";
+    perNode;
 
-  checkPolicyNode =
-    nodes:
+  checkDisjoint =
+    entries:
     let
-      hasPolicyName = nodes ? "s-router-policy";
-      policyNode = nodes."s-router-policy" or null;
+      withRanges = map (e: e // { range = cidrRange e.cidr; }) entries;
 
-      policyByRole = nodeNamesByRole "policy" nodes;
-
-      _mustExist = assert_ hasPolicyName "invariants: missing required node 's-router-policy'";
-
-      _mustBeRole = assert_ (
-        (policyNode.role or "") == "policy"
-      ) "invariants: node 's-router-policy' must have role='policy'";
-
-      _exactlyOne =
-        assert_ (builtins.length policyByRole == 1 && lib.head policyByRole == "s-router-policy")
-          "invariants: exactly one policy node is required and it must be named 's-router-policy' (found policy role nodes: ${lib.concatStringsSep ", " policyByRole})";
-    in
-    "s-router-policy";
-
-  checkStarAndDegrees =
-    policyName: nodes: links:
-    let
-      nonPolicy = lib.filter (n: n != policyName) (builtins.attrNames nodes);
-
-      rolesOk =
-        n:
+      pairs = lib.concatMap (
+        i:
         let
-          r = nodes.${n}.role or "";
+          a = builtins.elemAt withRanges i;
         in
-        r == "core" || r == "access" || r == "policy";
+        map (
+          j:
+          let
+            b = builtins.elemAt withRanges j;
+          in
+          {
+            a = a;
+            b = b;
+          }
+        ) (lib.range (i + 1) (builtins.length withRanges - 1))
+      ) (lib.range 0 (builtins.length withRanges - 2));
 
-      badRoles = lib.filter (n: !rolesOk n) (builtins.attrNames nodes);
-
-      _roles =
-        assert_ (badRoles == [ ])
-          "invariants: unsupported node role(s) (allowed: core, access, policy). Offenders: ${
-            lib.concatStringsSep ", " (map (n: "${n}=${nodes.${n}.role or ""}") badRoles)
-          }";
-
-      checkNonPolicy =
-        n:
-        let
-          r = nodes.${n}.role or "";
-
-          p2pLs = p2pLinksForNode n links;
-          allLs = linksForNode n links;
-
-          _mustHaveP2P = assert_ (
-            p2pLs != [ ]
-          ) "invariants: node '${n}' role='${r}' must have a p2p link to '${policyName}'";
-
-          _p2pDegree1 =
-            assert_ (builtins.length p2pLs == 1)
-              "invariants: node '${n}' role='${r}' must have exactly 1 p2p link (found ${toString (builtins.length p2pLs)}: ${lib.concatStringsSep ", " p2pLs})";
-
-          onlyP2P = lib.head p2pLs;
-          neigh = otherEnd n onlyP2P links.${onlyP2P};
-
-          _neighborIsPolicy =
-            assert_ (neigh == policyName)
-              "invariants: node '${n}' role='${r}' p2p neighbor must be '${policyName}' (found '${neigh}' via '${onlyP2P}')";
-
-          _totalCap =
-            if r == "core" || r == "access" then
-              assert_ (builtins.length allLs <= 2)
-                "invariants: node '${n}' role='${r}' may have at most 2 links total (found ${toString (builtins.length allLs)}: ${lib.concatStringsSep ", " allLs})"
-            else
-              true;
-        in
-        true;
-
-      _nonPolicyChecks = lib.all (x: x) (map checkNonPolicy nonPolicy);
-
-      policyLinks = linksForNode policyName links;
-
-      _policyMinDegree =
-        assert_ (builtins.length policyLinks >= 2)
-          "invariants: '${policyName}' must have at least 2 links (found ${toString (builtins.length policyLinks)}: ${lib.concatStringsSep ", " policyLinks})";
-
-      p2pCount = builtins.length (
-        builtins.attrNames (lib.filterAttrs (_: l: (l.kind or null) == "p2p") links)
-      );
-
-      _p2pCount =
-        assert_ (p2pCount == builtins.length nonPolicy)
-          "invariants: expected exactly one p2p link per non-policy node (expected ${toString (builtins.length nonPolicy)}, got ${toString p2pCount})";
+      _ = lib.all (
+        p:
+        assert_ (!(overlaps p.a.range p.b.range))
+          "invariants: overlapping user prefixes '${p.a.cidr}' (${p.a.owner}) and '${p.b.cidr}' (${p.b.owner})"
+      ) pairs;
     in
     true;
 
 in
 {
   checkSite =
-    { site, links }:
+    { site }:
     let
-      nodes = site.nodes or { };
+      userPrefixes = collectUserPrefixes site;
 
-      _mustHaveNodes = assert_ (
-        builtins.isAttrs nodes && (builtins.attrNames nodes) != [ ]
-      ) "invariants: site must define non-empty nodes";
+      _disjoint = checkDisjoint userPrefixes;
 
-      _mustHaveLinks = assert_ (builtins.isAttrs links) "invariants: internal error: links must be an attrset";
+      pool4 = site.p2p-pool.ipv4 or null;
+      pool6 = site.p2p-pool.ipv6 or null;
 
-      policyName = checkPolicyNode nodes;
+      poolChecks = lib.concatMap (
+        e:
+        lib.flatten [
+          (lib.optional (pool4 != null) {
+            pool = pool4;
+            entry = e;
+          })
+          (lib.optional (pool6 != null) {
+            pool = pool6;
+            entry = e;
+          })
+        ]
+      ) userPrefixes;
 
-      _networks = checkAccessNetworks nodes;
-
-      _p2p = checkP2PAddrs policyName links;
-
-      _star = checkStarAndDegrees policyName nodes links;
+      _poolOverlap = lib.all (
+        x:
+        let
+          rPool = cidrRange x.pool;
+          rUser = cidrRange x.entry.cidr;
+        in
+        assert_ (!(overlaps rPool rUser))
+          "invariants: access prefix '${x.entry.cidr}' (${x.entry.owner}) overlaps p2p pool '${x.pool}'; move one of them"
+      ) poolChecks;
     in
     true;
 }

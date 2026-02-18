@@ -24,16 +24,25 @@
             FILE="$(realpath "$1")"
 
             nix eval --impure --json --expr "
-              let
-                flake = builtins.getFlake (toString ./.);
-                pkgs  = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
-                lib   = pkgs.lib;
+            let
+              flake = builtins.getFlake (toString ./.);
+              pkgs  = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+              lib   = pkgs.lib;
 
-                compile = import ./lib/from-inputs.nix { inherit lib; };
-                inputs  = import (/. + \"$FILE\");
-              in
-                compile inputs
-            " | jq
+              compile    = import ./lib/from-inputs.nix { inherit lib; };
+              invariants = import ./lib/fabric/invariants { inherit lib; };
+
+              inputs = import (/. + \"$FILE\");
+              result = compile inputs;
+
+              _forceGlobal =
+                builtins.seq
+                  (invariants.checkAll { sites = inputs; })
+                  true;
+            in
+            builtins.seq _forceGlobal result
+
+                        " | jq
           ''
         );
 

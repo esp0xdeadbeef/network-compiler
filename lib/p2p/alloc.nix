@@ -1,26 +1,24 @@
 { lib }:
 
 let
+  addr = import ../model/addressing.nix { inherit lib; };
 
   splitCidr =
     cidr:
     let
       parts = lib.splitString "/" cidr;
     in
-    if builtins.length parts != 2 then
-      throw "p2p.alloc: invalid CIDR '${cidr}'"
-    else
-      {
-        ip = builtins.elemAt parts 0;
-        prefix = lib.toInt (builtins.elemAt parts 1);
-      };
+    {
+      ip = builtins.elemAt parts 0;
+      prefix = lib.toInt (builtins.elemAt parts 1);
+    };
 
   parseOctet =
     s:
     let
       n = lib.toInt s;
     in
-    if n < 0 || n > 255 then throw "p2p.alloc: bad IPv4 octet '${s}'" else n;
+    if n < 0 || n > 255 then throw "p2p pool exhausted" else n;
 
   parseV4 =
     s:
@@ -53,54 +51,21 @@ let
       ]
     );
 
-  nextV4 =
-    ip: inc:
+  pow2 = n: if n <= 0 then 1 else 2 * pow2 (n - 1);
+
+  rangeV4 =
+    cidr:
     let
-      base = v4ToInt (parseV4 ip);
+      c = splitCidr cidr;
+      base = v4ToInt (parseV4 c.ip);
+      size = pow2 (32 - c.prefix);
     in
-    intToV4 (base + inc);
+    {
+      start = base;
+      end = base + size - 1;
+    };
 
-  ipv6 = lib.network.ipv6;
-
-  hexToInt = s: if s == "" then 0 else (builtins.fromTOML "x = 0x${s}").x;
-  toHex = n: lib.toHexString n;
-
-  parseHextet =
-    s:
-    let
-      n = hexToInt s;
-    in
-    if n < 0 || n > 65535 then throw "p2p.alloc: bad IPv6 hextet '${s}'" else n;
-
-  parseV6Expanded = s: map parseHextet (lib.splitString ":" s);
-
-  addV6 =
-    segs: inc:
-    let
-      addRec =
-        i: carry: acc:
-        if i < 0 then
-          acc
-        else
-          let
-            sum = (builtins.elemAt segs i) + carry;
-            newVal = sum - (builtins.div sum 65536) * 65536;
-            newCarry = builtins.div sum 65536;
-          in
-          addRec (i - 1) newCarry ([ newVal ] ++ acc);
-    in
-    addRec 7 inc [ ];
-
-  v6ToStr = segs: lib.concatStringsSep ":" (map toHex segs);
-
-  nextV6 =
-    ip: inc:
-    let
-      parsed = ipv6.fromString ip;
-      segs0 = parseV6Expanded parsed.address;
-      segs1 = addV6 segs0 inc;
-    in
-    v6ToStr segs1;
+  overlaps = a: b: !(a.end < b.start || b.end < a.start);
 
   normPair =
     pair:
@@ -123,47 +88,107 @@ let
 
 in
 {
-
   alloc =
-    { p2p, links }:
+    { site }:
     let
+      p2p = site.p2p-pool;
+      links = site.links;
+
       v4 = splitCidr p2p.ipv4;
-      v6 = splitCidr p2p.ipv6;
+      base4 = v4ToInt (parseV4 v4.ip);
+
+      pool6 = p2p.ipv6 or null;
+
+      userRanges =
+        let
+          nodes = site.nodes or { };
+        in
+        lib.concatMap (
+          name:
+          let
+            n = nodes.${name};
+            nets = n.networks or null;
+          in
+          if nets == null || !(nets ? ipv4) then [ ] else [ (rangeV4 nets.ipv4) ]
+        ) (builtins.attrNames nodes);
 
       ps0 = map normPair links;
       ps = lib.sort (x: y: pairKey x < pairKey y) ps0;
 
-      mkOne =
-        i: p:
+      totalHosts = pow2 (32 - v4.prefix);
+      maxBlocks = builtins.div totalHosts 2;
+
+      allocOne =
+        used: idx:
+        if idx >= maxBlocks then
+          throw "p2p pool exhausted"
+        else
+          let
+            offA = 2 * idx;
+            offB = offA + 1;
+
+            r = {
+              start = base4 + offA;
+              end = base4 + offB;
+            };
+
+            collides = lib.any (u: overlaps u r) (used ++ userRanges);
+          in
+          if collides then
+            allocOne used (idx + 1)
+          else
+            {
+              range = r;
+              nextIdx = idx + 1;
+            };
+
+      step =
+        acc: p:
         let
-          offA = 2 * i;
-          offB = offA + 1;
+          found = allocOne acc.used acc.idx;
 
-          addr4A = "${nextV4 v4.ip offA}/31";
-          addr4B = "${nextV4 v4.ip offB}/31";
+          hostA = found.range.start;
+          hostB = found.range.start + 1;
 
-          addr6A = "${nextV6 v6.ip offA}/127";
-          addr6B = "${nextV6 v6.ip offB}/127";
+          addr4A = "${intToV4 hostA}/31";
+          addr4B = "${intToV4 hostB}/31";
+
+          addr6A = if pool6 == null then null else addr.hostCidr (2 * acc.idx) pool6;
+
+          addr6B = if pool6 == null then null else addr.hostCidr (2 * acc.idx + 1) pool6;
 
           linkName = "p2p-${p.a}-${p.b}";
         in
         {
-          name = linkName;
-          value = {
-            kind = "p2p";
-            endpoints = {
-              "${p.a}" = {
-                addr4 = addr4A;
-                addr6 = addr6A;
+          idx = found.nextIdx;
+          used = acc.used ++ [ found.range ];
+          attrs = acc.attrs ++ [
+            {
+              name = linkName;
+              value = {
+                kind = "p2p";
+                endpoints = {
+                  "${p.a}" = {
+                    addr4 = addr4A;
+                  }
+                  // lib.optionalAttrs (pool6 != null) { addr6 = addr6A; };
+
+                  "${p.b}" = {
+                    addr4 = addr4B;
+                  }
+                  // lib.optionalAttrs (pool6 != null) { addr6 = addr6B; };
+                };
               };
-              "${p.b}" = {
-                addr4 = addr4B;
-                addr6 = addr6B;
-              };
-            };
-          };
+            }
+          ];
         };
 
+      res = builtins.foldl' step {
+        idx = 0;
+        used = [ ];
+        attrs = [ ];
+      } ps;
+
     in
-    lib.listToAttrs (lib.imap0 mkOne ps);
+    lib.listToAttrs res.attrs;
 }

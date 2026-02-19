@@ -1,263 +1,157 @@
-# Network Compiler Architecture (S88-style, human readable)
+# Structural Levels
 
-This document defines how the network compiler is structured.
+The compiler follows ISA-88 responsibility layers.  
+Not every deployment must use all layers.
 
-It does NOT describe Linux configuration.
-It describes the logic that produces it.
+This implementation does not currently use the Enterprise level, but the model intentionally keeps it so larger deployments can extend without redesign.
 
-The goal:
-A single input model produces deterministic routing behavior for every node.
+No level is “more important” than another — each level answers a different question.
 
----
+* * *
 
-# 1. Core Rule
+## Enterprise — multi-site grouping _(optional in this implementation)_
 
-The compiler builds a **site routing system first**.
-
-Individual routers do not define the network.
-Routers implement the network.
-
-So the flow is:
-
-```
-inputs → site model → verified behavior → per-node configs
-```
-
-NOT:
-
-```
-inputs → per-node configs that hopefully work together
-```
-
----
-
-# 2. Structural Levels
-
-We use simplified ISA-88 levels only as responsibility boundaries.
-
-## Enterprise
-
-Container for everything.
+The Enterprise groups multiple independent sites.
 
 Example:
 
 ```
-esp0xdeadbeef-fabric
+corp
+homelab
+customer-a
 ```
 
-Has no logic. Only groups sites.
+It answers:
 
----
+> Which sites belong to the same administrative domain?
 
-## Site
+This layer is not required for single-operator setups and is unused in this project, but the architecture supports it so multiple organizations or large infrastructures can share the same compiler model without redesign.
 
-A routing domain.
+* * *
+
+## Site — authority boundary
+
+A site defines ownership and trust scope.
 
 Examples:
 
 ```
 site-a
 site-b
-laptop
 lab
-```
-
-A site is a failure boundary and an addressing scope.
-
-Nothing outside a site is trusted unless explicitly allowed.
-
----
-
-## Process Cell (the important level)
-
-The complete routing system of a site.
-
-It includes:
-
-* access routers
-* policy router
-* core router
-* uplinks
-* overlays
-
-Think of this as:
-
-> the network behavior of the site
-
-This is what the compiler actually builds and verifies.
-
----
-
-## Unit (a machine)
-
-A physical or virtual host.
-
-Examples:
-
-```
-site-a-s-router-core
-site-a-s-router-policy-only
-site-a-s-router-access-10
 laptop
-backup-host
 ```
 
-A unit implements part of the site routing system.
+It answers:
 
-Units do not decide policy — they execute it.
+> Which routing domain owns these addresses?
 
----
+Comparable to an autonomous routing domain.
 
-## Equipment Modules (capabilities inside a unit)
+Without a site, authority cannot be determined.
 
-These describe what a node *does*, not what it is.
+* * *
+
+## Process Cell — routing behavior
+
+The process cell describes the allowed forwarding behavior of the entire site:
+
+* access reachability
+    
+* policy enforcement
+    
+* transit behavior
+    
+* overlays
+    
+* external reachability
+    
+
+It answers:
+
+> What traffic is allowed to move where?
+
+No devices exist yet.  
+No interfaces exist yet.  
+Only allowed behavior exists.
+
+Without this layer, the network has hardware but no rules.
+
+* * *
+
+## Unit — execution context
+
+A unit is an instance that executes part of the site behavior.
 
 Examples:
 
-| Module            | Meaning                              |
-| ----------------- | ------------------------------------ |
-| access-gateway    | provides a local network             |
-| policy-engine     | enforces traffic rules               |
-| transit-forwarder | forwards traffic but does not decide |
-| wan-uplink        | connects to ISP                      |
-| overlay-peer      | connects sites together              |
+```
+core router instance
+policy router instance
+access router instance
+```
 
-A unit can have multiple modules.
+It answers:
 
----
+> Where is this behavior executed?
 
-## Control Modules (actual OS configuration)
+It is not necessarily a physical host — it is a runtime instance.
 
-These are generated outputs:
+Without units, behavior has nowhere to run.
 
-* networkd interfaces
+* * *
+
+## Equipment Modules — capabilities
+
+Modules describe **what a unit can do**, not what it is.
+
+| Module | Meaning |
+| --- | --- |
+| access-gateway | provides subnet |
+| policy-engine | enforces communication rules |
+| transit-forwarder | forwards only |
+| upstream-provider | exports default route |
+| overlay-peer | connects sites |
+
+They answer:
+
+> What responsibility does this unit perform?
+
+Without modules, units exist but have no semantics.
+
+* * *
+
+## Control Modules — implementation mechanisms
+
+These are generated operating system artifacts that realize compiled behavior.
+
+They do not define behavior — they enforce it.
+
+Examples:
+
+* interfaces
+    
 * routes
+    
 * nftables rules
-* sysctl flags
-
-These are never written manually.
-
----
-
-# 3. Compiler Phases
-
-The compiler runs these steps in order.
-
-Each phase must succeed before continuing.
-
----
-
-## Phase 1 — Input Validation
-
-Input files must define:
-
-* sites
-* nodes
-* roles
-* allowed reachability
-
-No routing behavior is guessed.
-
-If ambiguous → compilation fails.
-
-Output:
-Validated intent model
-
----
-
-## Phase 2 — Build Site Routing Graph
-
-Create a logical routing graph per site:
-
-* nodes
-* connections
-* authorities
-* allowed directions
-
-No IP addresses yet.
-
-This defines *how traffic is allowed to move*.
-
-Output:
-Site routing model
-
----
-
-## Phase 3 — Address Allocation
-
-Assign deterministic IPv4 and IPv6.
-
-Rules:
-
-* stable across rebuilds
-* extendable without renumbering
-* based on identity, not interface names
-
-Addresses exist to implement the model, not define it.
-
-Output:
-Addressed routing model
-
----
-
-## Phase 4 — Policy Compilation
-
-Convert intent into enforceable behavior:
-
-* who may talk to whom
-* default exits
-* overlay routing
-* packet marks
-* routing tables
-
-This produces the truth of the network.
-
-Output:
-Verified routing behavior
-
----
-
-## Phase 5 — Rendering Per Node
-
-Each unit extracts only what it must enforce.
-
-Generate:
-
-* networkd config
-* nftables rules
+    
 * sysctls
 
-Nodes do not need global knowledge.
+* DNS (e.g. unbound, bind)
+    
+* DHCP servers (e.g. Kea)
+    
+* Router advertisements (e.g. radvd)
+    
+* uplink mechanisms (e.g. PPP, DHCP client)
+    
 
-Output:
-Host configuration artifacts
+They answer:
 
----
+> How is the behavior implemented?
 
-# 4. Behavioral Guarantees
+Multiple mechanisms may implement the same behavior.  
+Changing the mechanism must not change the routing model.
 
-The compiler must be able to prove:
+Without this layer, the system has defined behavior but cannot execute it.
 
-* tenants cannot bypass policy
-* core does not become a routing authority
-* overlays do not leak default routes
-* each prefix has one authority
-* internet reachability follows declared intent
-
-If these cannot be proven → compilation fails.
-
----
-
-# 5. What Is NOT Part of the Model
-
-The following are implementation details and must not affect routing logic:
-
-* VLAN numbers
-* interface names
-* Linux device ordering
-* kernel routing quirks
-
-Changing them must not change behavior.
-
-
-These are part of the Physical model.

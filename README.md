@@ -25,7 +25,7 @@ It answers:
 
 > Which sites belong to the same administrative domain?
 
-This layer is not required for single-operator setups and is unused in this project, but the architecture supports it so multiple organizations or large infrastructures can share the same compiler model without redesign.
+This layer is not required for single-operator setups and is for now just set as esp0xdeadbeef in this project, but the architecture supports it so multiple organizations or large infrastructures can share the same compiler model without redesign.
 
 * * *
 

@@ -58,103 +58,160 @@ let
 
   overlaps = a: b: !(a.end < b.start || b.end < a.start);
 
+  isNetworkAttr =
+    name: v:
+    builtins.isAttrs v
+    && (v ? ipv4 || v ? ipv6)
+    && !(lib.elem name [
+      "role"
+      "interfaces"
+      "networks"
+    ]);
+
+  networksOf = node: if node ? networks then node.networks else lib.filterAttrs isNetworkAttr node;
+
+  enterpriseOf =
+    siteKey: site:
+    if site ? enterprise && builtins.isString site.enterprise then
+      site.enterprise
+    else
+
+      let
+        parts = lib.splitString "." siteKey;
+      in
+      if builtins.length parts >= 2 then builtins.elemAt parts 0 else "__default__";
+
+  groupByEnterprise =
+    sites:
+    builtins.foldl' (
+      acc: siteKey:
+      let
+        site = sites.${siteKey};
+        e = enterpriseOf siteKey site;
+      in
+      acc
+      // {
+        "${e}" = (acc."${e}" or { }) // {
+          "${siteKey}" = site;
+        };
+      }
+    ) { } (builtins.attrNames sites);
+
 in
 {
-  check =
+
+  checkAll =
     { sites }:
 
     let
-      siteNames = builtins.attrNames sites;
+      byEnt = groupByEnterprise sites;
 
-      entries = lib.concatMap (
-        siteName:
+      checkOneEnterprise =
+        entName:
         let
-          site = sites.${siteName};
-          nodes = site.nodes or { };
+          entSites = byEnt.${entName};
+          siteNames = builtins.attrNames entSites;
+
+          entries = lib.concatMap (
+            siteKey:
+            let
+              site = entSites.${siteKey};
+              nodes = site.nodes or { };
+            in
+            lib.concatMap (
+              nodeName:
+              let
+                n = nodes.${nodeName};
+                nets = networksOf n;
+              in
+              lib.concatMap (
+                netName:
+                let
+                  net = nets.${netName};
+                in
+                lib.flatten [
+                  (lib.optional (net ? ipv4) {
+                    cidr = toString net.ipv4;
+                    owner = "${siteKey}: node '${nodeName}' network '${netName}' ipv4";
+                  })
+                  (lib.optional (net ? ipv6) {
+                    cidr = toString net.ipv6;
+                    owner = "${siteKey}: node '${nodeName}' network '${netName}' ipv6";
+                  })
+                ]
+              ) (builtins.attrNames nets)
+            ) (builtins.attrNames nodes)
+          ) siteNames;
+
+          v4Entries = lib.filter (e: isV4 e.cidr) entries;
+          v6Entries = lib.filter (e: !(isV4 e.cidr)) entries;
+
+          v4WithRanges = map (e: e // { range = v4Range e.cidr; }) v4Entries;
+
+          v4Pairs = lib.concatMap (
+            i:
+            let
+              a = builtins.elemAt v4WithRanges i;
+            in
+            map (
+              j:
+              let
+                b = builtins.elemAt v4WithRanges j;
+              in
+              {
+                inherit a b;
+              }
+            ) (lib.range (i + 1) (builtins.length v4WithRanges - 1))
+          ) (lib.range 0 (builtins.length v4WithRanges - 2));
+
+          _v4Check = lib.all (
+            p:
+            assert_ (!(overlaps p.a.range p.b.range)) ''
+              invariants(global-user-space):
+
+              (enterprise: ${entName})
+
+              overlapping IPv4 prefixes detected:
+
+                ${p.a.cidr}  (${p.a.owner})
+                ${p.b.cidr}  (${p.b.owner})
+            ''
+          ) v4Pairs;
+
+          _v6State = builtins.foldl' (
+            acc: e:
+            let
+              k = e.cidr;
+            in
+            if acc.seen ? "${k}" then
+              throw ''
+                invariants(global-user-space):
+
+                (enterprise: ${entName})
+
+                duplicate IPv6 prefix detected within enterprise:
+
+                  ${k}
+
+                first seen in:
+                  ${acc.seen.${k}}
+
+                duplicated in:
+                  ${e.owner}
+              ''
+            else
+              {
+                seen = acc.seen // {
+                  "${k}" = e.owner;
+                };
+              }
+          ) { seen = { }; } v6Entries;
+
         in
-        lib.concatMap (
-          nodeName:
-          let
-            n = nodes.${nodeName};
-            nets = n.networks or null;
-          in
-          if nets == null then
-            [ ]
-          else
-            lib.flatten [
-              (lib.optional (nets ? ipv4) {
-                cidr = toString nets.ipv4;
-                owner = "${siteName}: node '${nodeName}' ipv4";
-              })
-              (lib.optional (nets ? ipv6) {
-                cidr = toString nets.ipv6;
-                owner = "${siteName}: node '${nodeName}' ipv6";
-              })
-            ]
-        ) (builtins.attrNames nodes)
-      ) siteNames;
+        builtins.seq _v4Check (builtins.seq _v6State true);
 
-      v4Entries = lib.filter (e: isV4 e.cidr) entries;
-      v6Entries = lib.filter (e: !(isV4 e.cidr)) entries;
-
-      v4WithRanges = map (e: e // { range = v4Range e.cidr; }) v4Entries;
-
-      v4Pairs = lib.concatMap (
-        i:
-        let
-          a = builtins.elemAt v4WithRanges i;
-        in
-        map (
-          j:
-          let
-            b = builtins.elemAt v4WithRanges j;
-          in
-          {
-            inherit a b;
-          }
-        ) (lib.range (i + 1) (builtins.length v4WithRanges - 1))
-      ) (lib.range 0 (builtins.length v4WithRanges - 2));
-
-      _v4Check = lib.all (
-        p:
-        assert_ (!(overlaps p.a.range p.b.range)) ''
-          invariants(global-user-space):
-
-          overlapping IPv4 prefixes detected:
-
-            ${p.a.cidr}  (${p.a.owner})
-            ${p.b.cidr}  (${p.b.owner})
-        ''
-      ) v4Pairs;
-
-      _v6State = builtins.foldl' (
-        acc: e:
-        let
-          k = e.cidr;
-        in
-        if acc.seen ? "${k}" then
-          throw ''
-            invariants(global-user-space):
-
-            duplicate IPv6 prefix detected across sites:
-
-              ${k}
-
-            first seen in:
-              ${acc.seen.${k}}
-
-            duplicated in:
-              ${e.owner}
-          ''
-        else
-          {
-            seen = acc.seen // {
-              "${k}" = e.owner;
-            };
-          }
-      ) { seen = { }; } v6Entries;
+      _all = lib.forEach (builtins.attrNames byEnt) checkOneEnterprise;
 
     in
-    builtins.seq _v4Check (builtins.seq _v6State true);
-
+    builtins.deepSeq _all true;
 }

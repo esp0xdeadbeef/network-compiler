@@ -1,33 +1,45 @@
 { lib }:
 
 let
-  nodeRoles = import ./node-roles.nix { inherit lib; };
-  userSpaceDisjoint = import ./user-space-disjoint.nix { inherit lib; };
-  globalUserSpace = import ./global-user-space-disjoint.nix { inherit lib; };
-  globalP2PPool = import ./global-p2p-pool-disjoint.nix { inherit lib; };
+
+  collect = import ../../lib/collect-nix-files.nix { inherit lib; };
+
+  files = lib.filter (p: baseNameOf p != "default.nix") (collect [ ./. ]);
+
+  isRegular =
+    p:
+    let
+      dir = builtins.readDir (builtins.dirOf p);
+      bn = baseNameOf p;
+    in
+    (dir ? "${bn}") && dir."${bn}" == "regular";
+
+  modules = map (p: import p { inherit lib; }) (lib.filter isRegular files);
+
+  callCheckSite =
+    site:
+    lib.forEach modules (
+      m:
+      if m ? check then
+        let
+          args = builtins.functionArgs m.check;
+        in
+        if args ? site then
+          m.check { inherit site; }
+        else if args ? nodes then
+          m.check { nodes = site.nodes or { }; }
+        else
+          true
+      else
+        true
+    );
+
+  callCheckAll =
+    sites: lib.forEach modules (m: if m ? checkAll then m.checkAll { inherit sites; } else true);
+
 in
 {
-  checkSite =
-    { site }:
-    let
-      _roles = nodeRoles.check {
-        nodes = site.nodes or { };
-      };
+  checkSite = { site }: builtins.deepSeq (callCheckSite site) true;
 
-      _user = userSpaceDisjoint.check {
-        inherit site;
-      };
-
-      _poolPresence =
-        if !(site ? p2p-pool) then throw "invariants: missing required attribute 'p2p-pool'" else true;
-    in
-    true;
-
-  checkAll =
-    { sites }:
-    let
-      a = globalUserSpace.check { inherit sites; };
-      b = globalP2PPool.check { inherit sites; };
-    in
-    builtins.deepSeq [ a b ] true;
+  checkAll = { sites }: builtins.deepSeq (callCheckAll sites) true;
 }

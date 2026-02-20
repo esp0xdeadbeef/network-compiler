@@ -86,6 +86,30 @@ let
 
   pairKey = p: "${p.a}|${p.b}";
 
+  splitIPv6 =
+    cidr:
+    let
+      parts = lib.splitString "/" cidr;
+    in
+    {
+      ip = builtins.elemAt parts 0;
+      prefix = lib.toInt (builtins.elemAt parts 1);
+    };
+
+  allocIPv6Pair =
+    { pool, linkIndex }:
+    let
+      c = splitIPv6 pool;
+
+      hostBase = linkIndex * 2;
+
+      a = addr.hostCidr hostBase "${c.ip}/127";
+      b = addr.hostCidr (hostBase + 1) "${c.ip}/127";
+    in
+    {
+      inherit a b;
+    };
+
 in
 {
   alloc =
@@ -153,9 +177,17 @@ in
           addr4A = "${intToV4 hostA}/31";
           addr4B = "${intToV4 hostB}/31";
 
-          addr6A = if pool6 == null then null else addr.hostCidr (2 * acc.idx) pool6;
-
-          addr6B = if pool6 == null then null else addr.hostCidr (2 * acc.idx + 1) pool6;
+          v6pair =
+            if pool6 == null then
+              {
+                a = null;
+                b = null;
+              }
+            else
+              allocIPv6Pair {
+                pool = pool6;
+                linkIndex = acc.idx;
+              };
 
           linkName = "p2p-${p.a}-${p.b}";
         in
@@ -171,12 +203,12 @@ in
                   "${p.a}" = {
                     addr4 = addr4A;
                   }
-                  // lib.optionalAttrs (pool6 != null) { addr6 = addr6A; };
+                  // lib.optionalAttrs (v6pair.a != null) { addr6 = v6pair.a; };
 
                   "${p.b}" = {
                     addr4 = addr4B;
                   }
-                  // lib.optionalAttrs (pool6 != null) { addr6 = addr6B; };
+                  // lib.optionalAttrs (v6pair.b != null) { addr6 = v6pair.b; };
                 };
               };
             }

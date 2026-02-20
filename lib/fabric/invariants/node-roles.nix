@@ -7,11 +7,15 @@ let
 
   nodeNamesByRole = role: nodes: builtins.attrNames (lib.filterAttrs (_: n: isRole role n) nodes);
 
+  accessNetworksDisjoint = import ./node-roles/access-networks-disjoint.nix { inherit lib; };
+
 in
 {
   check =
-    { nodes }:
+    { site, ... }:
     let
+      nodes = site.nodes or { };
+
       _mustHaveNodes = assert_ (
         builtins.isAttrs nodes && (builtins.attrNames nodes) != [ ]
       ) "invariants(node-roles): site must define non-empty nodes";
@@ -38,9 +42,9 @@ in
 
       policyNodes = nodeNamesByRole "policy" nodes;
 
-      _exactlyOnePolicy =
-        assert_ (builtins.length policyNodes == 1)
-          "invariants(node-roles): exactly one node with role='policy' is required (found: ${lib.concatStringsSep ", " policyNodes})";
+      _exactlyOnePolicy = assert_ (
+        builtins.length policyNodes == 1
+      ) "invariants(node-roles): exactly one node with role='policy' is required";
 
       offenders = lib.filter (
         n:
@@ -50,9 +54,11 @@ in
         nets != null && (nodes.${n}.role or "") != "access"
       ) (builtins.attrNames nodes);
 
-      _accessOnlyNetworks =
-        assert_ (offenders == [ ])
-          "invariants(node-roles): only access nodes may define networks; offenders: ${lib.concatStringsSep ", " offenders}";
+      _accessOnlyNetworks = assert_ (
+        offenders == [ ]
+      ) "invariants(node-roles): only access nodes may define networks";
+
+      _accessDisjoint = accessNetworksDisjoint.check { inherit nodes; };
     in
     true;
 }

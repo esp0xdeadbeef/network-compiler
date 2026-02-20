@@ -16,9 +16,20 @@ let
     "access"
   ];
 
+  coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNames;
+
+  _nonEmpty = check (nodeNames != [ ]) "site must define at least one node";
+
   _roles = lib.mapAttrsToList (
     name: n: check (lib.elem (n.role or null) validRoles) "node '${name}' has invalid or missing role"
   ) nodes;
+
+  _coreSpecialization = lib.forEach coreNodes (
+    name:
+    check (
+      nodes.${name} ? isp
+    ) "core node '${name}' must define 'isp' (core nodes require container specialization)"
+  );
 
   _access = lib.mapAttrsToList (
     name: n:

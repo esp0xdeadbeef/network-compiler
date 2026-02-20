@@ -22,12 +22,60 @@ let
 
   links = alloc.alloc { inherit site; };
 
+  emptyNode = n: n // { interfaces = { }; };
+
+  nodes0 = lib.mapAttrs (_: emptyNode) site.nodes;
+
+  addIface =
+    nodeName: linkName: iface:
+    lib.mapAttrs (
+      n: node:
+      if n == nodeName then
+        node
+        // {
+          interfaces = node.interfaces // {
+            ${linkName} = iface;
+          };
+        }
+      else
+        node
+    );
+
+  nodesWithIfaces = lib.foldlAttrs (
+    nodesAcc: linkName: link:
+    let
+      epNames = builtins.attrNames link.endpoints;
+
+      a = builtins.elemAt epNames 0;
+      b = builtins.elemAt epNames 1;
+
+      aData = link.endpoints.${a};
+      bData = link.endpoints.${b};
+
+      nodes1 = addIface a linkName {
+        peer = b;
+        kind = link.kind;
+        addr4 = aData.addr4 or null;
+        addr6 = aData.addr6 or null;
+      } nodesAcc;
+
+      nodes2 = addIface b linkName {
+        peer = a;
+        kind = link.kind;
+        addr4 = bData.addr4 or null;
+        addr6 = bData.addr6 or null;
+      } nodes1;
+
+    in
+    nodes2
+  ) nodes0 links;
+
   result = {
-    inherit (site) nodes;
+    nodes = nodesWithIfaces;
     inherit links;
   };
 
 in
 assert _shape;
 assert _inv;
-builtins.deepSeq links result
+builtins.deepSeq result result

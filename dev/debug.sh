@@ -1,24 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FILE="$1"
-QUERY="${2:-c: c}"
-QUERY="${2:-c: builtins.trace (builtins.toJSON c) c}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+cd "$REPO_ROOT"
 
-if [[ -d "$FILE" ]]; then
-  FILE="$FILE/default.nix"
-fi
+nix run --no-write-lock-file .#flatten   examples/single-wan/inputs.nix | tee /tmp/inputs-flatten.json
+nix run .#normalize /tmp/inputs-flatten.json | tee /tmp/inputs-normalized.json
+nix run .#invPre   /tmp/inputs-normalized.json | tee /tmp/inputs-invPre.json
+nix run .#compile  /tmp/inputs-invPre.json | tee /tmp/inputs-compile.json
+nix run .#invPost  /tmp/inputs-compile.json | tee /tmp/inputs-invPost.json
+nix run .#check    /tmp/inputs-invPost.json
 
-nix eval --impure --json --expr "
-let
-  flake = builtins.getFlake (toString ./.);
-  lib = flake.lib;
-  eval = import \"\${flake}/dev/debug.nix\" { inherit lib; };
-
-  compiled = eval { topology = import ./$FILE; };
-  f = $QUERY;
-in
-  f compiled
-" | jq
-
+nix run path:"$REPO_ROOT"#debug examples/single-wan/inputs.nix

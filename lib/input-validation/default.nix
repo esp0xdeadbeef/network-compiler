@@ -1,3 +1,3 @@
 { lib }:
 
-import ./eval/from-input.nix { inherit lib; }
+import ./from-input.nix { inherit lib; }

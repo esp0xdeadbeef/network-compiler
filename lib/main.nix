@@ -1,13 +1,9 @@
 { nix }:
 
 let
-  lib = import ./lib/resolve-lib.nix { inherit nix; };
+  lib = import ./lib/recursivelyImport.nix { inherit nix; };
 
-  evalNetwork = import ./input-validation { inherit lib; };
-
-  loadSites = import ./loader/normalize-input.nix {
-    inherit lib evalNetwork;
-  };
+  compile = import ./from-inputs.nix { inherit lib; };
 
   mkSite = import ./runtime/site-runtime.nix { inherit lib; };
 
@@ -16,19 +12,17 @@ in
   fromFile =
     path:
     let
-      routedBySite = loadSites path;
+      inputs = import path;
+      sites = compile inputs;
     in
     {
-      sites = routedBySite;
+      inherit sites;
 
       query = {
-        all-sites = builtins.attrNames routedBySite;
+        all-sites = builtins.attrNames sites;
+        all-nodes = lib.mapAttrs (_: r: builtins.attrNames r.nodes) sites;
 
-        all-nodes = lib.mapAttrs (_: r: builtins.attrNames r.nodes) routedBySite;
-
-        site =
-          name:
-          if routedBySite ? "${name}" then mkSite routedBySite.${name} else throw "unknown site '${name}'";
+        site = name: if sites ? "${name}" then mkSite sites.${name} else throw "unknown site '${name}'";
       };
     };
 }

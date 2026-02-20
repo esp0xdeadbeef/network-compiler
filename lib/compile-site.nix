@@ -4,78 +4,166 @@ site:
 
 let
   alloc = import ./p2p/alloc.nix { inherit lib; };
-  invariants = import ./fabric/invariants { inherit lib; };
 
-  _shape =
-    if !(site ? nodes && builtins.isAttrs site.nodes) then
-      throw "compile-site: site.nodes must be an attribute set"
-    else if !(site ? links && builtins.isList site.links) then
-      throw "compile-site: site.links must be a list of node pairs"
-    else if !(site ? p2p-pool && builtins.isAttrs site.p2p-pool) then
-      throw "compile-site: missing required attribute 'p2p-pool'"
-    else if !(site.p2p-pool ? ipv4) then
-      throw "compile-site: p2p-pool.ipv4 is required"
-    else
-      true;
+  isBoxAttr =
+    name: v:
+    builtins.isAttrs v
+    && !(lib.elem name [
+      "role"
+      "networks"
+      "interfaces"
+    ]);
 
-  _inv = invariants.checkSite { inherit site; };
+  boxesOf = node: builtins.attrNames (lib.filterAttrs isBoxAttr node);
 
-  links = alloc.alloc { inherit site; };
+  roleOf = n: (n.role or null);
 
-  emptyNode = n: n // { interfaces = { }; };
+  expandPair =
+    a: b:
+    let
+      na = site.nodes.${a};
+      nb = site.nodes.${b};
+
+      expandSide =
+        nodeName: node:
+        let
+          boxes = boxesOf node;
+        in
+        if boxes == [ ] then [ nodeName ] else map (b: "${nodeName}.${b}") boxes;
+
+      lefts = expandSide a na;
+      rights = expandSide b nb;
+
+    in
+    lib.concatMap (
+      l:
+      map (r: [
+        l
+        r
+      ]) rights
+    ) lefts;
+
+  expandedLinks = lib.concatMap (
+    pair: expandPair (builtins.elemAt pair 0) (builtins.elemAt pair 1)
+  ) site.links;
+
+  allocSite = site // {
+    links = expandedLinks;
+  };
+
+  links = alloc.alloc { site = allocSite; };
+
+  emptyNode =
+    n:
+    let
+      boxes = boxesOf n;
+    in
+    n
+    // {
+      interfaces = { };
+    }
+    // lib.genAttrs boxes (_: {
+      interfaces = { };
+    });
 
   nodes0 = lib.mapAttrs (_: emptyNode) site.nodes;
 
-  addIface =
-    nodeName: linkName: iface:
-    lib.mapAttrs (
-      n: node:
-      if n == nodeName then
-        node
-        // {
-          interfaces = node.interfaces // {
-            ${linkName} = iface;
-          };
-        }
-      else
-        node
-    );
+  splitName =
+    name:
+    let
+      parts = lib.splitString "." name;
+    in
+    if builtins.length parts == 1 then
+      {
+        node = name;
+        box = null;
+      }
+    else
+      {
+        node = builtins.elemAt parts 0;
+        box = builtins.elemAt parts 1;
+      };
 
-  nodesWithIfaces = lib.foldlAttrs (
+  attach =
     nodesAcc: linkName: link:
     let
       epNames = builtins.attrNames link.endpoints;
 
-      a = builtins.elemAt epNames 0;
-      b = builtins.elemAt epNames 1;
+      addOne =
+        nodesA: ep:
+        let
+          parsed = splitName ep;
+          node = parsed.node;
+          box = parsed.box;
+          peer = lib.head (lib.remove ep epNames);
+          epData = link.endpoints.${ep};
 
-      aData = link.endpoints.${a};
-      bData = link.endpoints.${b};
+          iface = {
+            peer = peer;
+            kind = link.kind;
+            addr4 = epData.addr4 or null;
+            addr6 = epData.addr6 or null;
+          };
 
-      nodes1 = addIface a linkName {
-        peer = b;
-        kind = link.kind;
-        addr4 = aData.addr4 or null;
-        addr6 = aData.addr6 or null;
-      } nodesAcc;
-
-      nodes2 = addIface b linkName {
-        peer = a;
-        kind = link.kind;
-        addr4 = bData.addr4 or null;
-        addr6 = bData.addr6 or null;
-      } nodes1;
+        in
+        if box == null then
+          nodesA
+          // {
+            ${node} = nodesA.${node} // {
+              interfaces = nodesA.${node}.interfaces // {
+                ${linkName} = iface;
+              };
+            };
+          }
+        else
+          nodesA
+          // {
+            ${node} = nodesA.${node} // {
+              ${box} = nodesA.${node}.${box} // {
+                interfaces = nodesA.${node}.${box}.interfaces // {
+                  ${linkName} = iface;
+                };
+              };
+            };
+          };
 
     in
-    nodes2
-  ) nodes0 links;
+    builtins.foldl' addOne nodesAcc epNames;
 
-  result = {
-    nodes = nodesWithIfaces;
-    inherit links;
-  };
+  nodesWithP2P = lib.foldlAttrs attach nodes0 links;
+
+  addAccessLan = lib.mapAttrs (
+    nodeName: node:
+    if (node.role or null) != "access" then
+      node
+    else
+      let
+        boxes = boxesOf node;
+
+        addOne =
+          acc: boxName:
+          let
+            box = acc.${boxName} or { };
+            ifs = box.interfaces or { };
+          in
+          acc
+          // {
+            ${boxName} = box // {
+              interfaces = ifs // {
+                "lan-${boxName}" = {
+                  kind = "lan";
+                  carrier = "lan";
+                };
+              };
+            };
+          };
+
+      in
+      builtins.foldl' addOne node boxes
+  ) nodesWithP2P;
 
 in
-assert _shape;
-assert _inv;
-builtins.deepSeq result result
+{
+  nodes = addAccessLan;
+  inherit links;
+}

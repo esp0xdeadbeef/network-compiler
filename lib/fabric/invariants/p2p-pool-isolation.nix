@@ -18,14 +18,14 @@ let
     let
       n = lib.toInt s;
     in
-    if n < 0 || n > 255 then throw "invariants(p2p-pool): bad IPv4 octet '${s}'" else n;
+    if n < 0 || n > 255 then throw "bad IPv4 octet" else n;
 
   parseV4 =
     s:
     let
       p = lib.splitString "." s;
     in
-    if builtins.length p != 4 then throw "invariants(p2p-pool): bad IPv4 '${s}'" else map parseOctet p;
+    map parseOctet p;
 
   v4ToInt =
     o:
@@ -51,8 +51,10 @@ let
 in
 {
   check =
-    { nodes, p2pPool }:
+    { site, ... }:
     let
+      nodes = site.nodes or { };
+      p2pPool = site.p2p-pool or { };
       pool4 = p2pPool.ipv4 or null;
 
       userRanges4 = lib.concatMap (
@@ -72,10 +74,7 @@ in
             rPool = cidrRange4 pool4;
           in
           lib.all (
-            rUser:
-            assert_ (
-              !(overlaps rPool rUser)
-            ) "invariants(p2p-pool): access prefix overlaps p2p pool; move one of them"
+            rUser: assert_ (!(overlaps rPool rUser)) "invariants(p2p-pool): access prefix overlaps p2p pool"
           ) userRanges4;
     in
     true;

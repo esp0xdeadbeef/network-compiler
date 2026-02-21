@@ -1,8 +1,18 @@
-throw ''
-  Do not import internal paths from nixos-network-compiler.
+{ lib }:
+let
+  compileContract = import ./contract/compile.nix { inherit lib; };
 
-  Use:
-    inputs.fabric.lib.evalNetwork
+  generateP2P = import ./pipeline/generate-p2p.nix { inherit lib; };
 
-  Internal layout is not stable.
-''
+  verify = import ./pipeline/verify.nix { inherit lib; };
+
+  stages = import ./stages.nix { inherit lib; };
+in
+{
+  inherit
+    compileContract
+    generateP2P
+    verify
+    stages
+    ;
+}

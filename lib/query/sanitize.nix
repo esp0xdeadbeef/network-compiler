@@ -1,4 +1,3 @@
-# ./lib/query/sanitize.nix
 { lib }:
 
 let
@@ -19,4 +18,3 @@ let
       x;
 in
 sanitize
-

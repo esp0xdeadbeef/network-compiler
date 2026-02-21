@@ -1,4 +1,3 @@
-# ./lib/query/default.nix
 { lib }:
 
 {
@@ -14,4 +13,3 @@
 
   routingTable = import ./routing-table.nix { inherit lib; };
 }
-

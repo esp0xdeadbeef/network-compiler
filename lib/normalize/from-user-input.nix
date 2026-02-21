@@ -3,53 +3,53 @@
 site:
 
 let
-  check = cond: msg: if cond then true else throw msg;
 
-  nodes = site.nodes or { };
-  links = site.links or [ ];
+  units = site.nodes or { };
 
-  nodeNames = builtins.attrNames nodes;
-
-  validRoles = [
-    "core"
-    "policy"
-    "access"
-  ];
-
-  coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNames;
-
-  _nonEmpty = check (nodeNames != [ ]) "site must define at least one node";
-
-  _roles = lib.mapAttrsToList (
-    name: n: check (lib.elem (n.role or null) validRoles) "node '${name}' has invalid or missing role"
-  ) nodes;
-
-  _coreSpecialization = lib.forEach coreNodes (
-    name:
-    check (
-      nodes.${name} ? isp
-    ) "core node '${name}' must define 'isp' (core nodes require container specialization)"
-  );
-
-  _access = lib.mapAttrsToList (
-    name: n:
-    if (n.role or null) == "access" then
-      check (
-        n ? networks && builtins.isAttrs n.networks && n.networks != { }
-      ) "access node '${name}' must define networks.<name> = { ipv4, ipv6, kind }"
-    else
-      check (!(n ? networks)) "only access nodes may define networks (offender: ${name})"
-  ) nodes;
-
-  _links = map (
-    pair:
+  accessUnit =
     let
-      a = builtins.elemAt pair 0;
-      b = builtins.elemAt pair 1;
+      names = builtins.attrNames units;
+      isAccess = n: ((units.${n}.role or null) == "access");
+      matches = lib.filter isAccess names;
     in
-    check (lib.elem a nodeNames) "link references unknown node '${a}'"
-    && check (lib.elem b nodeNames) "link references unknown node '${b}'"
-  ) links;
+    if builtins.length matches >= 1 then builtins.elemAt matches 0 else null;
+
+  owned = site.processCell.owned or { };
+  tenants = owned.tenants or [ ];
+  services = owned.services or [ ];
+
+  segments = {
+    tenants = tenants;
+    services = services;
+  };
+
+  attachments =
+    if accessUnit == null then
+      [ ]
+    else
+      map (t: {
+        segment = "tenants:${t.name}";
+        unit = accessUnit;
+      }) tenants;
+
+  transitLinks =
+    if site.processCell ? transit && site.processCell.transit ? links then
+      site.processCell.transit.links
+    else if site ? links then
+      site.links
+    else
+      [ ];
+
+  transitPool = site.p2p-pool or null;
 
 in
-site
+{
+  enterprise = site.enterprise or "default";
+
+  inherit segments attachments;
+
+  transit = {
+    links = transitLinks;
+    pool = transitPool;
+  };
+}

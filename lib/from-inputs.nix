@@ -5,14 +5,13 @@ inputs:
 let
   assert_ = cond: msg: if cond then true else throw msg;
 
-  invariants = import ./fabric/invariants/default.nix { inherit lib; };
-
   isSite = v: builtins.isAttrs v && (v ? nodes || v ? links || v ? p2p-pool);
 
   flattenSites =
     top:
     let
       topNames = builtins.attrNames top;
+
       addOne =
         acc: name:
         let
@@ -23,9 +22,11 @@ let
         else if builtins.isAttrs v then
           let
             siteNames = builtins.attrNames v;
+
             _nonEmpty = assert_ (
               siteNames != [ ]
             ) "from-inputs: enterprise '${name}' must contain at least one site";
+
             addSite =
               acc2: sname:
               let
@@ -54,18 +55,7 @@ let
   compileSite = import ./compile-site.nix { inherit lib; };
 
   normalizedSites = lib.mapAttrs (_: site: normalizeSite site) sites;
-
-  _invPrePerSite = lib.mapAttrs (_: site: invariants.checkSite { inherit site; }) normalizedSites;
-
-  _invAll = invariants.checkAll { sites = normalizedSites; };
-
   compiledSites = lib.mapAttrs (_: site: compileSite site) normalizedSites;
 
-  _invPostPerSite = lib.mapAttrs (_: site: invariants.checkSite { site = site; }) compiledSites;
-
-  result = compiledSites;
-
 in
-builtins.deepSeq _invPrePerSite (
-  builtins.deepSeq _invAll (builtins.deepSeq _invPostPerSite (builtins.deepSeq result result))
-)
+compiledSites

@@ -1,226 +1,123 @@
 { lib }:
 
 let
+
+  flattenSites = import ./flatten-sites.nix { inherit lib; };
   normalizeSite = import ./normalize/from-user-input.nix { inherit lib; };
-  compileSite = import ./compile-site.nix { inherit lib; };
-  invariants = import ./fabric/invariants/default.nix { inherit lib; };
 
-  alloc = import ./p2p/alloc.nix { inherit lib; };
-
-  assert_ = cond: msg: if cond then true else throw msg;
-
-  isSite = v: builtins.isAttrs v && (v ? nodes || v ? links || v ? p2p-pool);
-
-  isCompiledSite = v: builtins.isAttrs v && v ? nodes && v ? links && builtins.isAttrs v.links;
-
-  flattenSites =
-    top:
+  mkPortForwardRelations =
+    declared:
     let
-      topNames = builtins.attrNames top;
-      addOne =
-        acc: name:
+      nodes = declared.nodes or { };
+
+      coreNames = lib.filter (n: (nodes.${n}.role or null) == "core") (builtins.attrNames nodes);
+
+      forwards = lib.concatMap (
+        coreName:
         let
-          v = top.${name};
+          core = nodes.${coreName};
+          isp = core.isp or { };
+          fps = isp.forwardPorts or [ ];
         in
-        if isSite v then
-          acc // { "${name}" = v; }
-        else if builtins.isAttrs v then
-          let
-            siteNames = builtins.attrNames v;
-            _nonEmpty = assert_ (
-              siteNames != [ ]
-            ) "stages.flatten: enterprise '${name}' must contain at least one site";
-            addSite =
-              acc2: sname:
-              let
-                sv = v.${sname};
-              in
-              if isSite sv then
-                acc2
-                // {
-                  "${name}.${sname}" = sv // {
-                    enterprise = name;
-                    siteName = sname;
-                  };
-                }
-              else
-                throw "stages.flatten: enterprise '${name}' contains non-site attribute '${sname}'";
-          in
-          builtins.foldl' addSite acc siteNames
-        else
-          throw "stages.flatten: top-level attribute '${name}' must be a site or enterprise attrset";
+        map (fp: {
+          from = {
+            external = "default";
+          };
+          to = if fp ? target then { service = fp.target; } else { };
+          action = "allow";
+          proto = [ "tcp/${toString fp.port}" ];
+        }) fps
+      ) coreNames;
     in
-    builtins.foldl' addOne { } topNames;
+    forwards;
 
-  normalizeAll = sites: lib.mapAttrs (_: s: normalizeSite s) sites;
-
-  checkSiteAll =
-    sites: builtins.deepSeq (lib.mapAttrs (_: s: invariants.checkSite { site = s; }) sites) true;
-
-  checkAllGlobal = sites: builtins.deepSeq (invariants.checkAll { inherit sites; }) true;
-
-  runPreInvariants =
-    sites: builtins.seq (checkSiteAll sites) (builtins.seq (checkAllGlobal sites) sites);
-
-  compileAll = sites: lib.mapAttrs (_: s: if isCompiledSite s then s else compileSite s) sites;
-
-  runPostInvariants = compiled: builtins.seq (checkSiteAll compiled) compiled;
-
-  isNetworkAttr =
-    name: v:
-    builtins.isAttrs v
-    && (v ? ipv4 || v ? ipv6)
-    && !(lib.elem name [
-      "role"
-      "interfaces"
-      "networks"
-    ]);
-
-  networksOf =
-    node:
-    if node ? networks && builtins.isAttrs node.networks then
-      node.networks
-    else
-      lib.filterAttrs isNetworkAttr node;
-
-  segmentsFromProcessCell =
-    site:
+  buildModel =
+    siteKey: declared: semantic:
     let
-      pc = site.processCell or { };
-      owned = pc.owned or { };
-      tenants = owned.tenants or [ ];
-      services = owned.services or [ ];
-    in
-    {
-      inherit tenants services;
-    };
+      processCell = declared.processCell or { };
+      policyIntent = processCell.policyIntent or [ ];
 
-  tenantsFromAccessNetworks =
-    site:
-    let
-      nodes = site.nodes or { };
+      tenants = semantic.segments.tenants or [ ];
 
-      accessNodes = lib.filterAttrs (_: n: (n.role or null) == "access") nodes;
-
-      nets = lib.concatMap (
-        nodeName:
-        let
-          node = accessNodes.${nodeName};
-          ns = networksOf node;
-        in
-        lib.mapAttrsToList (netName: net: {
-          name = netName;
-          ipv4 = net.ipv4 or null;
-          ipv6 = net.ipv6 or null;
-          kind = net.kind or null;
-        }) ns
-      ) (builtins.attrNames accessNodes);
-
-      mkKey = t: "tenants:${t.name}";
-      keyed = lib.listToAttrs (
-        map (t: {
-          name = mkKey t;
-          value = t;
-        }) nets
+      trafficClasses = lib.unique (
+        lib.concatMap (rule: if rule ? proto then rule.proto else [ "any" ]) policyIntent
       );
-    in
-    {
-      tenants = lib.mapAttrsToList (_: v: v) keyed;
-    };
 
-  chooseSegments =
-    site:
-    let
-      pcSeg = segmentsFromProcessCell site;
+      baseAllowedRelations = map (rule: {
+        from = rule.from or { };
+        to = rule.to or { };
+        action = rule.action or "deny";
+        proto = rule.proto or [ "any" ];
+      }) policyIntent;
 
-      derived = tenantsFromAccessNetworks site;
+      portForwardRelations = mkPortForwardRelations declared;
 
-      tenants = if (pcSeg.tenants or [ ]) != [ ] then pcSeg.tenants else derived.tenants or [ ];
+      allowedRelations = baseAllowedRelations ++ portForwardRelations;
 
-      services = pcSeg.services or [ ];
-    in
-    {
-      inherit tenants services;
-    };
-
-  attachmentsFromAccess =
-    site:
-    let
-      nodes = site.nodes or { };
-
-      accessNodes = lib.filterAttrs (_: n: (n.role or null) == "access") nodes;
-
-      attachForNode =
-        nodeName:
+      transformations =
         let
-          node = accessNodes.${nodeName};
-          ns = networksOf node;
+          t = processCell.transformations or { };
         in
-        lib.mapAttrsToList (netName: _net: {
-          unit = nodeName;
-          segment = "tenants:${netName}";
-        }) ns;
-    in
-    lib.concatMap attachForNode (builtins.attrNames accessNodes);
+        lib.filterAttrs (_: v: v != [ ]) {
+          dnat = t.dnat or [ ];
+          snat = t.snat or [ ];
+        };
 
-  mkSiteGraph =
-    siteName: site:
-    let
-      seg = chooseSegments site;
+      enforcement =
+        let
+          auth = processCell.authority or { };
+          tf = processCell.transitForwarder or { };
+        in
+        lib.filterAttrs (_: v: v != { } && v != null) {
+          requirePolicyEngine = true;
+          authorityRoles = auth;
+          transitForwarder = tf;
+        };
 
-      tenantsGraph = map (t: {
-        name = t.name;
-        ipv4 = t.ipv4 or null;
-        ipv6 = t.ipv6 or null;
-      }) (seg.tenants or [ ]);
+      communicationContract = {
+        trafficClasses = trafficClasses;
+        allowedRelations = allowedRelations;
+      }
+      // lib.optionalAttrs (transformations != { }) { inherit transformations; }
+      // lib.optionalAttrs (enforcement != { }) { inherit enforcement; };
 
-      servicesGraph = map (s: {
-        name = s.name;
-        prefixes = s.prefixes or [ ];
-      }) (seg.services or [ ]);
     in
     {
+      id = siteKey;
+      enterprise = semantic.enterprise or "default";
+
+      domains = {
+        tenants = tenants;
+      };
+
+      attachment = semantic.attachments or [ ];
+
       transit = {
-        links = site.links or [ ];
-        pool = site.p2p-pool or null;
+        ordering = semantic.transit.links or [ ];
+        addressAuthority = semantic.transit.pool or null;
       };
 
-      segments = {
-        tenants = tenantsGraph;
-        services = servicesGraph;
-      };
-
-      attachments = attachmentsFromAccess site;
+      inherit communicationContract;
     };
 
-  mkP2P =
-    _siteName: site:
+  compileSite =
+    siteKey: declared:
     let
-      pool = site.p2p-pool or null;
-      p2pLinks = if pool == null then { } else alloc.alloc { site = site; };
+      semantic = normalizeSite declared;
+      model = buildModel siteKey declared semantic;
     in
-    {
-      inherit pool;
-      links = p2pLinks;
-    };
+    model;
 
 in
 {
-  flatten = inputs: flattenSites inputs;
 
-  normalize = inputs: normalizeAll (flattenSites inputs);
-
-  "invariants-pre" = inputs: runPreInvariants (normalizeAll (flattenSites inputs));
-
-  compile = inputs: compileAll (runPreInvariants (normalizeAll (flattenSites inputs)));
-
-  "invariants-post" =
-    inputs: runPostInvariants (compileAll (runPreInvariants (normalizeAll (flattenSites inputs))));
-
-  checkSites = sites: builtins.seq (checkSiteAll sites) (builtins.seq (checkAllGlobal sites) true);
-
-  p2p = inputs: lib.mapAttrs mkP2P (runPreInvariants (normalizeAll (flattenSites inputs)));
-
-  siteGraph =
-    inputs: lib.mapAttrs mkSiteGraph (runPreInvariants (normalizeAll (flattenSites inputs)));
+  run =
+    inputs:
+    let
+      sites = flattenSites inputs;
+      compiled = lib.mapAttrs compileSite sites;
+    in
+    {
+      sites = compiled;
+    };
 }

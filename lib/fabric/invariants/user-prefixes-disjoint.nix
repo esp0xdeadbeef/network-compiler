@@ -139,11 +139,11 @@ in
         ) (lib.range (i + 1) (builtins.length withRanges - 1))
       ) (lib.range 0 (builtins.length withRanges - 2));
 
-      _ = lib.all (
+      checked = lib.all (
         p:
         assert_ (!(overlaps p.a.range p.b.range))
           "invariants(user-prefixes): overlapping user prefixes '${p.a.cidr}' (${p.a.owner}) and '${p.b.cidr}' (${p.b.owner})"
       ) pairs;
     in
-    true;
+    builtins.deepSeq checked true;
 }

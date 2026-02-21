@@ -57,15 +57,13 @@ Without a site, authority cannot be determined.
 The process cell describes the allowed forwarding behavior of the entire site:
 
 * access reachability
-    
 * policy enforcement
-    
 * transit behavior
-    
 * overlays
-    
 * external reachability
     
+
+These rules define the behavior that the policy-engine must enforce.
 
 It answers:
 

@@ -29,7 +29,18 @@ let
         else if args ? nodes then
           m.check { nodes = site.nodes or { }; }
         else
-          true
+          throw ''
+            invariant loader error:
+
+            The invariant '${toString m}' defines `check` but does not accept
+            `{ site }` nor `{ nodes }`.
+
+            Valid signatures:
+              check = { site }: ...
+              check = { nodes }: ...
+
+            This invariant is currently being skipped silently.
+          ''
       else
         true
     );

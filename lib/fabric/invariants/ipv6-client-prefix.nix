@@ -23,7 +23,7 @@ in
     let
       nodes = site.nodes or { };
 
-      _ = lib.all (
+      checks = lib.all (
         name:
         let
           node = nodes.${name};
@@ -46,5 +46,5 @@ in
           true
       ) (builtins.attrNames nodes);
     in
-    true;
+    builtins.deepSeq checks true;
 }

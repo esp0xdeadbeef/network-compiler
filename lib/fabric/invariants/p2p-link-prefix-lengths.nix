@@ -52,14 +52,14 @@ in
       siteName = toString (site.siteName or "<unknown-site>");
       links = site.links or null;
 
-      _onlyCompiled =
+      checked =
         if links == null || !(builtins.isAttrs links) then
           true
         else
           let
             linkNames = builtins.attrNames links;
 
-            _ = lib.forEach linkNames (
+            results = lib.forEach linkNames (
               linkName:
               let
                 l = links.${linkName};
@@ -121,10 +121,10 @@ in
 
                   _both = lib.forEach epNames checkOne;
                 in
-                builtins.seq _members (builtins.seq _both true)
+                builtins.seq _members (builtins.deepSeq _both true)
             );
           in
-          builtins.deepSeq _ true;
+          builtins.deepSeq results true;
     in
-    true;
+    builtins.deepSeq checked true;
 }

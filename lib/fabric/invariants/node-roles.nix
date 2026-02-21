@@ -24,6 +24,7 @@ in
         "core"
         "access"
         "policy"
+        "upstream-selector"
       ];
 
       badRoles = lib.filter (
@@ -46,6 +47,18 @@ in
         builtins.length policyNodes == 1
       ) "invariants(node-roles): exactly one node with role='policy' is required";
 
+      upstreamNodes = nodeNamesByRole "upstream-selector" nodes;
+
+      _exactlyOneUpstream = assert_ (
+        builtins.length upstreamNodes == 1
+      ) "invariants(node-roles): exactly one node with role='upstream-selector' is required";
+
+      coreNodes = nodeNamesByRole "core" nodes;
+
+      _atLeastOneCore = assert_ (
+        builtins.length coreNodes >= 1
+      ) "invariants(node-roles): at least one node with role='core' is required";
+
       offenders = lib.filter (
         n:
         let
@@ -60,5 +73,13 @@ in
 
       _accessDisjoint = accessNetworksDisjoint.check { inherit nodes; };
     in
-    true;
+    builtins.seq _mustHaveNodes (
+      builtins.seq _rolesOk (
+        builtins.seq _exactlyOnePolicy (
+          builtins.seq _exactlyOneUpstream (
+            builtins.seq _atLeastOneCore (builtins.seq _accessOnlyNetworks (builtins.seq _accessDisjoint true))
+          )
+        )
+      )
+    );
 }

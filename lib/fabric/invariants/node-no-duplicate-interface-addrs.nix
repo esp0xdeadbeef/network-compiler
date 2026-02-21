@@ -1,7 +1,6 @@
 { lib }:
 
 let
-
   stripMask =
     s:
     let
@@ -57,7 +56,6 @@ let
     }:
     let
       topIfs = node.interfaces or { };
-
       conts = containersOf node;
 
       contEntries = lib.concatMap (
@@ -110,9 +108,9 @@ let
         else
           acc // { "${k}" = e.where; };
 
-      _ = builtins.foldl' step { } entries';
+      scanned = builtins.foldl' step { } entries';
     in
-    true;
+    builtins.deepSeq scanned true;
 
 in
 {
@@ -122,7 +120,7 @@ in
       siteName = toString (site.siteName or "<unknown-site>");
       nodes = site.nodes or { };
 
-      _ = lib.forEach (builtins.attrNames nodes) (
+      done = lib.forEach (builtins.attrNames nodes) (
         nodeName:
         checkNode {
           inherit siteName nodeName;
@@ -130,5 +128,5 @@ in
         }
       );
     in
-    builtins.deepSeq _ true;
+    builtins.deepSeq done true;
 }

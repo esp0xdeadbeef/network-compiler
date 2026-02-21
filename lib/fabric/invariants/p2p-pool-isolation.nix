@@ -66,7 +66,7 @@ in
         if nets == null || !(nets ? ipv4) then [ ] else [ (cidrRange4 nets.ipv4) ]
       ) (builtins.attrNames nodes);
 
-      _poolOverlap4 =
+      poolOverlap4 =
         if pool4 == null then
           true
         else
@@ -77,5 +77,5 @@ in
             rUser: assert_ (!(overlaps rPool rUser)) "invariants(p2p-pool): access prefix overlaps p2p pool"
           ) userRanges4;
     in
-    true;
+    builtins.deepSeq poolOverlap4 true;
 }

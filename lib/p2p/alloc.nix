@@ -177,6 +177,12 @@ in
           addr4A = "${intToV4 hostA}/31";
           addr4B = "${intToV4 hostB}/31";
 
+          linkIndex =
+            let
+              off = found.range.start - base4;
+            in
+            builtins.div off 2;
+
           v6pair =
             if pool6 == null then
               {
@@ -186,7 +192,7 @@ in
             else
               allocIPv6Pair {
                 pool = pool6;
-                linkIndex = acc.idx;
+                inherit linkIndex;
               };
 
           linkName = "p2p-${p.a}-${p.b}";

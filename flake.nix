@@ -1,101 +1,167 @@
 {
-  description = "Declarative network fabric compiler";
+  description = "nixos-network-compiler";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
     { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-      lib = pkgs.lib;
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
 
-      stages = import ./lib/stages.nix { inherit lib; };
+      mkPkgs = system: import nixpkgs { inherit system; };
 
-      mkStageApp = stageName: exprBody: {
-        type = "app";
-        program = toString (
-          pkgs.writeShellScript "fabric-${stageName}" ''
+      mkLib =
+        system:
+        let
+          pkgs = mkPkgs system;
+        in
+        import ./lib { lib = pkgs.lib; };
+
+      mkEvalApp =
+        system: expr:
+        let
+          pkgs = mkPkgs system;
+        in
+        pkgs.writeShellApplication {
+          name = "app";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.nix
+          ];
+          text = ''
             set -euo pipefail
-            FILE="$(realpath "$1")"
 
-            nix eval --impure --json --expr '
-              let
-                flake = builtins.getFlake (toString ./.);
-                pkgs  = import flake.inputs.nixpkgs { system = "'"${system}"'"; };
-                lib   = pkgs.lib;
+            if [ "$
+              echo "usage: $0 <input>" >&2
+              exit 2
+            fi
 
-                stages = import ./lib/stages.nix { inherit lib; };
+            input="$1"
+            inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
 
-                p = builtins.toPath "'"$FILE"'";
+            exec ${pkgs.nix}/bin/nix eval \
+              --json \
+              --impure \
+              --expr '
+                let
+                  flake = builtins.getFlake "'"${self.outPath}"'";
 
-                inputs0 =
-                  if lib.hasSuffix ".json" (toString p) then
-                    builtins.fromJSON (builtins.readFile p)
-                  else
-                    import p;
+                  inputPath = "'"$inputAbs"'";
 
-                inputs  = if builtins.isFunction inputs0 then inputs0 {} else inputs0;
-              in
-                '"${exprBody}"'
-            ' | jq
-          ''
-        );
-      };
+                  readInputs =
+                    p:
+                    if flake.inputs.nixpkgs.lib.hasSuffix ".json" p then
+                      builtins.fromJSON (builtins.readFile p)
+                    else
+                      let v = import p; in
+                      if builtins.isFunction v then v { } else v;
 
+                  inputs = readInputs inputPath;
+                in
+                  '"${expr}"'
+              '
+          '';
+        };
     in
     {
+      lib = mkLib "x86_64-linux";
 
-      lib.evalNetwork = import ./lib/from-inputs.nix { inherit lib; };
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = mkPkgs system;
+        in
+        {
+          default = pkgs.writeText "nixos-network-compiler" "nixos-network-compiler";
+        }
+      );
 
-      apps.${system} = {
+      apps = forAllSystems (
+        system:
+        let
+          flattenDrv = mkEvalApp system ''
+            flake.lib.stages.flatten inputs
+          '';
 
-        debug = {
-          type = "app";
-          program = toString (
-            pkgs.writeShellScript "fabric-debug" ''
-              set -euo pipefail
-              FILE="$(realpath "$1")"
+          normalizeDrv = mkEvalApp system ''
+            flake.lib.stages.normalize inputs
+          '';
 
-              nix eval --impure --json --expr "
-                let
-                  flake = builtins.getFlake (toString ./.);
-                  main  = import ./lib/main.nix { nix = flake.inputs.nixpkgs; };
-                in
-                  (main.fromFile \"$FILE\").sites
-              " | jq
-            ''
-          );
-        };
+          invPreDrv = mkEvalApp system ''
+            flake.lib.stages."invariants-pre" inputs
+          '';
 
-        flatten = mkStageApp "flatten" "stages.flatten inputs";
+          compileDrv = mkEvalApp system ''
+            let
+              sites = flake.lib.stages.compile inputs;
+              p2p = flake.lib.stages.p2p inputs;
+              siteGraph = flake.lib.stages.siteGraph inputs;
+            in
+            {
+              inherit sites p2p siteGraph;
+            }
+          '';
 
-        normalize = mkStageApp "normalize" "stages.normalize inputs";
+          invPostDrv = mkEvalApp system ''
+            flake.lib.stages."invariants-post" inputs
+          '';
 
-        invPre = mkStageApp "invPre" "stages.\"invariants-pre\" inputs";
+          checkDrv = mkEvalApp system ''
+            let
+              sites = flake.lib.stages.compile inputs;
+            in
+              flake.lib.stages.checkSites sites
+          '';
 
-        compile = mkStageApp "compile" "stages.compile inputs";
+          debugDrv = compileDrv;
+        in
+        {
+          flatten = {
+            type = "app";
+            program = "${flattenDrv}/bin/app";
+          };
 
-        invPost = mkStageApp "invPost" "stages.\"invariants-post\" inputs";
+          normalize = {
+            type = "app";
+            program = "${normalizeDrv}/bin/app";
+          };
 
-        check = mkStageApp "check" ''
-          let
-            sites0 = stages.normalize inputs;
-            _pre = stages.checkSites sites0;
+          invPre = {
+            type = "app";
+            program = "${invPreDrv}/bin/app";
+          };
 
-            compiled = stages.compile inputs;
+          compile = {
+            type = "app";
+            program = "${compileDrv}/bin/app";
+          };
 
-            
-            _post = stages.checkSites compiled;
-          in true
-        '';
-      };
+          invPost = {
+            type = "app";
+            program = "${invPostDrv}/bin/app";
+          };
 
-      nixosConfigurations.lab = nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [ ./vm.nix ];
-      };
+          check = {
+            type = "app";
+            program = "${checkDrv}/bin/app";
+          };
+
+          debug = {
+            type = "app";
+            program = "${debugDrv}/bin/app";
+          };
+
+          default = {
+            type = "app";
+            program = "${compileDrv}/bin/app";
+          };
+        }
+      );
     };
 }

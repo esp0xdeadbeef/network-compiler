@@ -29,11 +29,6 @@
           text = ''
             set -euo pipefail
 
-            if [ "$
-              echo "usage: $0 <input>" >&2
-              exit 2
-            fi
-
             input="$1"
             inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
 

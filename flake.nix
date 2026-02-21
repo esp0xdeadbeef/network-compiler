@@ -27,20 +27,20 @@
             pkgs.nix
           ];
           text = ''
-                      set -euo pipefail
+            set -euo pipefail
 
-                      if [ "$
-                        echo "usage: $0 <input>" >&2
-                        exit 2
-                      fi
+            if [ "$
+              echo "usage: $0 <input>" >&2
+              exit 2
+            fi
 
-                      input="$1"
-                      inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
+            input="$1"
+            inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
 
-                      tmp="$(mktemp)"
-                      trap 'rm -f "$tmp"' EXIT
+            tmp="$(mktemp)"
+            trap 'rm -f "$tmp"' EXIT
 
-                      cat > "$tmp" <<NIX
+            cat > "$tmp" <<NIX
             let
               flake = builtins.getFlake (toString ${self.outPath});
               lib = flake.inputs.nixpkgs.lib;
@@ -71,7 +71,7 @@
             ${nixExpr}
             NIX
 
-                      exec ${pkgs.nix}/bin/nix eval --json --impure -f "$tmp"
+            exec ${pkgs.nix}/bin/nix eval --json --impure -f "$tmp"
           '';
         };
     in

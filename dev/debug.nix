@@ -6,6 +6,10 @@ let
   lib = pkgs.lib;
 
   inputs = import path;
-  compile = import ../lib/from-inputs.nix { inherit lib; };
+
+  compile = import ../lib/main.nix { inherit lib; };
+
+  result = compile inputs;
+
 in
-compile inputs
+builtins.toJSON result

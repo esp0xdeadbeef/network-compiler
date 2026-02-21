@@ -1,155 +1,236 @@
 # Structural Levels
 
-The compiler follows ISA-88 responsibility layers.  
-Not every deployment must use all layers.
+The architecture follows ISA-88 responsibility layers.
 
-This implementation does not currently use the Enterprise level, but the model intentionally keeps it so larger deployments can extend without redesign.
+Each layer answers a different question about the network.  
+The repositories implement different layers.
 
-No level is “more important” than another — each level answers a different question.
+The boundary is strict:
+
+> The compiler defines communication semantics.  
+> The solver realizes those semantics into an executable fabric.
 
 * * *
 
-## Enterprise — multi-site grouping _(optional in this implementation)_
+## Enterprise — multi-site grouping
 
-The Enterprise groups multiple independent sites.
+**Responsibility: nixos-network-compiler**
+
+The Enterprise groups multiple independent Sites into a shared administrative domain.
 
 Example:
 
-```
-corp
-homelab
+Codecorp  
+homelab  
 customer-a
-```
 
 It answers:
 
-> Which sites belong to the same administrative domain?
+> Which Sites belong to the same authority domain?
 
-This layer is not required for single-operator setups and is for now just set as esp0xdeadbeef in this project, but the architecture supports it so multiple organizations or large infrastructures can share the same compiler model without redesign.
+This layer exists to allow large or multi-organization deployments to share the same model without redesign.  
+Single-site setups may use a single implicit Enterprise.
 
 * * *
 
 ## Site — authority boundary
 
-A site defines ownership and trust scope.
+**Responsibility: nixos-network-compiler**
+
+A Site defines ownership and trust scope.
 
 Examples:
 
-```
-site-a
-site-b
-lab
+Codesite-a  
+site-b  
+lab  
 laptop
-```
 
 It answers:
 
-> Which routing domain owns these addresses?
+> Which address space is governed by the same authority?
 
-Comparable to an autonomous routing domain.
+Comparable to a routing domain or administrative domain.
 
-Without a site, authority cannot be determined.
+The Site defines where communication rules apply.  
+It does not define how traffic flows between devices.
 
 * * *
 
-## Process Cell — routing behavior
+## Process Cell — communication behavior
 
-The process cell describes the allowed forwarding behavior of the entire site:
+**Responsibility: nixos-network-compiler**
 
-* access reachability
-* policy enforcement
-* transit behavior
-* overlays
-* external reachability
+The Process Cell defines allowed communication inside a Site.
+
+It describes:
+
+* reachable domains
     
-
-These rules define the behavior that the policy-engine must enforce.
+* enforcement requirements
+    
+* external reachability requirements
+    
+* authority roles
+    
+* communication permissions
+    
 
 It answers:
 
-> What traffic is allowed to move where?
+> What communication is valid?
 
-No devices exist yet.  
-No interfaces exist yet.  
-Only allowed behavior exists.
+No topology exists at this layer.  
+No adjacency exists at this layer.  
+No addressing for links exists at this layer.
 
-Without this layer, the network has hardware but no rules.
+The Process Cell is a behavioral contract.
+
+Without this layer, the network contains configuration but no defined meaning.
 
 * * *
 
 ## Unit — execution context
 
-A unit is an instance that executes part of the site behavior.
+**Responsibility: shared**
+
+_Declared by:_ nixos-network-compiler  
+_Used by:_ nixos-fabric-solver
+
+A Unit is a runtime execution context capable of hosting responsibilities.
 
 Examples:
 
-```
-core router instance
-policy router instance
-access router instance
-```
+Codepolicy instance  
+access instance  
+transit instance
 
 It answers:
 
-> Where is this behavior executed?
+> Where may responsibilities execute?
 
-It is not necessarily a physical host — it is a runtime instance.
+The compiler declares available Units.  
+The solver decides how responsibilities are distributed across them.
 
-Without units, behavior has nowhere to run.
-
-* * *
-
-## Equipment Modules — capabilities
-
-Modules describe **what a unit can do**, not what it is.
-
-| Module | Meaning |
-| --- | --- |
-| access-gateway | provides subnet |
-| policy-engine | enforces communication rules |
-| transit-forwarder | forwards only |
-| upstream-provider | exports default route |
-| overlay-peer | connects sites |
-
-They answer:
-
-> What responsibility does this unit perform?
-
-Without modules, units exist but have no semantics.
+A Unit is not a topology node and does not imply connectivity.
 
 * * *
 
-## Control Modules — implementation mechanisms
+## Equipment Modules — responsibilities
 
-These are generated operating system artifacts that realize compiled behavior.
+**Derived by: nixos-fabric-solver**
 
-They do not define behavior — they enforce it.
+Equipment Modules represent operational responsibilities required by the Process Cell.
 
 Examples:
 
-* interfaces
-    
-* routes
-    
-* nftables rules
-    
-* sysctls
+| Module | Meaning |
+| --- | --- |
+| access-gateway | terminates owned address domains |
+| policy-engine | enforces communication permissions |
+| transit-forwarder | carries traffic between responsibilities |
+| upstream-selector | provides external reachability |
+| authority-rib | owns routing decisions |
 
-* DNS (e.g. unbound, bind)
+They answer:
+
+> Which responsibilities must exist for the Site to function?
+
+The compiler does not assign these.  
+The solver derives them from the Process Cell and assigns them to Units.
+
+* * *
+
+## Unit Connectivity — operational relationships
+
+**Responsibility: nixos-fabric-solver**
+
+The solver determines how Units must relate so responsibilities can interact.
+
+This includes:
+
+* adjacency relationships
     
-* DHCP servers (e.g. Kea)
+* forwarding relationships
     
-* Router advertisements (e.g. radvd)
+* responsibility ordering
     
-* uplink mechanisms (e.g. PPP, DHCP client)
+
+It answers:
+
+> How must responsibilities interact so behavior is realizable?
+
+This is the first layer where traffic traversal exists.
+
+* * *
+
+## Control Modules — execution mechanisms
+
+**Prepared by: nixos-fabric-solver  
+Implemented by: platform renderers**
+
+Control Modules are executable configuration primitives.
+
+Examples:
+
+* interface addressing
+    
+* forwarding state
+    
+* route entries
+    
+* enforcement attachment points
     
 
 They answer:
 
-> How is the behavior implemented?
+> What configuration must exist for a Unit to execute its responsibilities?
 
-Multiple mechanisms may implement the same behavior.  
-Changing the mechanism must not change the routing model.
+Control Modules remain platform-neutral until rendered.
 
-Without this layer, the system has defined behavior but cannot execute it.
+* * *
+
+## Platform Implementation
+
+**Responsibility: renderer (e.g. NixOS module)**
+
+Platform renderers translate Control Modules into device configuration.
+
+Examples:
+
+* systemd-networkd configuration
+    
+* nftables hooks
+    
+* routing configuration
+    
+
+They answer:
+
+> How does a specific system express the Control Modules?
+
+Different platforms implement the same Control Modules differently while preserving behavior.
+
+* * *
+
+# Responsibility Summary
+
+| Layer | Implemented by |
+| --- | --- |
+| Enterprise | nixos-network-compiler |
+| Site | nixos-network-compiler |
+| Process Cell | nixos-network-compiler |
+| Unit declaration | nixos-network-compiler |
+| Equipment Modules | nixos-fabric-solver |
+| Unit Connectivity | nixos-fabric-solver |
+| Control Modules | nixos-fabric-solver |
+| Platform configuration | renderer (e.g. NixOS) |
+
+* * *
+
+# Conceptual Flow
+
+Codecompiler → semantics  
+solver   → realization  
+renderer → execution
 

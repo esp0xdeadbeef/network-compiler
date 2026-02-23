@@ -1,4 +1,4 @@
-{ lib }:
+{ lib, self }:
 
 inputs:
 
@@ -7,17 +7,9 @@ let
 
   result = stages.run inputs;
 
-  flake = builtins.getFlake (toString ../.);
+  gitRev = if self ? rev then self.rev else "dirty";
 
-  gitRev =
-    if flake ? rev then
-      flake.rev
-    else if flake ? shortRev then
-      flake.shortRev
-    else
-      "unknown";
-
-  gitDirty = if flake ? dirtyRev then true else false;
+  gitDirty = if self ? dirtyRev then true else false;
 
   meta = {
     compiler = {

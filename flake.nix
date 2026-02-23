@@ -10,6 +10,7 @@
         "x86_64-linux"
         "aarch64-linux"
       ];
+
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       mkPkgs = system: import nixpkgs { inherit system; };
 
@@ -48,16 +49,6 @@
 
               inputs = readInputs "$inputAbs";
 
-              flatten = import (flake.outPath + "/lib/flatten-sites.nix") { inherit lib; };
-              normalize = import (flake.outPath + "/lib/normalize/from-user-input.nix") { inherit lib; };
-
-              declared = flatten inputs;
-
-              semantic =
-                lib.mapAttrs
-                  (_: normalize)
-                  declared;
-
               compiled = flake.lib.compile inputs;
 
             in
@@ -72,6 +63,7 @@
       lib = {
         compile = import ./lib/main.nix {
           lib = nixpkgs.lib;
+          inherit self;
         };
       };
 
@@ -85,8 +77,6 @@
           debugDrv = mkEvalApp system ''
             {
               raw = inputs;
-              declared = declared;
-              semantic = semantic;
               compiled = compiled;
             }
           '';
@@ -96,10 +86,12 @@
             type = "app";
             program = "${compileDrv}/bin/app";
           };
+
           debug = {
             type = "app";
             program = "${debugDrv}/bin/app";
           };
+
           default = {
             type = "app";
             program = "${compileDrv}/bin/app";

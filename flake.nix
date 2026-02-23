@@ -24,6 +24,8 @@
           runtimeInputs = [
             pkgs.coreutils
             pkgs.nix
+            pkgs.git
+            pkgs.jq
           ];
           text = ''
             set -euo pipefail
@@ -55,7 +57,19 @@
             ${nixExpr}
             NIX
 
-            exec ${pkgs.nix}/bin/nix eval --json --impure -f "$tmp"
+            json="$(${pkgs.nix}/bin/nix eval --json --impure -f "$tmp")"
+
+            gitRev="$(${pkgs.git}/bin/git rev-parse HEAD)"
+            if ${pkgs.git}/bin/git diff --quiet && ${pkgs.git}/bin/git diff --cached --quiet; then
+              gitDirty=false
+            else
+              gitDirty=true
+            fi
+
+            echo "$json" | ${pkgs.jq}/bin/jq -c \
+              --arg rev "$gitRev" \
+              --argjson dirty "$gitDirty" \
+              '. + { meta: { compiler: { gitRev: $rev, gitDirty: $dirty } } }' | tee ./output-signed.json | jq
           '';
         };
     in
@@ -63,7 +77,6 @@
       lib = {
         compile = import ./lib/main.nix {
           lib = nixpkgs.lib;
-          inherit self;
         };
       };
 

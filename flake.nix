@@ -1,10 +1,18 @@
 {
   description = "nixos-network-compiler";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
+  };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      nixpkgs-network,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -12,7 +20,26 @@
       ];
 
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
-      mkPkgs = system: import nixpkgs { inherit system; };
+
+      mkPkgs =
+        system:
+        let
+          patchedPkgs = import nixpkgs-network {
+            inherit system;
+          };
+
+          patchedNetwork = patchedPkgs.lib.network;
+        in
+        import nixpkgs {
+          inherit system;
+          overlays = [
+            (final: prev: {
+              lib = prev.lib // {
+                network = patchedNetwork;
+              };
+            })
+          ];
+        };
 
       mkEvalApp =
         system: nixExpr:
@@ -69,14 +96,16 @@
             echo "$json" | ${pkgs.jq}/bin/jq -c \
               --arg rev "$gitRev" \
               --argjson dirty "$gitDirty" \
-              '. + { meta: { compiler: { gitRev: $rev, gitDirty: $dirty } } }' | tee ./output-signed.json | jq
+              '. + { meta: { compiler: { gitRev: $rev, gitDirty: $dirty } } }' \
+              | tee ./output-signed.json \
+              | ${pkgs.jq}/bin/jq
           '';
         };
     in
     {
       lib = {
         compile = import ./lib/main.nix {
-          lib = nixpkgs.lib;
+          lib = (mkPkgs builtins.currentSystem).lib;
         };
       };
 

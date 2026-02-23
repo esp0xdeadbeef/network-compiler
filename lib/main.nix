@@ -9,11 +9,19 @@ let
 
   flake = builtins.getFlake (toString ../.);
 
+  gitRev =
+    if flake ? rev then
+      flake.rev
+    else if flake ? shortRev then
+      flake.shortRev
+    else
+      "unknown";
+
+  gitDirty = if flake ? dirtyRev then true else false;
+
   meta = {
     compiler = {
-      gitRev = if flake ? rev then flake.rev else "dirty";
-
-      gitDirty = if flake ? dirtyRev then true else false;
+      inherit gitRev gitDirty;
     };
   };
 

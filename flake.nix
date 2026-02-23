@@ -1,9 +1,7 @@
 {
   description = "nixos-network-compiler";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
 
   outputs =
     { self, nixpkgs }:

@@ -5,7 +5,13 @@ inputs:
 let
   assert_ = cond: msg: if cond then true else throw msg;
 
-  isSite = v: builtins.isAttrs v && (v ? processCell || v ? p2p-pool || v ? nodes || v ? links);
+  isSite =
+    v:
+    builtins.isAttrs v
+    && v ? topology
+    && builtins.isAttrs v.topology
+    && (v.topology ? nodes)
+    && builtins.isAttrs v.topology.nodes;
 
   splitSiteKey =
     key:
@@ -67,6 +73,7 @@ let
               else
                 throw ''
                   flatten-sites: enterprise '${name}' contains non-site attribute '${sname}'
+                  (sites must be new-style: { topology = { nodes = ...; links = ...; }; ... })
                 '';
           in
           builtins.foldl' addSite acc siteNames

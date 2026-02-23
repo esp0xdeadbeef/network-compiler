@@ -36,112 +36,14 @@
       ];
     };
 
-    subjects = [
-      {
-        kind = "tenant";
-        name = "mgmt";
-      }
-      {
-        kind = "tenant";
-        name = "admin";
-      }
-      {
-        kind = "tenant";
-        name = "clients";
-      }
-    ];
-
     policy = {
-
-      externalCatalog = {
-        default = {
-          semantics = "internet";
-          families = [
-            "ipv4"
-            "ipv6"
-          ];
-        };
-      };
-
-      model = {
-        subjectBinding = {
-          mode = "ownedPrefixes";
-          includeGatewayIps = true;
-        };
-
-        statefulness = {
-          allowIsStateful = true;
-          denyAffects = "new";
-        };
-
-        precedence = {
-          mode = "priority";
-          defaultPriority = 1000;
-        };
-
-        matchDefaults = {
-          families = [
-            "ipv4"
-            "ipv6"
-          ];
-          l4 = "any";
-          dports = [ ];
-          sports = [ ];
-        };
-
-        capabilitySemantics = "endpointSet";
-      };
-
-      enforcement = {
-        defaultEnforcerRole = "policy";
-        ingressEnforcerRole = "core";
-        egressEnforcerRole = "policy";
-
-        nat = {
-          allowedRoles = [ "core" ];
-          requiredRole = "core";
-        };
-      };
 
       external = {
         wantDefault = true;
         wantFullTables = false;
       };
 
-      authority = {
-        internalRib = "s-router-policy";
-        externalRib = "s-router-upstream-selector";
-      };
-
-      transit = {
-        sink = "s-router-upstream-selector";
-        mustRejectOwnedPrefixes = true;
-      };
-
       catalog = {
-
-        capabilities = {
-          resolver = {
-            match = [
-              {
-                l4 = "udp";
-                dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
-              }
-              {
-                l4 = "tcp";
-                dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
-              }
-            ];
-          };
-        };
 
         services = [
           {
@@ -170,6 +72,7 @@
               kind = "tenant";
               name = "mgmt";
             };
+            provides = [ "resolver" ];
           }
 
           {
@@ -197,92 +100,17 @@
         ];
       };
 
-      capabilityBindings = [
-        {
-          capability = "resolver";
-          scope = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          toService = {
-            kind = "service";
-            name = "dns-site";
-          };
-        }
-      ];
-
-      egressProfiles = {
-        any = {
-          match = [
-            {
-              l4 = "any";
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            }
-          ];
-        };
-      };
-
       nat = {
-        egress = [
-          {
-            subject = {
-              kind = "tenant";
-              name = "clients";
-            };
-            toExternal = "default";
-            egressProfile = "any";
-
-            ipv4 = {
-              kind = "snat";
-            };
-            ipv6 = {
-              kind = "none";
-            };
-
-            realizeAtRole = "core";
-          }
-        ];
-
         ingress = [
           {
             fromExternal = "default";
-            match = {
-              l4 = "tcp";
-              dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            };
             toService = {
               kind = "service";
               name = "external-jump-host";
             };
-
-            realizeAtRole = "core";
           }
         ];
       };
-
-      invariants = [
-        {
-          kind = "mustTraverse";
-          fromKinds = [ "tenant" ];
-          toKinds = [ "tenant" ];
-          viaRole = "policy";
-        }
-        {
-          kind = "mustRejectOwnedFromExternal";
-          sink = "s-router-upstream-selector";
-        }
-        {
-          kind = "natRealizationRestricted";
-          allowedRoles = [ "core" ];
-        }
-      ];
 
       rules = [
         {
@@ -325,7 +153,7 @@
           to = {
             external = "default";
           };
-          egressProfile = "any";
+          proto = [ "any" ];
           action = "allow";
         }
 

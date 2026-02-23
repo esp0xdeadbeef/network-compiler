@@ -1,40 +1,106 @@
 {
   esp0xdeadbeef.site-a = {
 
-    p2p-pool = {
-      ipv4 = "10.10.0.0/24";
-      ipv6 = "fd42:dead:beef:1000::/118";
+    pools = {
+      p2p = {
+        ipv4 = "10.10.0.0/24";
+        ipv6 = "fd42:dead:beef:1000::/118";
+      };
+
+      loopback = {
+        ipv4 = "10.19.0.0/24";
+        ipv6 = "fd42:dead:beef:1900::/118";
+      };
     };
 
-    processCell = {
+    ownership = {
+      prefixes = [
+        {
+          kind = "tenant";
+          name = "mgmt";
+          ipv4 = "10.20.10.0/24";
+          ipv6 = "fd42:dead:beef:10::/64";
+        }
+        {
+          kind = "tenant";
+          name = "admin";
+          ipv4 = "10.20.15.0/24";
+          ipv6 = "fd42:dead:beef:15::/64";
+        }
+        {
+          kind = "tenant";
+          name = "clients";
+          ipv4 = "10.20.20.0/24";
+          ipv6 = "fd42:dead:beef:20::/64";
+        }
+      ];
+    };
 
-      owned = {
+    subjects = [
+      {
+        kind = "tenant";
+        name = "mgmt";
+      }
+      {
+        kind = "tenant";
+        name = "admin";
+      }
+      {
+        kind = "tenant";
+        name = "clients";
+      }
+    ];
 
-        tenants = [
+    policy = {
 
-          {
-            name = "mgmt";
-            ipv4 = "10.20.10.0/24";
-            ipv6 = "fd42:dead:beef:10::/64";
+      externalCatalog = {
+        default = {
+          semantics = "internet";
+          families = [
+            "ipv4"
+            "ipv6"
+          ];
+        };
+      };
 
-            exports = {
-              resolver = { };
-              ntp = { };
-            };
-          }
+      model = {
+        subjectBinding = {
+          mode = "ownedPrefixes";
+          includeGatewayIps = true;
+        };
 
-          {
-            name = "admin";
-            ipv4 = "10.20.15.0/24";
-            ipv6 = "fd42:dead:beef:15::/64";
-          }
+        statefulness = {
+          allowIsStateful = true;
+          denyAffects = "new";
+        };
 
-          {
-            name = "clients";
-            ipv4 = "10.20.20.0/24";
-            ipv6 = "fd42:dead:beef:20::/64";
-          }
-        ];
+        precedence = {
+          mode = "priority";
+          defaultPriority = 1000;
+        };
+
+        matchDefaults = {
+          families = [
+            "ipv4"
+            "ipv6"
+          ];
+          l4 = "any";
+          dports = [ ];
+          sports = [ ];
+        };
+
+        capabilitySemantics = "endpointSet";
+      };
+
+      enforcement = {
+        defaultEnforcerRole = "policy";
+        ingressEnforcerRole = "core";
+        egressEnforcerRole = "policy";
+
+        nat = {
+          allowedRoles = [ "core" ];
+          requiredRole = "core";
+        };
       };
 
       external = {
@@ -47,127 +113,283 @@
         externalRib = "s-router-upstream-selector";
       };
 
-      transitForwarder = {
+      transit = {
         sink = "s-router-upstream-selector";
         mustRejectOwnedPrefixes = true;
       };
 
-      policyIntent = [
+      catalog = {
 
+        capabilities = {
+          resolver = {
+            match = [
+              {
+                l4 = "udp";
+                dports = [ 53 ];
+                families = [
+                  "ipv4"
+                  "ipv6"
+                ];
+              }
+              {
+                l4 = "tcp";
+                dports = [ 53 ];
+                families = [
+                  "ipv4"
+                  "ipv6"
+                ];
+              }
+            ];
+          };
+        };
+
+        services = [
+          {
+            kind = "service";
+            name = "dns-site";
+            match = [
+              {
+                l4 = "udp";
+                dports = [ 53 ];
+                families = [
+                  "ipv4"
+                  "ipv6"
+                ];
+              }
+              {
+                l4 = "tcp";
+                dports = [ 53 ];
+                families = [
+                  "ipv4"
+                  "ipv6"
+                ];
+              }
+            ];
+            scope = "site";
+            zoneHint = {
+              kind = "tenant";
+              name = "mgmt";
+            };
+          }
+
+          {
+            kind = "service";
+            name = "external-jump-host";
+            match = [
+              {
+                l4 = "tcp";
+                dports = [ 22 ];
+                families = [
+                  "ipv4"
+                  "ipv6"
+                ];
+              }
+            ];
+            scope = "site";
+            exposure = {
+              external = true;
+            };
+            zoneHint = {
+              kind = "tenant";
+              name = "mgmt";
+            };
+          }
+        ];
+      };
+
+      capabilityBindings = [
         {
+          capability = "resolver";
+          scope = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          toService = {
+            kind = "service";
+            name = "dns-site";
+          };
+        }
+      ];
+
+      egressProfiles = {
+        any = {
+          match = [
+            {
+              l4 = "any";
+              families = [
+                "ipv4"
+                "ipv6"
+              ];
+            }
+          ];
+        };
+      };
+
+      nat = {
+        egress = [
+          {
+            subject = {
+              kind = "tenant";
+              name = "clients";
+            };
+            toExternal = "default";
+            egressProfile = "any";
+
+            ipv4 = {
+              kind = "snat";
+            };
+            ipv6 = {
+              kind = "none";
+            };
+
+            realizeAtRole = "core";
+          }
+        ];
+
+        ingress = [
+          {
+            fromExternal = "default";
+            match = {
+              l4 = "tcp";
+              dports = [ 22 ];
+              families = [
+                "ipv4"
+                "ipv6"
+              ];
+            };
+            toService = {
+              kind = "service";
+              name = "external-jump-host";
+            };
+
+            realizeAtRole = "core";
+          }
+        ];
+      };
+
+      invariants = [
+        {
+          kind = "mustTraverse";
+          fromKinds = [ "tenant" ];
+          toKinds = [ "tenant" ];
+          viaRole = "policy";
+        }
+        {
+          kind = "mustRejectOwnedFromExternal";
+          sink = "s-router-upstream-selector";
+        }
+        {
+          kind = "natRealizationRestricted";
+          allowedRoles = [ "core" ];
+        }
+      ];
+
+      rules = [
+        {
+          id = "allow-admin-to-mgmt-dns";
+          priority = 100;
           from = {
-            tenant = "admin";
+            kind = "tenant";
+            name = "admin";
           };
           to = {
-            tenant = "mgmt";
+            kind = "tenant";
+            name = "mgmt";
             capability = "resolver";
           };
-          proto = [
-            "udp/53"
-            "tcp/53"
-          ];
           action = "allow";
         }
 
         {
+          id = "deny-clients-to-mgmt-dns";
+          priority = 90;
           from = {
-            tenant = "clients";
+            kind = "tenant";
+            name = "clients";
           };
           to = {
-            tenant = "mgmt";
+            kind = "tenant";
+            name = "mgmt";
             capability = "resolver";
           };
           action = "deny";
         }
 
         {
+          id = "allow-clients-to-external-any";
+          priority = 200;
           from = {
-            tenant = "clients";
+            kind = "tenant";
+            name = "clients";
           };
           to = {
             external = "default";
           };
-          proto = [ "any" ];
+          egressProfile = "any";
           action = "allow";
         }
 
         {
+          id = "deny-clients-to-mgmt";
+          priority = 150;
           from = {
-            tenant = "clients";
+            kind = "tenant";
+            name = "clients";
           };
           to = {
-            tenant = "mgmt";
+            kind = "tenant";
+            name = "mgmt";
           };
           action = "deny";
         }
       ];
     };
 
-    nodes = {
+    topology = {
+      nodes = {
+        s-router-core = {
+          role = "core";
+        };
+        s-router-upstream-selector = {
+          role = "upstream-selector";
+        };
+        s-router-policy = {
+          role = "policy";
+        };
 
-      s-router-core = {
-        role = "core";
-
-        isp = {
-          snat = true;
-          nat = true;
-          forwardPorts = [
+        s-router-access = {
+          role = "access";
+          attachments = [
             {
-              port = 22;
-              target = "s-infra-external-jump-host";
-              ipv4 = true;
-              ipv6 = true;
+              kind = "tenant";
+              name = "mgmt";
+            }
+            {
+              kind = "tenant";
+              name = "admin";
+            }
+            {
+              kind = "tenant";
+              name = "clients";
             }
           ];
         };
-
-        vpn = { };
       };
 
-      s-router-upstream-selector = {
-        role = "upstream-selector";
-      };
-
-      s-router-policy = {
-        role = "policy";
-      };
-
-      s-router-access = {
-        role = "access";
-
-        mgmt = {
-          kind = "client";
-          ipv4 = "10.20.10.0/24";
-          ipv6 = "fd42:dead:beef:10::/64";
-        };
-
-        admin = {
-          kind = "client";
-          ipv4 = "10.20.15.0/24";
-          ipv6 = "fd42:dead:beef:15::/64";
-        };
-
-        clients = {
-          kind = "client";
-          ipv4 = "10.20.20.0/24";
-          ipv6 = "fd42:dead:beef:20::/64";
-        };
-      };
+      links = [
+        [
+          "s-router-core"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-upstream-selector"
+          "s-router-policy"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access"
+        ]
+      ];
     };
-
-    links = [
-      [
-        "s-router-core"
-        "s-router-upstream-selector"
-      ]
-      [
-        "s-router-upstream-selector"
-        "s-router-policy"
-      ]
-      [
-        "s-router-policy"
-        "s-router-access"
-      ]
-    ];
   };
 }

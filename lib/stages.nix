@@ -258,6 +258,9 @@ let
       );
 
       model = {
+
+        inputs = declared;
+
         id = canonicalSiteId;
         enterprise = semantic.enterprise or "default";
 

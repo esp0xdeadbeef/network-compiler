@@ -258,9 +258,6 @@ let
       );
 
       model = {
-
-        inputs = declared;
-
         id = canonicalSiteId;
         enterprise = semantic.enterprise or "default";
 
@@ -320,6 +317,9 @@ in
         sites = compiledGrouped;
         meta = {
           schemaVersion = 2;
+          provenance = {
+            originalInputs = inputs;
+          };
         };
       };
     in

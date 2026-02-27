@@ -178,7 +178,7 @@
         s-router-core = {
           role = "core";
           nat = {
-            mode = "none";
+            mode = "custom";
           };
         };
         s-router-upstream-selector = {

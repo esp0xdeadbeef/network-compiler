@@ -1,6 +1,8 @@
 { lib }:
 
 let
+  err = import ../error.nix { inherit lib; };
+
   invariantsMod = import ../fabric/invariants { inherit lib; };
 
   runInvariants =
@@ -27,7 +29,13 @@ let
         if builtins.isAttrs site then
           site // { inherit siteName; }
         else
-          throw "compileContract: site '${siteName}' is not an attribute set";
+          err.throwError {
+            code = "E_CONTRACT_SITE_NOT_ATTRSET";
+            site = siteName;
+            path = [ siteName ];
+            message = "site must be an attribute set";
+            hints = [ "Ensure each site evaluates to an attribute set." ];
+          };
 
       _ = runInvariants site';
     in
@@ -42,7 +50,16 @@ let
     if builtins.isAttrs v then
       v
     else
-      throw "compileContract: '${toString input}' must evaluate to an attribute set of sites";
+      err.throwError {
+        code = "E_CONTRACT_INPUT_NOT_ATTRSET";
+        site = null;
+        path = [ ];
+        message = "'${toString input}' must evaluate to an attribute set of sites";
+        hints = [
+          "If using Nix, return an attrset: { site-a = { ... }; }"
+          "If using JSON, the top-level must be an object mapping site keys to site configs."
+        ];
+      };
 in
 { input }:
 let

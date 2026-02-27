@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "sites": {
+    "esp0xdeadbeef": {
+      "site-a": {
+        "addressPools": {
+          "local": {
+            "ipv4": "10.19.0.0/24",
+            "ipv6": "fd42:dead:beef:1900::/118"
+          },
+          "p2p": {
+            "ipv4": "10.10.0.0/24",
+            "ipv6": "fd42:dead:beef:1000::/118"
+          }
+        },
+        "attachment": [
+          {
+            "segment": "tenants:mgmt",
+            "unit": "s-router-access"
+          }
+        ],
+        "communicationContract": {
+          "allowedRelations": [],
+          "nat": {
+            "ingress": []
+          }
+        },
+        "domains": {
+          "tenants": [
+            {
+              "ipv4": "10.20.10.0/24",
+              "ipv6": "fd42:dead:beef:10::/64",
+              "name": "mgmt"
+            }
+          ]
+        },
+        "enterprise": "esp0xdeadbeef",
+        "id": "esp0xdeadbeef.site-a",
+        "routerLoopbacks": {
+          "s-router-access": {
+            "ipv4": "10.19.0.1",
+            "ipv6": "fd42:dead:beef:1900:0:0:0:1"
+          },
+          "s-router-core": {
+            "ipv4": "10.19.0.2",
+            "ipv6": "fd42:dead:beef:1900:0:0:0:2"
+          },
+          "s-router-policy": {
+            "ipv4": "10.19.0.3",
+            "ipv6": "fd42:dead:beef:1900:0:0:0:3"
+          }
+        },
+        "transit": {
+          "ordering": [
+            [
+              "s-router-core",
+              "s-router-policy"
+            ],
+            [
+              "s-router-policy",
+              "s-router-access"
+            ]
+          ]
+        }
+      },
+      "site-b": {
+        "addressPools": {
+          "local": {
+            "ipv4": "10.29.0.0/24",
+            "ipv6": "fd42:dead:beef:2900::/118"
+          },
+          "p2p": {
+            "ipv4": "10.11.0.0/24",
+            "ipv6": "fd42:dead:beef:1100::/118"
+          }
+        },
+        "attachment": [
+          {
+            "segment": "tenants:mgmt",
+            "unit": "s-router-access"
+          }
+        ],
+        "communicationContract": {
+          "allowedRelations": [],
+          "nat": {
+            "ingress": []
+          }
+        },
+        "domains": {
+          "tenants": [
+            {
+              "ipv4": "10.30.10.0/24",
+              "ipv6": "fd42:dead:beef:11::/64",
+              "name": "mgmt"
+            }
+          ]
+        },
+        "enterprise": "esp0xdeadbeef",
+        "id": "esp0xdeadbeef.site-b",
+        "routerLoopbacks": {
+          "s-router-access": {
+            "ipv4": "10.29.0.1",
+            "ipv6": "fd42:dead:beef:2900:0:0:0:1"
+          },
+          "s-router-core": {
+            "ipv4": "10.29.0.2",
+            "ipv6": "fd42:dead:beef:2900:0:0:0:2"
+          },
+          "s-router-policy": {
+            "ipv4": "10.29.0.3",
+            "ipv6": "fd42:dead:beef:2900:0:0:0:3"
+          }
+        },
+        "transit": {
+          "ordering": [
+            [
+              "s-router-core",
+              "s-router-policy"
+            ],
+            [
+              "s-router-policy",
+              "s-router-access"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

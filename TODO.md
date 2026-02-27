@@ -1,33 +1,18 @@
-# inputs should define the nat mode for cores, or crash:
+<!-- ./TODO.md -->
+# Required for Production Readiness
 
-Minimal and explicit:
+This TODO reflects **current implementation status** in `lib/` as of the latest verified test run.
 
-```nix
-nat = {  
-  mode = "none";     # no nat
-};
-```
+---
 
-or
+## 5. Structural Integrity (Mandatory)
 
-```nix
-nat = {  
-  mode = "custom";  
-  
-  egress = {  
-    strategy = "masquerade";  
-    source = "interface";  
-  };  
-  
-  ingress = {  
-    allowPortForward = true;  
-    hairpin = false;  
-  };  
-};
-```
+- [ ] Structured error model (no raw `throw "string"`), e.g. `{ code, site, path, message, hints }`
 
-Only two semantic states exist.
+---
 
-So:
-(node.role == "core") AND (nat undefined)
-    → compiler error
+## 6. Developer Ergonomics (Strongly Recommended)
+
+- [ ] Add `nix run .#check` to CI
+- [ ] Add `nix run .#compile-all-examples` (or keep `./compile-all-examples.sh`) and run it in CI
+- [ ] Add “How to debug a failing invariant” section to README (point to `dev/debug.sh`, `dev/ctx-debug.sh`)

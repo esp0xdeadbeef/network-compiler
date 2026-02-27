@@ -3,7 +3,8 @@
 inputs:
 
 let
-  assert_ = cond: msg: if cond then true else throw msg;
+  util = import ./correctness/util.nix { inherit lib; };
+  inherit (util) ensure throwError;
 
   isSite =
     v:
@@ -29,10 +30,12 @@ let
         siteName = builtins.elemAt m 1;
       };
 
+  sortedAttrNames = a: lib.sort builtins.lessThan (builtins.attrNames a);
+
   flattenSites =
     top:
     let
-      topNames = builtins.attrNames top;
+      topNames = sortedAttrNames top;
 
       addOne =
         acc: name:
@@ -51,11 +54,15 @@ let
           }
         else if builtins.isAttrs v then
           let
-            siteNames = builtins.attrNames v;
+            siteNames = sortedAttrNames v;
 
-            _nonEmpty = assert_ (siteNames != [ ]) ''
-              flatten-sites: enterprise '${name}' must contain at least one site
-            '';
+            _nonEmpty = ensure (siteNames != [ ]) {
+              code = "E_INPUT_EMPTY_ENTERPRISE";
+              site = null;
+              path = [ name ];
+              message = "enterprise '${name}' must contain at least one site";
+              hints = [ "Add at least one site attribute under '${name}'." ];
+            };
 
             addSite =
               acc2: sname:
@@ -71,16 +78,29 @@ let
                   };
                 }
               else
-                throw ''
-                  flatten-sites: enterprise '${name}' contains non-site attribute '${sname}'
-                  (sites must be new-style: { topology = { nodes = ...; links = ...; }; ... })
-                '';
+                throwError {
+                  code = "E_INPUT_NON_SITE";
+                  site = null;
+                  path = [
+                    name
+                    sname
+                  ];
+                  message = "enterprise '${name}' contains non-site attribute '${sname}'";
+                  hints = [
+                    "Sites must be new-style: { topology = { nodes = ...; links = ...; }; ... }"
+                    "Move non-site data elsewhere or nest sites one level deeper."
+                  ];
+                };
           in
           builtins.foldl' addSite acc siteNames
         else
-          throw ''
-            flatten-sites: top-level attribute '${name}' must be a site or an enterprise attrset
-          '';
+          throwError {
+            code = "E_INPUT_TOPLEVEL_SHAPE";
+            site = null;
+            path = [ name ];
+            message = "top-level attribute '${name}' must be a site or an enterprise attrset";
+            hints = [ "Provide a site definition or an attribute set of sites." ];
+          };
     in
     builtins.foldl' addOne { } topNames;
 

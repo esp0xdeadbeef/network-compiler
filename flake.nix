@@ -93,12 +93,12 @@
               gitDirty=true
             fi
 
-            echo "$json" | ${pkgs.jq}/bin/jq -c \
+            echo "$json" | ${pkgs.jq}/bin/jq -S -c \
               --arg rev "$gitRev" \
               --argjson dirty "$gitDirty" \
               '. + { meta: { compiler: { gitRev: $rev, gitDirty: $dirty } } }' \
               | tee ./output-signed.json \
-              | ${pkgs.jq}/bin/jq
+              | ${pkgs.jq}/bin/jq -S
           '';
         };
     in
@@ -112,6 +112,8 @@
       apps = forAllSystems (
         system:
         let
+          pkgs = mkPkgs system;
+
           compileDrv = mkEvalApp system ''
             compiled
           '';
@@ -122,6 +124,35 @@
               compiled = compiled;
             }
           '';
+
+          checkDrv = pkgs.writeShellApplication {
+            name = "check";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.nix
+              pkgs.jq
+              pkgs.gnugrep
+            ];
+            text = builtins.readFile ./tests/check.sh;
+          };
+
+          compileAllDrv = pkgs.writeShellApplication {
+            name = "compile-all-examples";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.nix
+              pkgs.jq
+              pkgs.findutils
+            ];
+            text = ''
+              set -euo pipefail
+              find examples -type f -name 'inputs.nix' -print0 | while IFS= read -r -d ''\0 f; do
+                echo ""
+                echo "=== $f ==="
+                nix run path:.
+              done
+            '';
+          };
         in
         {
           compile = {
@@ -132,6 +163,16 @@
           debug = {
             type = "app";
             program = "${debugDrv}/bin/app";
+          };
+
+          check = {
+            type = "app";
+            program = "${checkDrv}/bin/check";
+          };
+
+          compile-all-examples = {
+            type = "app";
+            program = "${compileAllDrv}/bin/compile-all-examples";
           };
 
           default = {

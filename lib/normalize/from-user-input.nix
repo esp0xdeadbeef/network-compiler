@@ -3,19 +3,35 @@
 site:
 
 let
-  assert_ = cond: msg: if cond then true else throw msg;
+  util = import ../correctness/util.nix { inherit lib; };
+  inherit (util) ensure;
 
   topo =
     if site ? topology && builtins.isAttrs site.topology then
       site.topology
     else
-      throw "normalize/from-user-input: site.topology is required (legacy inputs removed)";
+      util.throwError {
+        code = "E_INPUT_MISSING_TOPOLOGY";
+        site = site.siteName or null;
+        path = [ "topology" ];
+        message = "site.topology is required (legacy inputs removed)";
+        hints = [ "Add topology = { nodes = ...; links = ...; } to the site." ];
+      };
 
   units =
     if topo ? nodes && builtins.isAttrs topo.nodes then
       topo.nodes
     else
-      throw "normalize/from-user-input: site.topology.nodes is required";
+      util.throwError {
+        code = "E_INPUT_MISSING_TOPOLOGY_NODES";
+        site = site.siteName or null;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "site.topology.nodes is required";
+        hints = [ "Add topology.nodes = { ... }." ];
+      };
 
   accessUnit =
     let
@@ -44,11 +60,41 @@ let
   segRef =
     seg:
     let
-      _ = assert_ (builtins.isAttrs seg) "normalize/from-user-input: attachment must be an attrset";
+      _ = ensure (builtins.isAttrs seg) {
+        code = "E_INPUT_ATTACHMENT_SHAPE";
+        site = site.siteName or null;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "attachment must be an attrset";
+        hints = [ "Use { kind = \"tenant\"; name = \"...\"; }." ];
+      };
+
       kind = seg.kind or null;
       name = seg.name or null;
-      _k = assert_ (kind != null) "normalize/from-user-input: attachment.kind is required";
-      _n = assert_ (name != null) "normalize/from-user-input: attachment.name is required";
+
+      _k = ensure (kind != null) {
+        code = "E_INPUT_ATTACHMENT_MISSING_KIND";
+        site = site.siteName or null;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "attachment.kind is required";
+        hints = [ "Set attachment.kind = \"tenant\" or \"service\"." ];
+      };
+
+      _n = ensure (name != null) {
+        code = "E_INPUT_ATTACHMENT_MISSING_NAME";
+        site = site.siteName or null;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "attachment.name is required";
+        hints = [ "Set attachment.name = \"...\"." ];
+      };
     in
     if kind == "tenant" then
       "tenants:${name}"

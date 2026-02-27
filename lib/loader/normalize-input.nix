@@ -1,6 +1,8 @@
 { lib, evalNetwork }:
 
 let
+  err = import ../error.nix { inherit lib; };
+
   isSingleInput =
     x:
     builtins.isAttrs x
@@ -19,7 +21,17 @@ let
     else if builtins.isAttrs raw then
       raw
     else
-      throw "Unsupported topology format";
+      err.throwError {
+        code = "E_INPUT_UNSUPPORTED_TOPOLOGY_FORMAT";
+        site = null;
+        path = [ ];
+        message = "unsupported topology format";
+        hints = [
+          "Input must be an attribute set (single site or multi-site)."
+          "If passing a single site, include: policyAccessTransitBase, corePolicyTransitVlan, ulaPrefix, tenantV4Base."
+          "If passing a resolved topology, include: nodes, links, ulaPrefix, tenantV4Base."
+        ];
+      };
 
 in
 

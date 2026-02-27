@@ -3,6 +3,8 @@
 args:
 
 let
+  err = import ../error.nix { inherit lib; };
+
   raw = if builtins.isAttrs args && args ? topology then args.topology else args;
 
   topoInput = if builtins.isFunction raw then raw { } else raw;
@@ -34,4 +36,14 @@ else if isSingleSite then
 else if isAttrs then
   evalMultiSite topoInput
 else
-  throw "eval/from-input: unsupported topology input shape"
+  err.throwError {
+    code = "E_INPUT_UNSUPPORTED_TOPOLOGY_SHAPE";
+    site = null;
+    path = [ ];
+    message = "unsupported topology input shape";
+    hints = [
+      "Provide either a resolved topology ({ nodes, links, ulaPrefix, tenantV4Base })"
+      "Or provide a site topology that can be evaluated into a resolved topology."
+      "Or provide an attribute set of sites (multi-site)."
+    ];
+  }

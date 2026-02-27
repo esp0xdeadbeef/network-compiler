@@ -1,6 +1,7 @@
 { lib }:
 
 let
+  err = import ../error.nix { inherit lib; };
 
   parseCidr =
     cidr:
@@ -8,7 +9,13 @@ let
       parts = lib.splitString "/" cidr;
     in
     if builtins.length parts != 2 then
-      throw "allocator: expected CIDR like a.b.c.d/prefix or xxxx::/prefix, got: ${toString cidr}"
+      err.throwError {
+        code = "E_ALLOCATOR_INVALID_CIDR";
+        site = null;
+        path = [ "addressPools" ];
+        message = "expected CIDR like a.b.c.d/prefix or xxxx::/prefix, got '${toString cidr}'";
+        hints = [ "Use a valid CIDR string with exactly one '/'." ];
+      }
     else
       {
         base = builtins.elemAt parts 0;
@@ -18,7 +25,13 @@ let
   pow2 =
     n:
     if n < 0 then
-      throw "allocator: pow2 exponent must be >= 0, got ${toString n}"
+      err.throwError {
+        code = "E_ALLOCATOR_INTERNAL";
+        site = null;
+        path = [ "addressPools" ];
+        message = "pow2 exponent must be >= 0, got ${toString n}";
+        hints = [ "This is an internal bug: exponent is derived from prefix math." ];
+      }
     else
       builtins.foldl' (acc: _: acc * 2) 1 (lib.range 1 n);
 
@@ -26,14 +39,41 @@ let
     ip:
     let
       octets = lib.splitString "." ip;
-      _ = if builtins.length octets != 4 then throw "allocator: invalid IPv4 address: ${ip}" else true;
+      _ =
+        if builtins.length octets != 4 then
+          err.throwError {
+            code = "E_ALLOCATOR_INVALID_IPV4";
+            site = null;
+            path = [
+              "addressPools"
+              "local"
+              "ipv4"
+            ];
+            message = "invalid IPv4 address '${ip}'";
+            hints = [ "Use a valid IPv4 base like 10.0.0.0." ];
+          }
+        else
+          true;
 
       toOctet =
         s:
         let
           v = lib.toInt s;
         in
-        if 0 <= v && v <= 255 then v else throw "allocator: IPv4 octet out of range in ${ip}";
+        if 0 <= v && v <= 255 then
+          v
+        else
+          err.throwError {
+            code = "E_ALLOCATOR_INVALID_IPV4";
+            site = null;
+            path = [
+              "addressPools"
+              "local"
+              "ipv4"
+            ];
+            message = "IPv4 octet out of range in '${ip}'";
+            hints = [ "Each octet must be 0..255." ];
+          };
       o0 = toOctet (builtins.elemAt octets 0);
       o1 = toOctet (builtins.elemAt octets 1);
       o2 = toOctet (builtins.elemAt octets 2);
@@ -46,7 +86,17 @@ let
     let
       _ =
         if n < 0 || n > 4294967295 then
-          throw "allocator: IPv4 integer out of range: ${toString n}"
+          err.throwError {
+            code = "E_ALLOCATOR_INVALID_IPV4";
+            site = null;
+            path = [
+              "addressPools"
+              "local"
+              "ipv4"
+            ];
+            message = "IPv4 integer out of range: ${toString n}";
+            hints = [ "This is an internal allocator bug (address math overflow)." ];
+          }
         else
           true;
 
@@ -72,7 +122,17 @@ let
 
         _ =
           if prefix < 0 || prefix > 32 then
-            throw "allocator: IPv4 prefix must be in [0..32], got ${toString prefix} in ${pool.ipv4}"
+            err.throwError {
+              code = "E_ALLOCATOR_INVALID_PREFIX";
+              site = null;
+              path = [
+                "addressPools"
+                "local"
+                "ipv4"
+              ];
+              message = "IPv4 prefix must be in [0..32], got ${toString prefix} in '${pool.ipv4}'";
+              hints = [ "Use a valid IPv4 CIDR prefix /0..../32." ];
+            }
           else
             true;
 
@@ -84,7 +144,20 @@ let
             off = idx + 1;
           in
           if off >= size then
-            throw "allocator: IPv4 pool exhausted (${pool.ipv4}), idx=${toString idx}"
+            err.throwError {
+              code = "E_ALLOCATOR_POOL_EXHAUSTED";
+              site = null;
+              path = [
+                "addressPools"
+                "local"
+                "ipv4"
+              ];
+              message = "IPv4 pool exhausted ('${pool.ipv4}'), idx=${toString idx}";
+              hints = [
+                "Increase the pool size (use a shorter prefix, e.g. /23 instead of /24)."
+                "Or reduce the number of allocated units."
+              ];
+            }
           else
             intToIpv4 (baseInt + off);
       in
@@ -96,7 +169,6 @@ let
       (_: null)
     else
       let
-
         parsed = lib.network.ipv6.fromString pool.ipv6;
 
         first = lib.network.ipv6.firstAddress parsed;
@@ -111,7 +183,23 @@ let
               let
                 n = lib.network.ipv6.nextAddress a;
               in
-              if n == null then throw "allocator: IPv6 pool exhausted (${pool.ipv6}), idx=${toString idx}" else n;
+              if n == null then
+                err.throwError {
+                  code = "E_ALLOCATOR_POOL_EXHAUSTED";
+                  site = null;
+                  path = [
+                    "addressPools"
+                    "local"
+                    "ipv6"
+                  ];
+                  message = "IPv6 pool exhausted ('${pool.ipv6}'), idx=${toString idx}";
+                  hints = [
+                    "Increase the IPv6 pool size (use a shorter prefix)."
+                    "Or reduce the number of allocated units."
+                  ];
+                }
+              else
+                n;
 
             addrAttrs = builtins.foldl' (a: _: stepOnce a) first (lib.range 1 steps);
           in

@@ -177,6 +177,9 @@
       nodes = {
         s-router-core = {
           role = "core";
+          nat = {
+            mode = "none";
+          };
         };
         s-router-upstream-selector = {
           role = "upstream-selector";

@@ -5,6 +5,46 @@ let
   normalizeSite = import ./normalize/from-user-input.nix { inherit lib; };
   allocator = import ./allocators/pinned-allocator.nix { inherit lib; };
 
+  splitSiteKey =
+    key:
+    let
+      m = builtins.match "([^.]*)\\.(.*)" key;
+    in
+    if m == null then
+      {
+        enterprise = "default";
+        siteName = key;
+      }
+    else
+      {
+        enterprise = builtins.elemAt m 0;
+        siteName = builtins.elemAt m 1;
+      };
+
+  regroupSites =
+    compiledFlat:
+    let
+      keys = builtins.attrNames compiledFlat;
+
+      addOne =
+        acc: k:
+        let
+          parts = splitSiteKey k;
+          ent = parts.enterprise;
+          sname = parts.siteName;
+
+          ent0 = acc.${ent} or { };
+          siteVal = compiledFlat.${k};
+        in
+        acc
+        // {
+          "${ent}" = ent0 // {
+            "${sname}" = siteVal;
+          };
+        };
+    in
+    builtins.foldl' addOne { } keys;
+
   matchListToProto =
     matches:
     let
@@ -143,6 +183,62 @@ let
     in
     map expandOne ingress0;
 
+  validateCoreNat =
+    nodes:
+    let
+      names = builtins.attrNames nodes;
+
+      checkOne =
+        name:
+        let
+          node = nodes.${name};
+          role = node.role or null;
+          nat = node.nat or null;
+          mode = if nat != null && nat ? mode then nat.mode else null;
+
+          isCore = role == "core";
+        in
+        if !isCore then
+          true
+        else if nat == null then
+          throw ''
+            stages: node '${name}' (role="core") must define nat
+
+            Example:
+
+              nat = {
+                mode = "none";
+              };
+
+            or
+
+              nat = {
+                mode = "custom";
+                egress = {
+                  strategy = "masquerade";
+                  source = "interface";
+                };
+                ingress = {
+                  allowPortForward = true;
+                  hairpin = false;
+                };
+              };
+          ''
+        else if mode == "none" then
+          true
+        else if mode == "custom" then
+          true
+        else
+          throw ''
+            stages: node '${name}' (role="core") has invalid nat.mode '${toString mode}'
+
+            Allowed values:
+              - "none"
+              - "custom"
+          '';
+    in
+    map checkOne names;
+
   buildModel =
     siteKey: declared: semantic:
     let
@@ -165,6 +261,9 @@ let
 
       topo = declared.topology or { };
       nodes = topo.nodes or { };
+
+      _ = validateCoreNat nodes;
+
       nodeNames = lib.sort builtins.lessThan (builtins.attrNames nodes);
 
       localPool =
@@ -223,10 +322,11 @@ in
   run =
     inputs:
     let
-      sites = flattenSites inputs;
-      compiled = lib.mapAttrs compileSite sites;
+      sitesFlat = flattenSites inputs;
+      compiledFlat = lib.mapAttrs compileSite sitesFlat;
+      compiledGrouped = regroupSites compiledFlat;
     in
     {
-      sites = compiled;
+      sites = compiledGrouped;
     };
 }

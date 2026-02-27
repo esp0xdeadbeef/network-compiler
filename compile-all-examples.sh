@@ -1,4 +1,6 @@
-find examples -type f -exec sh -c '
-  echo -e "\n\n$1:\n"
-  nix run path:.#compile -- "$1" | jq -c
-' _ {} \;
+find examples -name 'inputs.nix' -print0 |
+while IFS= read -r -d '' f; do
+  echo ""
+  echo "=== $f ==="
+  nix run path:.#compile -- "$f" | jq -c
+done

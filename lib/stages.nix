@@ -242,7 +242,9 @@ in
 
       out = {
         sites = compiledGrouped;
-        schemaVersion = 1;
+        meta = {
+          schemaVersion = 1;
+        };
       };
     in
     canonicalize out;

@@ -74,10 +74,30 @@ expect_fail_code() {
   rm -f "$err" "$out"
 }
 
+assert_schema_version() {
+  local input="$1"
+  local want="$2"
+
+  local got
+  got="$(nix run path:.#compile -- "$input" | jq -r '.meta.schemaVersion')"
+  if [ "$got" != "$want" ]; then
+    echo "schemaVersion mismatch: got=$got want=$want" >&2
+    exit 1
+  fi
+}
+
 diff_golden "single-wan" "examples/single-wan/inputs.nix"
 diff_golden "multi-wan" "examples/multi-wan/inputs.nix"
 diff_golden "multi-enterprise" "examples/multi-enterprise/inputs.nix"
 
+# New tests (TODO)
+diff_golden "priority-stability" "tests/golden/priority-stability-input.nix"
+
 expect_fail_code "disconnected-topology" "tests/negative/disconnected.nix" "E_TOPO_DISCONNECTED"
+expect_fail_code "nat-ingress-without-custom-core" "tests/negative/nat-ingress-without-custom-core.nix" "E_NAT_INGRESS_REQUIRES_CUSTOM_CORE"
+expect_fail_code "exposed-service-without-ingress" "tests/negative/exposed-service-without-ingress.nix" "E_NAT_EXPOSED_MISSING_INGRESS"
+expect_fail_code "allocator-exhaustion" "tests/negative/allocator-exhaustion.nix" "E_ALLOCATOR_POOL_EXHAUSTED"
+
+assert_schema_version "examples/single-wan/inputs.nix" "2"
 
 echo "ok"

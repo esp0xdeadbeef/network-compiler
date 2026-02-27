@@ -289,8 +289,15 @@ let
           ];
         }
       ) exposedServices;
+
+      _forced = builtins.deepSeq {
+        inherit
+          _uniqNat
+          _exposedHaveNat
+          ;
+      } true;
     in
-    expanded;
+    if _forced then expanded else expanded;
 in
 {
   inherit

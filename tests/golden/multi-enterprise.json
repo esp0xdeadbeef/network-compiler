@@ -157,6 +157,62 @@
           }
         },
         "transit": {
+          "adjacencies": [
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.10.0.1",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:1"
+                  },
+                  "unit": "s-router-core"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.10.0.2",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:2"
+                  },
+                  "unit": "s-router-upstream-selector"
+                }
+              ]
+            },
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.10.0.3",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:3"
+                  },
+                  "unit": "s-router-upstream-selector"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.10.0.4",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:4"
+                  },
+                  "unit": "s-router-policy"
+                }
+              ]
+            },
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.10.0.5",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:5"
+                  },
+                  "unit": "s-router-policy"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.10.0.6",
+                    "ipv6": "fd42:dead:beef:1000:0:0:0:6"
+                  },
+                  "unit": "s-router-access"
+                }
+              ]
+            }
+          ],
           "ordering": [
             [
               "s-router-core",
@@ -171,6 +227,32 @@
               "s-router-access"
             ]
           ]
+        },
+        "units": {
+          "s-router-access": {
+            "containers": [
+              "isolated-0"
+            ],
+            "isolated": true
+          },
+          "s-router-core": {
+            "containers": [
+              "isolated-0"
+            ],
+            "isolated": true
+          },
+          "s-router-policy": {
+            "containers": [
+              "default"
+            ],
+            "isolated": false
+          },
+          "s-router-upstream-selector": {
+            "containers": [
+              "default"
+            ],
+            "isolated": false
+          }
         }
       }
     },
@@ -331,6 +413,62 @@
           }
         },
         "transit": {
+          "adjacencies": [
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.11.0.1",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:1"
+                  },
+                  "unit": "s-router-core"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.11.0.2",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:2"
+                  },
+                  "unit": "s-router-upstream-selector"
+                }
+              ]
+            },
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.11.0.3",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:3"
+                  },
+                  "unit": "s-router-upstream-selector"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.11.0.4",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:4"
+                  },
+                  "unit": "s-router-policy"
+                }
+              ]
+            },
+            {
+              "endpoints": [
+                {
+                  "local": {
+                    "ipv4": "10.11.0.5",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:5"
+                  },
+                  "unit": "s-router-policy"
+                },
+                {
+                  "local": {
+                    "ipv4": "10.11.0.6",
+                    "ipv6": "fd42:dead:beef:1100:0:0:0:6"
+                  },
+                  "unit": "s-router-access"
+                }
+              ]
+            }
+          ],
           "ordering": [
             [
               "s-router-core",
@@ -345,6 +483,32 @@
               "s-router-access"
             ]
           ]
+        },
+        "units": {
+          "s-router-access": {
+            "containers": [
+              "isolated-0"
+            ],
+            "isolated": true
+          },
+          "s-router-core": {
+            "containers": [
+              "isolated-0"
+            ],
+            "isolated": true
+          },
+          "s-router-policy": {
+            "containers": [
+              "default"
+            ],
+            "isolated": false
+          },
+          "s-router-upstream-selector": {
+            "containers": [
+              "default"
+            ],
+            "isolated": false
+          }
         }
       }
     }

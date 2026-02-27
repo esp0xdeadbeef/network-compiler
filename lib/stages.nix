@@ -67,6 +67,9 @@ let
       topo = declared.topology or { };
       policy = declared.policy or { };
 
+      parts = splitSiteKey siteKey;
+      canonicalSiteId = "${parts.enterprise}.${parts.siteName}";
+
       _addrSafe = validateSite siteKey declared;
       _topoValid = validateTopology siteKey topo;
 
@@ -174,21 +177,88 @@ let
         else
           null;
 
-      allocV4 = allocator.mkIPv4Allocator localPool;
-      allocV6 = allocator.mkIPv6Allocator localPool;
+      p2pPool =
+        if semantic ? addressPools && semantic.addressPools ? p2p then semantic.addressPools.p2p else null;
+
+      allocLoopV4 = allocator.mkIPv4Allocator localPool;
+      allocLoopV6 = allocator.mkIPv6Allocator localPool;
 
       loopbacks = lib.listToAttrs (
         lib.imap0 (idx: name: {
           name = name;
           value = {
-            ipv4 = allocV4 idx;
-            ipv6 = allocV6 idx;
+            ipv4 = allocLoopV4 idx;
+            ipv6 = allocLoopV6 idx;
           };
         }) nodeNamesSorted
       );
 
+      allocP2pV4 = allocator.mkIPv4Allocator p2pPool;
+      allocP2pV6 = allocator.mkIPv6Allocator p2pPool;
+
+      links0 = topo.links or [ ];
+
+      adjacencyAddrs = lib.imap0 (
+        idx: pair:
+        let
+          a = builtins.elemAt pair 0;
+          b = builtins.elemAt pair 1;
+
+          a4 = allocP2pV4 (idx * 2);
+          b4 = allocP2pV4 (idx * 2 + 1);
+
+          a6 = allocP2pV6 (idx * 2);
+          b6 = allocP2pV6 (idx * 2 + 1);
+        in
+        {
+          endpoints = [
+            {
+              unit = a;
+              local = {
+                ipv4 = a4;
+                ipv6 = a6;
+              };
+            }
+            {
+              unit = b;
+              local = {
+                ipv4 = b4;
+                ipv6 = b6;
+              };
+            }
+          ];
+        }
+      ) links0;
+
+      mkUnitIsolation =
+        n:
+        let
+          role = nodes.${n}.role or null;
+          isolated = builtins.elem role [
+            "core"
+            "access"
+          ];
+        in
+        if isolated then
+          {
+            containers = [ "isolated-0" ];
+            isolated = true;
+          }
+        else
+          {
+            containers = [ "default" ];
+            isolated = false;
+          };
+
+      unitIsolation = lib.listToAttrs (
+        map (n: {
+          name = n;
+          value = mkUnitIsolation n;
+        }) nodeNamesSorted
+      );
+
       model = {
-        id = siteKey;
+        id = canonicalSiteId;
         enterprise = semantic.enterprise or "default";
 
         domains = {
@@ -198,12 +268,15 @@ let
         attachment = semantic.attachments or [ ];
 
         transit = {
-          ordering = topo.links or [ ];
+          ordering = links0;
+          adjacencies = adjacencyAddrs;
         };
 
         addressPools = semantic.addressPools or { };
 
         routerLoopbacks = loopbacks;
+
+        units = unitIsolation;
 
         inherit communicationContract;
       };
@@ -243,7 +316,7 @@ in
       out = {
         sites = compiledGrouped;
         meta = {
-          schemaVersion = 1;
+          schemaVersion = 2;
         };
       };
     in

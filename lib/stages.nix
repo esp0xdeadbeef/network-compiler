@@ -11,7 +11,7 @@ let
   addressSafety = import ./address-safety { inherit lib; };
   canonicalize = import ./canonicalize.nix { inherit lib; };
 
-  inherit (util) assertUnique ensure throwError;
+  inherit (util) assertUnique ensure;
   inherit (policyC)
     buildCapabilityIndex
     normalizeRuleWithProvenance
@@ -61,6 +61,15 @@ let
     in
     builtins.foldl' addOne { } keys;
 
+  normalizeUpstreams =
+    u:
+    if u == null then
+      [ ]
+    else if builtins.isAttrs u then
+      map (k: { name = k; }) (lib.sort builtins.lessThan (builtins.attrNames u))
+    else
+      [ ];
+
   buildModel =
     siteKey: declared: semantic:
     let
@@ -103,72 +112,41 @@ let
 
       coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
 
-      coreNatMode =
-        n:
-        let
-          nat = nodes.${n}.nat or null;
-          mode = if nat == null then null else nat.mode or null;
+      coreUpstreams = lib.listToAttrs (
+        map (n: {
+          name = n;
+          value =
+            let
+              us = normalizeUpstreams (nodes.${n}.upstreams or null);
 
-          _present = ensure (mode != null) {
-            code = "E_NAT_CORE_MODE_MISSING";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              n
-              "nat"
-              "mode"
-            ];
-            message = "core node '${n}' in site '${siteKey}' must explicitly declare node.nat.mode";
-            hints = [ "Set topology.nodes.${n}.nat.mode = \"none\" or \"custom\"." ];
-          };
-
-          _valid =
-            ensure
-              (builtins.elem mode [
-                "none"
-                "custom"
-              ])
-              {
-                code = "E_NAT_CORE_MODE_INVALID";
+              _required = ensure (builtins.length us > 0) {
+                code = "E_CORE_UPSTREAMS_REQUIRED";
                 site = siteKey;
                 path = [
                   "topology"
                   "nodes"
                   n
-                  "nat"
-                  "mode"
+                  "upstreams"
                 ];
-                message = "core node '${n}' in site '${siteKey}' has invalid node.nat.mode '${toString mode}'";
-                hints = [ "Valid values: \"none\" or \"custom\"." ];
+                message = "core node '${n}' must define at least one upstream";
+                hints = [ "Set topology.nodes.${n}.upstreams = { default = {}; }." ];
               };
-        in
-        mode;
+            in
+            if _required then us else us;
+        }) coreNodes
+      );
 
-      coreModes = map coreNatMode coreNodes;
+      allUpstreamCounts = map (n: builtins.length (coreUpstreams.${n} or [ ])) coreNodes;
+      anyMultiWan = builtins.any (c: c > 1) allUpstreamCounts;
 
-      _natRequiresCustomCore =
-        ensure (!(builtins.length ingressExpanded > 0) || (builtins.elem "custom" coreModes))
-          {
-            code = "E_NAT_INGRESS_REQUIRES_CUSTOM_CORE";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-            ];
-            message = "policy.nat.ingress is non-empty for site '${siteKey}', but no core node has node.nat.mode = \"custom\"";
-            hints = [
-              "Set at least one core node nat.mode = \"custom\"."
-              "Or remove policy.nat.ingress entries if NAT is not desired."
-            ];
-          };
+      natModel = {
+        enabled = builtins.length ingressExpanded > 0;
+        ingress = ingressExpanded;
+      };
 
       communicationContract = {
         allowedRelations = normalizedRules;
-        nat = {
-          ingress = ingressExpanded;
-        };
+        nat = natModel;
       };
 
       localPool =
@@ -278,6 +256,11 @@ let
 
         units = unitIsolation;
 
+        upstreams = {
+          multiWan = anyMultiWan;
+          cores = coreUpstreams;
+        };
+
         inherit communicationContract;
       };
 
@@ -288,11 +271,10 @@ let
           _uniqServices
           _uniqTenants
           _uniqRuleIds
-          _natRequiresCustomCore
           ;
         normalizedRules = normalizedRules;
         ingressExpanded = ingressExpanded;
-        coreModes = coreModes;
+        coreUpstreams = coreUpstreams;
       } true;
     in
     if _forced then model else model;
@@ -316,7 +298,7 @@ in
       out = {
         sites = compiledGrouped;
         meta = {
-          schemaVersion = 2;
+          schemaVersion = 4;
           provenance = {
             originalInputs = inputs;
           };

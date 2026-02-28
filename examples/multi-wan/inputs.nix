@@ -6,38 +6,26 @@
         ipv4 = "10.10.0.0/24";
         ipv6 = "fd42:dead:beef:1000::/118";
       };
-
       loopback = {
         ipv4 = "10.19.0.0/24";
         ipv6 = "fd42:dead:beef:1900::/118";
       };
     };
 
-    ownership = {
-      prefixes = [
-        {
-          kind = "tenant";
-          name = "mgmt";
-          ipv4 = "10.20.10.0/24";
-          ipv6 = "fd42:dead:beef:10::/64";
-        }
-      ];
-    };
+    ownership.prefixes = [
+      {
+        kind = "tenant";
+        name = "mgmt";
+        ipv4 = "10.20.10.0/24";
+        ipv6 = "fd42:dead:beef:10::/64";
+      }
+    ];
 
     policy = {
-      external = {
-        wantDefault = true;
-        wantFullTables = false;
-      };
-
-      catalog = {
-        services = [ ];
-      };
-
-      nat = {
-        ingress = [ ];
-      };
-
+      external.wantDefault = true;
+      external.wantFullTables = false;
+      catalog.services = [ ];
+      nat.ingress = [ ];
       rules = [ ];
     };
 
@@ -45,11 +33,16 @@
       nodes = {
         s-router-core = {
           role = "core";
-          nat = {
-            mode = "none";
+
+          upstreams = {
+            isp-a = { };
+            isp-b = { };
           };
         };
 
+        s-router-upstream-selector = {
+          role = "upstream-selector";
+        };
         s-router-policy = {
           role = "policy";
         };
@@ -68,6 +61,10 @@
       links = [
         [
           "s-router-core"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-upstream-selector"
           "s-router-policy"
         ]
         [
@@ -85,38 +82,26 @@
         ipv4 = "10.11.0.0/24";
         ipv6 = "fd42:dead:beef:1100::/118";
       };
-
       loopback = {
         ipv4 = "10.29.0.0/24";
         ipv6 = "fd42:dead:beef:2900::/118";
       };
     };
 
-    ownership = {
-      prefixes = [
-        {
-          kind = "tenant";
-          name = "mgmt";
-          ipv4 = "10.30.10.0/24";
-          ipv6 = "fd42:dead:beef:11::/64";
-        }
-      ];
-    };
+    ownership.prefixes = [
+      {
+        kind = "tenant";
+        name = "mgmt";
+        ipv4 = "10.30.10.0/24";
+        ipv6 = "fd42:dead:beef:11::/64";
+      }
+    ];
 
     policy = {
-      external = {
-        wantDefault = true;
-        wantFullTables = false;
-      };
-
-      catalog = {
-        services = [ ];
-      };
-
-      nat = {
-        ingress = [ ];
-      };
-
+      external.wantDefault = true;
+      external.wantFullTables = false;
+      catalog.services = [ ];
+      nat.ingress = [ ];
       rules = [ ];
     };
 
@@ -124,11 +109,16 @@
       nodes = {
         s-router-core = {
           role = "core";
-          nat = {
-            mode = "none";
+
+          upstreams = {
+            isp-a = { };
+            isp-b = { };
           };
         };
 
+        s-router-upstream-selector = {
+          role = "upstream-selector";
+        };
         s-router-policy = {
           role = "policy";
         };
@@ -147,6 +137,10 @@
       links = [
         [
           "s-router-core"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-upstream-selector"
           "s-router-policy"
         ]
         [

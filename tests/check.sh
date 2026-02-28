@@ -8,6 +8,7 @@ positive_cases=(
   multi-wan
   multi-enterprise
   priority-stability
+  overlay-east-west
 )
 
 negative_nix_cases=(
@@ -16,6 +17,9 @@ negative_nix_cases=(
   "$ROOT/tests/negative/exposed-service-without-ingress.nix"
   "$ROOT/tests/negative/core-missing-upstreams.nix"
   "$ROOT/tests/negative/multi-wan-missing-upstream-selector.nix"
+  "$ROOT/tests/negative/overlay-without-core.nix"
+  "$ROOT/tests/negative/overlay-on-non-core.nix"
+  "$ROOT/tests/negative/overlay-defined-without-policy-rules.nix"
 )
 
 echo "=== negative tests (inputs.nix fixtures) ==="

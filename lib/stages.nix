@@ -11,7 +11,7 @@ let
   addressSafety = import ./address-safety { inherit lib; };
   canonicalize = import ./canonicalize.nix { inherit lib; };
 
-  inherit (util) assertUnique ensure;
+  inherit (util) assertUnique ensure throwError;
   inherit (policyC)
     buildCapabilityIndex
     normalizeRuleWithProvenance
@@ -69,6 +69,242 @@ let
       map (k: { name = k; }) (lib.sort builtins.lessThan (builtins.attrNames u))
     else
       [ ];
+
+  normalizeTransportOverlays =
+    siteKey: topo: declared:
+    let
+      nodes = topo.nodes or { };
+      nodeNames = builtins.attrNames nodes;
+
+      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
+        lib.sort builtins.lessThan nodeNames
+      );
+
+      transport0 = declared.transport or { };
+      overlays0 = transport0.overlays or [ ];
+
+      _shape = ensure (builtins.isList overlays0) {
+        code = "E_OVERLAY_SHAPE";
+        site = siteKey;
+        path = [
+          "transport"
+          "overlays"
+        ];
+        message = "transport.overlays must be a list";
+        hints = [
+          "Use transport.overlays = [ { peerSite = \"enterprise.site\"; terminateOn = \"core-node\"; mustTraverse = [\"policy\"]; } ... ]"
+        ];
+      };
+
+      _needsCore =
+        if overlays0 == [ ] then
+          true
+        else
+          ensure (builtins.length coreNodes > 0) {
+            code = "E_OVERLAY_NO_CORE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+            ];
+            message = "overlays require at least one core node";
+            hints = [ "Add a topology.nodes.<name>.role = \"core\" node." ];
+          };
+
+      getPeer =
+        ov:
+        if ov ? peerSite then
+          ov.peerSite
+        else if ov ? peer then
+          ov.peer
+        else if ov ? toSite then
+          ov.toSite
+        else
+          null;
+
+      resolveTerminateOn =
+        idx: ov:
+        if ov ? terminateOn then
+          ov.terminateOn
+        else if builtins.length coreNodes == 1 then
+          builtins.elemAt coreNodes 0
+        else
+          throwError {
+            code = "E_OVERLAY_AMBIGUOUS_CORE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+            ];
+            message = "overlay.terminateOn is required when multiple core nodes exist";
+            hints = [ "Set transport.overlays[].terminateOn to the core node name." ];
+          };
+
+      normalizeMustTraverse =
+        idx: ov:
+        let
+          _present = ensure (ov ? mustTraverse) {
+            code = "E_OVERLAY_MISSING_MUST_TRAVERSE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "mustTraverse"
+            ];
+            message = "overlay.mustTraverse is required; compiler must not assume policy traversal";
+            hints = [ "Set transport.overlays[].mustTraverse = [ \"policy\" ]." ];
+          };
+
+          mt0 = ov.mustTraverse;
+
+          _shape2 = ensure (builtins.isList mt0) {
+            code = "E_OVERLAY_MUST_TRAVERSE_SHAPE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "mustTraverse"
+            ];
+            message = "overlay.mustTraverse must be a list of strings";
+            hints = [ "Use mustTraverse = [ \"policy\" ] (or additional unit roles as needed)." ];
+          };
+
+          _items = ensure (builtins.all builtins.isString mt0) {
+            code = "E_OVERLAY_MUST_TRAVERSE_SHAPE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "mustTraverse"
+            ];
+            message = "overlay.mustTraverse must be a list of strings";
+            hints = [ "Use mustTraverse = [ \"policy\" ]." ];
+          };
+
+          _requiresPolicy = ensure (builtins.elem "policy" mt0) {
+            code = "E_OVERLAY_MUST_TRAVERSE_POLICY_REQUIRED";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "mustTraverse"
+            ];
+            message = "overlay traversal must explicitly include \"policy\"";
+            hints = [ "Add \"policy\" to mustTraverse." ];
+          };
+
+          _force = builtins.deepSeq {
+            inherit
+              _present
+              _shape2
+              _items
+              _requiresPolicy
+              ;
+          } true;
+        in
+        if _force then mt0 else mt0;
+
+      normalizeOne =
+        idx: ov:
+        let
+          _ovShape = ensure (builtins.isAttrs ov) {
+            code = "E_OVERLAY_ENTRY_SHAPE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+            ];
+            message = "overlay entry must be an attrset";
+            hints = [
+              "Use { name = \"...\"; peerSite = \"enterprise.site\"; terminateOn = \"s-router-core\"; mustTraverse = [\"policy\"]; }."
+            ];
+          };
+
+          peer = getPeer ov;
+
+          _peer = ensure (peer != null && builtins.isString peer && peer != "") {
+            code = "E_OVERLAY_MISSING_PEER";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+            ];
+            message = "overlay must set peerSite (string)";
+            hints = [ "Set transport.overlays[].peerSite = \"enterprise.site\"." ];
+          };
+
+          term = resolveTerminateOn idx ov;
+
+          _termExists = ensure (builtins.elem term nodeNames) {
+            code = "E_OVERLAY_UNKNOWN_TERMINATION";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "terminateOn"
+            ];
+            message = "overlay termination node '${term}' does not exist";
+            hints = [ "Set terminateOn to an existing topology.nodes.<name>." ];
+          };
+
+          _termIsCore = ensure (builtins.elem term coreNodes) {
+            code = "E_OVERLAY_TERMINATE_NON_CORE";
+            site = siteKey;
+            path = [
+              "transport"
+              "overlays"
+              idx
+              "terminateOn"
+            ];
+            message = "overlay must terminate on a core node (got '${term}')";
+            hints = [ "Set terminateOn to a node with role = \"core\"." ];
+          };
+
+          mustTraverse = normalizeMustTraverse idx ov;
+
+          _force = builtins.deepSeq {
+            inherit
+              _ovShape
+              _peer
+              _termExists
+              _termIsCore
+              mustTraverse
+              ;
+          } true;
+
+          name = ov.name or "overlay-${toString idx}";
+        in
+        if _force then
+          {
+            inherit name;
+            peerSite = peer;
+            terminateOn = term;
+            mustTraverse = mustTraverse;
+          }
+        else
+          null;
+
+      overlaysN = lib.imap0 normalizeOne overlays0;
+
+      _uniqNames = assertUnique "overlay name" (map (o: o.name) overlaysN);
+
+      _forced = builtins.deepSeq {
+        inherit
+          _shape
+          _needsCore
+          _uniqNames
+          ;
+      } true;
+    in
+    if _forced then overlaysN else overlaysN;
 
   buildModel =
     siteKey: declared: semantic:
@@ -129,7 +365,9 @@ let
                   "upstreams"
                 ];
                 message = "core node '${n}' must define at least one upstream";
-                hints = [ "Set topology.nodes.${n}.upstreams = { default = {}; }." ];
+                hints = [
+                  "Set topology.nodes.${n}.upstreams = { default = {}; }."
+                ];
               };
             in
             if _required then us else us;
@@ -137,6 +375,7 @@ let
       );
 
       allUpstreamCounts = map (n: builtins.length (coreUpstreams.${n} or [ ])) coreNodes;
+
       anyMultiWan = builtins.any (c: c > 1) allUpstreamCounts;
 
       natModel = {
@@ -235,6 +474,37 @@ let
         }) nodeNamesSorted
       );
 
+      overlays = normalizeTransportOverlays siteKey topo declared;
+
+      overlayNames = map (o: o.name) overlays;
+
+      overlayHasExplicitAllow =
+        ovName:
+        builtins.any (
+          r: (r.action or "deny") == "allow" && (r.to ? external) && r.to.external == ovName
+        ) normalizedRules;
+
+      _overlayPolicyRequired =
+        if overlays == [ ] then
+          true
+        else
+          builtins.all (
+            ov:
+            ensure (overlayHasExplicitAllow ov.name) {
+              code = "E_OVERLAY_POLICY_MISSING";
+              site = siteKey;
+              path = [
+                "transport"
+                "overlays"
+              ];
+              message = "overlay '${ov.name}' requires an explicit allow rule to external='${ov.name}' (no implicit policy traversal)";
+              hints = [
+                "Add policy.rules = [ { from = { kind = \"tenant\"; name = \"...\"; }; to = { external = \"${ov.name}\"; }; action = \"allow\"; proto = [\"any\"]; priority = ...; } ... ]."
+                "Or remove the overlay if inter-site communication is not intended."
+              ];
+            }
+          ) overlays;
+
       model = {
         id = canonicalSiteId;
         enterprise = semantic.enterprise or "default";
@@ -248,6 +518,10 @@ let
         transit = {
           ordering = links0;
           adjacencies = adjacencyAddrs;
+        };
+
+        transport = {
+          overlays = overlays;
         };
 
         addressPools = semantic.addressPools or { };
@@ -275,6 +549,9 @@ let
         normalizedRules = normalizedRules;
         ingressExpanded = ingressExpanded;
         coreUpstreams = coreUpstreams;
+        overlays = overlays;
+        overlayNames = overlayNames;
+        _overlayPolicyRequired = _overlayPolicyRequired;
       } true;
     in
     if _forced then model else model;

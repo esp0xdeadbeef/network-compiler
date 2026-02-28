@@ -32,9 +32,7 @@
       nodes = {
         s-router-core = {
           role = "core";
-          upstreams = {
-            default = { };
-          };
+
         };
 
         s-router-policy = {
@@ -56,6 +54,10 @@
         [
           "s-router-core"
           "s-router-policy"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access"
         ]
       ];
     };

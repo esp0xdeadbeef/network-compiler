@@ -33,7 +33,8 @@
         s-router-core = {
           role = "core";
           upstreams = {
-            default = { };
+            isp-a = { };
+            isp-b = { };
           };
         };
 
@@ -56,6 +57,10 @@
         [
           "s-router-core"
           "s-router-policy"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access"
         ]
       ];
     };

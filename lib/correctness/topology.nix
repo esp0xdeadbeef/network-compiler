@@ -59,6 +59,15 @@ let
     in
     stateN.seen;
 
+  normalizeUpstreams =
+    u:
+    if u == null then
+      [ ]
+    else if builtins.isAttrs u then
+      map (k: { name = k; }) (lib.sort builtins.lessThan (builtins.attrNames u))
+    else
+      [ ];
+
   validateTopology =
     siteKey: topo:
     let
@@ -138,6 +147,30 @@ let
         site = siteKey;
       };
 
+      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
+        lib.sort builtins.lessThan nodeNames
+      );
+
+      coreUpstreamCounts = map (
+        n: builtins.length (normalizeUpstreams (nodes.${n}.upstreams or null))
+      ) coreNodes;
+
+      anyMultiWan = builtins.any (c: c > 1) coreUpstreamCounts;
+
+      _requiresUpstreamSelector = ensure (!anyMultiWan || builtins.elem "upstream-selector" roles) {
+        code = "E_TOPO_MISSING_UPSTREAM_SELECTOR";
+        site = siteKey;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "multi-wan requires an upstream-selector node";
+        hints = [
+          "Add a node with role = \"upstream-selector\"."
+          "Connect it in topology.links between core and policy."
+        ];
+      };
+
       _force = builtins.deepSeq {
         inherit
           _uniqNodes
@@ -147,6 +180,7 @@ let
           _linksOk
           _noIsolated
           _connected
+          _requiresUpstreamSelector
           ;
       } true;
     in

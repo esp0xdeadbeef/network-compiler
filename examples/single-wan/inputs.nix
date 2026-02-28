@@ -37,80 +37,71 @@
     };
 
     policy = {
-
       external = {
         wantDefault = true;
         wantFullTables = false;
       };
 
-      catalog = {
+      catalog.services = [
+        {
+          kind = "service";
+          name = "dns-site";
+          match = [
+            {
+              l4 = "udp";
+              dports = [ 53 ];
+              families = [
+                "ipv4"
+                "ipv6"
+              ];
+            }
+            {
+              l4 = "tcp";
+              dports = [ 53 ];
+              families = [
+                "ipv4"
+                "ipv6"
+              ];
+            }
+          ];
+          scope = "site";
+          zoneHint = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          provides = [ "resolver" ];
+        }
+        {
+          kind = "service";
+          name = "external-jump-host";
+          match = [
+            {
+              l4 = "tcp";
+              dports = [ 22 ];
+              families = [
+                "ipv4"
+                "ipv6"
+              ];
+            }
+          ];
+          scope = "site";
+          exposure.external = true;
+          zoneHint = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+        }
+      ];
 
-        services = [
-          {
-            kind = "service";
-            name = "dns-site";
-            match = [
-              {
-                l4 = "udp";
-                dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
-              }
-              {
-                l4 = "tcp";
-                dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
-              }
-            ];
-            scope = "site";
-            zoneHint = {
-              kind = "tenant";
-              name = "mgmt";
-            };
-            provides = [ "resolver" ];
-          }
-
-          {
+      nat.ingress = [
+        {
+          fromExternal = "default";
+          toService = {
             kind = "service";
             name = "external-jump-host";
-            match = [
-              {
-                l4 = "tcp";
-                dports = [ 22 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
-              }
-            ];
-            scope = "site";
-            exposure = {
-              external = true;
-            };
-            zoneHint = {
-              kind = "tenant";
-              name = "mgmt";
-            };
-          }
-        ];
-      };
-
-      nat = {
-        ingress = [
-          {
-            fromExternal = "default";
-            toService = {
-              kind = "service";
-              name = "external-jump-host";
-            };
-          }
-        ];
-      };
+          };
+        }
+      ];
 
       rules = [
         {
@@ -127,7 +118,6 @@
           };
           action = "allow";
         }
-
         {
           id = "deny-clients-to-mgmt-dns";
           priority = 90;
@@ -142,7 +132,6 @@
           };
           action = "deny";
         }
-
         {
           id = "allow-clients-to-external-any";
           priority = 200;
@@ -156,7 +145,6 @@
           proto = [ "any" ];
           action = "allow";
         }
-
         {
           id = "deny-clients-to-mgmt";
           priority = 150;
@@ -177,13 +165,15 @@
       nodes = {
         s-router-core = {
           role = "core";
-          nat = {
-            mode = "custom";
+          upstreams = {
+            default = { };
           };
         };
+
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
+
         s-router-policy = {
           role = "policy";
         };

@@ -4,28 +4,26 @@
       enterprise = "default";
       siteName = "stable";
 
-      ownership = {
-        prefixes = [
-          {
-            kind = "tenant";
-            name = "mgmt";
-            ipv4 = "10.20.10.0/24";
-            ipv6 = "fd42:dead:beef:10::/64";
-          }
-          {
-            kind = "tenant";
-            name = "admin";
-            ipv4 = "10.20.15.0/24";
-            ipv6 = "fd42:dead:beef:15::/64";
-          }
-          {
-            kind = "tenant";
-            name = "clients";
-            ipv4 = "10.20.20.0/24";
-            ipv6 = "fd42:dead:beef:20::/64";
-          }
-        ];
-      };
+      ownership.prefixes = [
+        {
+          kind = "tenant";
+          name = "mgmt";
+          ipv4 = "10.20.10.0/24";
+          ipv6 = "fd42:dead:beef:10::/64";
+        }
+        {
+          kind = "tenant";
+          name = "admin";
+          ipv4 = "10.20.15.0/24";
+          ipv6 = "fd42:dead:beef:15::/64";
+        }
+        {
+          kind = "tenant";
+          name = "clients";
+          ipv4 = "10.20.20.0/24";
+          ipv6 = "fd42:dead:beef:20::/64";
+        }
+      ];
 
       pools = {
         loopback = {
@@ -110,21 +108,12 @@
       };
 
       topology = {
-        links = [
-          [
-            "s-router-core"
-            "s-router-policy"
-          ]
-          [
-            "s-router-policy"
-            "s-router-access"
-          ]
-        ];
-
         nodes = {
           s-router-core = {
             role = "core";
-            nat.mode = "custom";
+            upstreams = {
+              default = { };
+            };
           };
 
           s-router-policy = {
@@ -149,6 +138,17 @@
             ];
           };
         };
+
+        links = [
+          [
+            "s-router-core"
+            "s-router-policy"
+          ]
+          [
+            "s-router-policy"
+            "s-router-access"
+          ]
+        ];
       };
     };
   };

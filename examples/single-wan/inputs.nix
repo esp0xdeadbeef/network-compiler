@@ -173,11 +173,9 @@
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
-
         s-router-policy = {
           role = "policy";
         };
-
         s-router-access = {
           role = "access";
           attachments = [

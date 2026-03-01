@@ -17,7 +17,13 @@
         kind = "tenant";
         name = "mgmt";
         ipv4 = "10.20.10.0/24";
-        ipv6 = "fd42:dead:beef:10::/64";
+        ipv6 = "fd42:dead:beef:20::/64";
+      }
+      {
+        kind = "tenant";
+        name = "adm";
+        ipv4 = "10.21.10.0/24";
+        ipv6 = "fd42:dead:beef:21::/64";
       }
     ];
 
@@ -31,12 +37,16 @@
 
     topology = {
       nodes = {
-        s-router-core = {
+        s-router-core-isp-a = {
           role = "core";
-
           upstreams = {
-            isp-a = { };
-            isp-b = { };
+            default = { };
+          };
+        };
+        s-router-core-isp-b = {
+          role = "core";
+          upstreams = {
+            default = { };
           };
         };
 
@@ -46,8 +56,17 @@
         s-router-policy = {
           role = "policy";
         };
+        s-router-access-adm = {
+          role = "access";
+          attachments = [
+            {
+              kind = "tenant";
+              name = "adm";
+            }
+          ];
+        };
 
-        s-router-access = {
+        s-router-access-mgmt = {
           role = "access";
           attachments = [
             {
@@ -60,7 +79,11 @@
 
       links = [
         [
-          "s-router-core"
+          "s-router-core-isp-a"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-core-isp-b"
           "s-router-upstream-selector"
         ]
         [
@@ -69,7 +92,11 @@
         ]
         [
           "s-router-policy"
-          "s-router-access"
+          "s-router-access-adm"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access-mgmt"
         ]
       ];
     };
@@ -107,12 +134,16 @@
 
     topology = {
       nodes = {
-        s-router-core = {
+        s-router-core-isp-a = {
           role = "core";
-
           upstreams = {
-            isp-a = { };
-            isp-b = { };
+            default = { };
+          };
+        };
+        s-router-core-isp-b = {
+          role = "core";
+          upstreams = {
+            default = { };
           };
         };
 
@@ -136,7 +167,11 @@
 
       links = [
         [
-          "s-router-core"
+          "s-router-core-isp-a"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-core-isp-b"
           "s-router-upstream-selector"
         ]
         [

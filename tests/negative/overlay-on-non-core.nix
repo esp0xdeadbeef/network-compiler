@@ -21,8 +21,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -33,6 +31,7 @@
         name = "east-west";
         peerSite = "default.other";
         terminateOn = "s-router-access";
+        mustTraverse = [ "policy" ];
       }
     ];
 
@@ -40,8 +39,11 @@
       nodes = {
         s-router-core = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            wan = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 

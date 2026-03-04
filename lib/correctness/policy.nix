@@ -77,15 +77,68 @@ let
       priority = prio;
     };
 
+  normalizeExternalRef =
+    siteKey: idx: externals: ext:
+    let
+      _shape = ensure (builtins.isString ext && ext != "") {
+        code = "E_POLICY_EXTERNAL_SHAPE";
+        site = siteKey;
+        path = [
+          "policy"
+          "rules"
+          idx
+          "to"
+          "external"
+        ];
+        message = "rule.to.external must be a non-empty string";
+        hints = [ "Set rule.to.external = \"<uplink-or-overlay-name>\"." ];
+      };
+
+      _noDefault = ensure (ext != "default") {
+        code = "E_POLICY_EXTERNAL_DEFAULT_FORBIDDEN";
+        site = siteKey;
+        path = [
+          "policy"
+          "rules"
+          idx
+          "to"
+          "external"
+        ];
+        message = "the keyword \"default\" must not be used for external routing";
+        hints = [
+          "Replace external = \"default\" with an explicit uplink name (e.g. \"wan\")."
+          "For overlays, reference the explicit overlay name."
+        ];
+      };
+
+      _exists = ensure (builtins.elem ext externals) {
+        code = "E_POLICY_UNKNOWN_EXTERNAL";
+        site = siteKey;
+        path = [
+          "policy"
+          "rules"
+          idx
+          "to"
+          "external"
+        ];
+        message = "rule references unknown external '${ext}'";
+        hints = [
+          "Declare an uplink under topology.nodes.<core>.uplinks.<name>."
+          "Or declare a transport overlay with transport.overlays[].name."
+        ];
+      };
+    in
+    ext;
+
   normalizeRuleWithProvenance =
-    tenants: capIndex: idx: rule:
+    siteKey: externals: tenants: capIndex: idx: rule:
     let
       from0 = rule.from or { };
       to0 = rule.to or { };
 
       _fromShape = ensure ((from0 ? kind) && from0.kind == "tenant" && (from0 ? name)) {
         code = "E_POLICY_RULE_FROM_SHAPE";
-        site = null;
+        site = siteKey;
         path = [
           "policy"
           "rules"
@@ -98,7 +151,7 @@ let
 
       _fromExists = ensure (builtins.elem from0.name tenants) {
         code = "E_POLICY_UNKNOWN_TENANT";
-        site = null;
+        site = siteKey;
         path = [
           "policy"
           "rules"
@@ -116,12 +169,14 @@ let
 
       to =
         if to0 ? external then
-          { external = to0.external; }
+          {
+            external = normalizeExternalRef siteKey idx externals to0.external;
+          }
         else if (to0 ? kind) && to0.kind == "tenant" && (to0 ? name) then
           let
             _toExists = ensure (builtins.elem to0.name tenants) {
               code = "E_POLICY_UNKNOWN_TENANT";
-              site = null;
+              site = siteKey;
               path = [
                 "policy"
                 "rules"
@@ -142,7 +197,7 @@ let
                 let
                   _capExists = ensure (builtins.hasAttr to0.capability capIndex) {
                     code = "E_POLICY_UNKNOWN_CAPABILITY";
-                    site = null;
+                    site = siteKey;
                     path = [
                       "policy"
                       "rules"
@@ -164,7 +219,7 @@ let
         else
           throwError {
             code = "E_POLICY_RULE_TO_SHAPE";
-            site = null;
+            site = siteKey;
             path = [
               "policy"
               "rules"
@@ -173,7 +228,7 @@ let
             ];
             message = "invalid rule.to";
             hints = [
-              "Use { external = \"default\"; } for external targets."
+              "Use { external = \"<uplink-or-overlay-name>\"; } for external targets."
               "Or use { kind = \"tenant\"; name = \"...\"; } for tenant targets."
             ];
           };
@@ -209,7 +264,7 @@ let
     lib.sort cmp rules;
 
   normalizeNatIngress =
-    policy:
+    siteKey: uplinks: policy:
     let
       catalog = policy.catalog or { };
       services = catalog.services or [ ];
@@ -227,18 +282,82 @@ let
       nat0 = policy.nat or { };
       ingress0 = nat0.ingress or [ ];
 
+      normalizeFromExternal =
+        idx: n:
+        let
+          ext = n.fromExternal or null;
+
+          _present = ensure (ext != null) {
+            code = "E_NAT_INGRESS_MISSING_FROM_EXTERNAL";
+            site = siteKey;
+            path = [
+              "policy"
+              "nat"
+              "ingress"
+              idx
+              "fromExternal"
+            ];
+            message = "nat.ingress[].fromExternal is required (no implicit default uplink)";
+            hints = [ "Set fromExternal to an explicit uplink name (e.g. \"wan\")." ];
+          };
+
+          _shape = ensure (builtins.isString ext && ext != "") {
+            code = "E_NAT_INGRESS_FROM_EXTERNAL_SHAPE";
+            site = siteKey;
+            path = [
+              "policy"
+              "nat"
+              "ingress"
+              idx
+              "fromExternal"
+            ];
+            message = "nat.ingress[].fromExternal must be a non-empty string";
+            hints = [ "Set fromExternal = \"<uplink-name>\"." ];
+          };
+
+          _noDefault = ensure (ext != "default") {
+            code = "E_NAT_INGRESS_DEFAULT_FORBIDDEN";
+            site = siteKey;
+            path = [
+              "policy"
+              "nat"
+              "ingress"
+              idx
+              "fromExternal"
+            ];
+            message = "the keyword \"default\" must not be used for external routing";
+            hints = [ "Replace fromExternal = \"default\" with an explicit uplink name (e.g. \"wan\")." ];
+          };
+
+          _exists = ensure (builtins.elem ext uplinks) {
+            code = "E_NAT_INGRESS_UNKNOWN_UPLINK";
+            site = siteKey;
+            path = [
+              "policy"
+              "nat"
+              "ingress"
+              idx
+              "fromExternal"
+            ];
+            message = "nat.ingress references unknown uplink '${ext}'";
+            hints = [ "Declare topology.nodes.<core>.uplinks.${ext} with ipv4/ipv6 prefixes." ];
+          };
+        in
+        ext;
+
       expandOne =
-        n:
+        idx: n:
         let
           svcRef = n.toService or null;
 
           _shape = ensure (svcRef != null && svcRef ? name) {
             code = "E_NAT_INGRESS_SHAPE";
-            site = null;
+            site = siteKey;
             path = [
               "policy"
               "nat"
               "ingress"
+              idx
             ];
             message = "nat.ingress entry must reference toService.name";
             hints = [ "Set nat.ingress[].toService.name = \"...\"." ];
@@ -248,25 +367,30 @@ let
 
           _exists = ensure (builtins.elem svcName serviceNames) {
             code = "E_POLICY_UNKNOWN_SERVICE";
-            site = null;
+            site = siteKey;
             path = [
               "policy"
               "nat"
               "ingress"
+              idx
+              "toService"
+              "name"
             ];
             message = "nat.ingress references unknown service '${svcName}'";
             hints = [ "Declare service '${svcName}' under policy.catalog.services." ];
           };
+
+          fromExternal = normalizeFromExternal idx n;
         in
         {
-          fromExternal = n.fromExternal or "default";
+          inherit fromExternal;
           toService = {
             kind = "service";
             name = svcName;
           };
         };
 
-      expanded = map expandOne ingress0;
+      expanded = lib.imap0 expandOne ingress0;
 
       _uniqNat = assertUnique "nat ingress service" (map (e: e.toService.name) expanded);
 
@@ -276,7 +400,7 @@ let
         svcName:
         ensure (builtins.elem svcName ingressNames) {
           code = "E_NAT_EXPOSED_MISSING_INGRESS";
-          site = null;
+          site = siteKey;
           path = [
             "policy"
             "nat"

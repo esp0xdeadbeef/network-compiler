@@ -21,8 +21,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -32,9 +30,15 @@
       nodes = {
         s-router-core = {
           role = "core";
-          upstreams = {
-            isp-a = { };
-            isp-b = { };
+          uplinks = {
+            isp-a = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
+            isp-b = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 

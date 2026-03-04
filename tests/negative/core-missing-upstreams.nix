@@ -21,8 +21,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -32,7 +30,6 @@
       nodes = {
         s-router-core = {
           role = "core";
-
         };
 
         s-router-policy = {

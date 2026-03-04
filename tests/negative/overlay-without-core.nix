@@ -21,8 +21,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -33,6 +31,7 @@
         name = "east-west";
         peerSite = "default.other";
         terminateOn = "s-router-core";
+        mustTraverse = [ "policy" ];
       }
     ];
 

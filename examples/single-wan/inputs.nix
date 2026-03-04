@@ -37,11 +37,6 @@
     };
 
     policy = {
-      external = {
-        wantDefault = true;
-        wantFullTables = false;
-      };
-
       catalog.services = [
         {
           kind = "service";
@@ -95,7 +90,7 @@
 
       nat.ingress = [
         {
-          fromExternal = "default";
+          fromExternal = "wan";
           toService = {
             kind = "service";
             name = "external-jump-host";
@@ -133,14 +128,14 @@
           action = "deny";
         }
         {
-          id = "allow-clients-to-external-any";
+          id = "allow-clients-to-wan-any";
           priority = 200;
           from = {
             kind = "tenant";
             name = "clients";
           };
           to = {
-            external = "default";
+            external = "wan";
           };
           proto = [ "any" ];
           action = "allow";
@@ -165,8 +160,11 @@
       nodes = {
         s-router-core = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            wan = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 

@@ -21,9 +21,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
-
       catalog.services = [
         {
           kind = "service";
@@ -55,8 +52,11 @@
       nodes = {
         s-router-core = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            wan = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 

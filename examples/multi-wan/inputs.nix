@@ -28,8 +28,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -39,14 +37,20 @@
       nodes = {
         s-router-core-isp-a = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            isp-a = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
         s-router-core-isp-b = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            isp-b = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 
@@ -125,8 +129,6 @@
     ];
 
     policy = {
-      external.wantDefault = true;
-      external.wantFullTables = false;
       catalog.services = [ ];
       nat.ingress = [ ];
       rules = [ ];
@@ -136,14 +138,20 @@
       nodes = {
         s-router-core-isp-a = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            isp-a = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
         s-router-core-isp-b = {
           role = "core";
-          upstreams = {
-            default = { };
+          uplinks = {
+            isp-b = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
 

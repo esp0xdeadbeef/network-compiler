@@ -61,12 +61,192 @@ let
     in
     builtins.foldl' addOne { } keys;
 
-  normalizeUpstreams =
-    u:
+  parseIpv4Cidr =
+    siteKey: path: cidr:
+    let
+      parts = lib.splitString "/" cidr;
+
+      _len = ensure (builtins.length parts == 2) {
+        code = "E_UPLINK_INVALID_CIDR";
+        site = siteKey;
+        path = path;
+        message = "invalid IPv4 CIDR '${toString cidr}'";
+        hints = [ "Use a.b.c.d/prefix." ];
+      };
+
+      base = builtins.elemAt parts 0;
+      prefix = lib.toInt (builtins.elemAt parts 1);
+
+      octets = lib.splitString "." base;
+
+      _octLen = ensure (builtins.length octets == 4) {
+        code = "E_UPLINK_INVALID_IPV4";
+        site = siteKey;
+        path = path;
+        message = "invalid IPv4 address '${base}'";
+        hints = [ "Use four octets a.b.c.d." ];
+      };
+
+      toOctet =
+        s:
+        let
+          v = lib.toInt s;
+        in
+        ensure (0 <= v && v <= 255) {
+          code = "E_UPLINK_INVALID_IPV4";
+          site = siteKey;
+          path = path;
+          message = "IPv4 octet out of range in '${base}'";
+          hints = [ "Each octet must be 0..255." ];
+        };
+
+      _ = toOctet (builtins.elemAt octets 0);
+      _1 = toOctet (builtins.elemAt octets 1);
+      _2 = toOctet (builtins.elemAt octets 2);
+      _3 = toOctet (builtins.elemAt octets 3);
+
+      _pref = ensure (0 <= prefix && prefix <= 32) {
+        code = "E_UPLINK_INVALID_PREFIX";
+        site = siteKey;
+        path = path;
+        message = "invalid IPv4 prefix in '${cidr}'";
+        hints = [ "Use /0..../32." ];
+      };
+    in
+    true;
+
+  parseIpv6Cidr =
+    siteKey: path: cidr:
+    let
+      _parsed = lib.network.ipv6.fromString cidr;
+    in
+    true;
+
+  validateOnePrefix =
+    siteKey: path: cidr:
+    if lib.hasInfix ":" cidr then parseIpv6Cidr siteKey path cidr else parseIpv4Cidr siteKey path cidr;
+
+  normalizeUplinksForNode =
+    siteKey: nodeName: u:
     if u == null then
       [ ]
     else if builtins.isAttrs u then
-      map (k: { name = k; }) (lib.sort builtins.lessThan (builtins.attrNames u))
+      let
+        names = lib.sort builtins.lessThan (builtins.attrNames u);
+
+        _uniq = assertUnique "uplink name" names;
+
+        one =
+          name:
+          let
+            v = u.${name};
+
+            _shape = ensure (builtins.isAttrs v) {
+              code = "E_UPLINK_ENTRY_SHAPE";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+              ];
+              message = "uplink '${name}' must be an attrset";
+              hints = [ "Use uplinks.${name} = { ipv4 = [\"...\"]; ipv6 = [\"...\"]; }." ];
+            };
+
+            ipv4 = v.ipv4 or [ ];
+            ipv6 = v.ipv6 or [ ];
+
+            _v4shape = ensure (builtins.isList ipv4 && builtins.all builtins.isString ipv4) {
+              code = "E_UPLINK_PREFIX_SHAPE";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+                "ipv4"
+              ];
+              message = "uplink.ipv4 must be a list of CIDR strings";
+              hints = [ "Use ipv4 = [ \"0.0.0.0/0\" \"203.0.113.0/24\" ]." ];
+            };
+
+            _v6shape = ensure (builtins.isList ipv6 && builtins.all builtins.isString ipv6) {
+              code = "E_UPLINK_PREFIX_SHAPE";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+                "ipv6"
+              ];
+              message = "uplink.ipv6 must be a list of CIDR strings";
+              hints = [ "Use ipv6 = [ \"::/0\" \"2001:db8::/32\" ]." ];
+            };
+
+            _nonEmpty = ensure (ipv4 != [ ] || ipv6 != [ ]) {
+              code = "E_UPLINK_PREFIX_EMPTY";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+              ];
+              message = "uplink must include at least one ipv4 and/or ipv6 prefix";
+              hints = [ "Set ipv4 and/or ipv6 to a non-empty list of CIDR prefixes." ];
+            };
+
+            _v4ok = builtins.foldl' (
+              acc: p:
+              acc
+              && validateOnePrefix siteKey [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+                "ipv4"
+              ] p
+            ) true ipv4;
+
+            _v6ok = builtins.foldl' (
+              acc: p:
+              acc
+              && validateOnePrefix siteKey [
+                "topology"
+                "nodes"
+                nodeName
+                "uplinks"
+                name
+                "ipv6"
+              ] p
+            ) true ipv6;
+
+            _forced = builtins.deepSeq {
+              inherit
+                _shape
+                _v4shape
+                _v6shape
+                _nonEmpty
+                _v4ok
+                _v6ok
+                ;
+            } true;
+          in
+          if _forced then
+            {
+              inherit name ipv4 ipv6;
+            }
+          else
+            null;
+      in
+      if _uniq then map one names else map one names
     else
       [ ];
 
@@ -318,6 +498,49 @@ let
       _addrSafe = validateSite siteKey declared;
       _topoValid = validateTopology siteKey topo;
 
+      nodes = topo.nodes or { };
+      nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
+
+      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
+
+      overlays = normalizeTransportOverlays siteKey topo declared;
+      overlayNames = map (o: o.name) overlays;
+
+      coreUplinks = lib.listToAttrs (
+        map (n: {
+          name = n;
+          value =
+            let
+              us = normalizeUplinksForNode siteKey n (nodes.${n}.uplinks or null);
+
+              _required = ensure (builtins.length us > 0) {
+                code = "E_CORE_UPLINKS_REQUIRED";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "nodes"
+                  n
+                  "uplinks"
+                ];
+                message = "core node '${n}' must define at least one uplink";
+                hints = [
+                  "Set topology.nodes.${n}.uplinks = { wan = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+                ];
+              };
+            in
+            if _required then us else us;
+        }) coreNodes
+      );
+
+      uplinkNames = lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes);
+
+      externals = lib.unique (uplinkNames ++ overlayNames);
+
+      totalUplinks = builtins.foldl' (
+        acc: n: acc + (builtins.length (coreUplinks.${n} or [ ]))
+      ) 0 coreNodes;
+      anyMultiWan = totalUplinks > 1;
+
       catalog = policy.catalog or { };
       services = catalog.services or [ ];
       serviceNames = map (s: s.name) services;
@@ -336,47 +559,12 @@ let
       _uniqRuleIds = assertUnique "rule id" (lib.filter (x: x != null) ruleIds);
 
       normalizedRules0 = lib.imap0 (
-        idx: r: normalizeRuleWithProvenance tenantNames capIndex idx r
+        idx: r: normalizeRuleWithProvenance siteKey externals tenantNames capIndex idx r
       ) rules0;
 
       normalizedRules = sortRules normalizedRules0;
 
-      ingressExpanded = normalizeNatIngress policy;
-
-      nodes = topo.nodes or { };
-      nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
-
-      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
-
-      coreUpstreams = lib.listToAttrs (
-        map (n: {
-          name = n;
-          value =
-            let
-              us = normalizeUpstreams (nodes.${n}.upstreams or null);
-
-              _required = ensure (builtins.length us > 0) {
-                code = "E_CORE_UPSTREAMS_REQUIRED";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  n
-                  "upstreams"
-                ];
-                message = "core node '${n}' must define at least one upstream";
-                hints = [
-                  "Set topology.nodes.${n}.upstreams = { default = {}; }."
-                ];
-              };
-            in
-            if _required then us else us;
-        }) coreNodes
-      );
-
-      allUpstreamCounts = map (n: builtins.length (coreUpstreams.${n} or [ ])) coreNodes;
-
-      anyMultiWan = builtins.any (c: c > 1) allUpstreamCounts;
+      ingressExpanded = normalizeNatIngress siteKey uplinkNames policy;
 
       natModel = {
         enabled = builtins.length ingressExpanded > 0;
@@ -474,10 +662,6 @@ let
         }) nodeNamesSorted
       );
 
-      overlays = normalizeTransportOverlays siteKey topo declared;
-
-      overlayNames = map (o: o.name) overlays;
-
       overlayHasExplicitAllow =
         ovName:
         builtins.any (
@@ -530,9 +714,9 @@ let
 
         units = unitIsolation;
 
-        upstreams = {
+        uplinks = {
           multiWan = anyMultiWan;
-          cores = coreUpstreams;
+          cores = coreUplinks;
         };
 
         inherit communicationContract;
@@ -548,9 +732,9 @@ let
           ;
         normalizedRules = normalizedRules;
         ingressExpanded = ingressExpanded;
-        coreUpstreams = coreUpstreams;
+        coreUplinks = coreUplinks;
         overlays = overlays;
-        overlayNames = overlayNames;
+        externals = externals;
         _overlayPolicyRequired = _overlayPolicyRequired;
       } true;
     in

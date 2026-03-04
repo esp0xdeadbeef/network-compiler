@@ -37,11 +37,6 @@
     };
 
     policy = {
-      external = {
-        wantDefault = true;
-        wantFullTables = false;
-      };
-
       catalog.services = [
         {
           kind = "service";

@@ -68,11 +68,6 @@
           }
         ];
 
-        external = {
-          wantDefault = false;
-          wantFullTables = false;
-        };
-
         nat.ingress = [ ];
 
         rules = [
@@ -111,8 +106,11 @@
         nodes = {
           s-router-core = {
             role = "core";
-            upstreams = {
-              default = { };
+            uplinks = {
+              wan = {
+                ipv4 = [ "0.0.0.0/0" ];
+                ipv6 = [ "::/0" ];
+              };
             };
           };
 

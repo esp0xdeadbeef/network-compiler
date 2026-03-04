@@ -95,7 +95,7 @@
 
       nat.ingress = [
         {
-          fromExternal = "default";
+          fromExternal = "wan";
           toService = {
             kind = "service";
             name = "external-jump-host";
@@ -133,15 +133,18 @@
           action = "deny";
         }
         {
-          id = "allow-clients-to-external-any";
+          id = "allow-clients-to-wan";
           priority = 200;
+
           from = {
             kind = "tenant";
             name = "clients";
           };
+
           to = {
-            external = "default";
+            external = "wan";
           };
+
           proto = [ "any" ];
           action = "allow";
         }
@@ -163,19 +166,34 @@
 
     topology = {
       nodes = {
-        s-router-core-wan = {
-          role = "core";
-          upstreams = {
-            default = { };
-          };
-        };
         s-router-core-nebula = {
           role = "core";
 
-          upstreams = {
-            default = {
-              ipv4 = "100.64.100.0/24";
-              ipv6 = "fd42:dead:beef:fffe::/64";
+          uplinks = {
+            nebula = {
+              ipv4 = [
+                "100.64.100.0/24"
+              ];
+
+              ipv6 = [
+                "fd42:dead:beef:fffe::/64"
+              ];
+            };
+          };
+        };
+
+        s-router-core-wan = {
+          role = "core";
+
+          uplinks = {
+            wan = {
+              ipv4 = [
+                "0.0.0.0/0"
+              ];
+
+              ipv6 = [
+                "::/0"
+              ];
             };
           };
         };

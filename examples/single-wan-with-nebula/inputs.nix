@@ -128,18 +128,15 @@
           action = "deny";
         }
         {
-          id = "allow-clients-to-wan";
+          id = "allow-clients-to-wan-any";
           priority = 200;
-
           from = {
             kind = "tenant";
             name = "clients";
           };
-
           to = {
             external = "wan";
           };
-
           proto = [ "any" ];
           action = "allow";
         }
@@ -161,34 +158,21 @@
 
     topology = {
       nodes = {
-        s-router-core-nebula = {
+        s-router-core-wan = {
           role = "core";
-
           uplinks = {
-            nebula = {
-              ipv4 = [
-                "100.64.100.0/24"
-              ];
-
-              ipv6 = [
-                "fd42:dead:beef:fffe::/64"
-              ];
+            wan = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
             };
           };
         };
-
-        s-router-core-wan = {
+        s-router-core-nebula = {
           role = "core";
-
           uplinks = {
-            wan = {
-              ipv4 = [
-                "0.0.0.0/0"
-              ];
-
-              ipv6 = [
-                "::/0"
-              ];
+            nebula = {
+              ipv4 = [ "100.64.0.0/64" ];
+              ipv6 = [ "fd42::/48" ];
             };
           };
         };

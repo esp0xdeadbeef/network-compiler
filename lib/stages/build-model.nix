@@ -1,0 +1,294 @@
+{ lib }:
+
+let
+  allocator = import ../allocators/pinned-allocator.nix { inherit lib; };
+
+  util = import ../correctness/util.nix { inherit lib; };
+  policyC = import ../correctness/policy.nix { inherit lib; };
+  topoC = import ../correctness/topology.nix { inherit lib; };
+  addressSafety = import ../address-safety { inherit lib; };
+
+  splitSiteKey = import ./split-site-key.nix { inherit lib; };
+  normalizeUplinksForNode = import ./normalize-uplinks.nix { inherit lib; };
+  normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
+  validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
+
+  inherit (util) assertUnique ensure;
+  inherit (policyC)
+    buildCapabilityIndex
+    normalizeRuleWithProvenance
+    sortRules
+    normalizeNatIngress
+    ;
+  inherit (topoC) validateTopology;
+  inherit (addressSafety) validateSite;
+
+in
+siteKey: declared: semantic:
+
+let
+  topo = declared.topology or { };
+  policy = declared.policy or { };
+
+  parts = splitSiteKey siteKey;
+  canonicalSiteId = "${parts.enterprise}.${parts.siteName}";
+
+  _noLegacyExternalPolicy = validateNoLegacyExternalPolicy siteKey declared;
+  _addrSafe = validateSite siteKey declared;
+  _topoValid = validateTopology siteKey topo;
+
+  nodes = topo.nodes or { };
+  nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
+
+  links0 = topo.links or [ ];
+
+  linkNodes = lib.unique (lib.concatMap (pair: pair) links0);
+
+  _noDisconnectedNodes =
+    let
+      disconnected = lib.filter (n: !(builtins.elem n linkNodes)) nodeNamesSorted;
+    in
+    if disconnected == [ ] then
+      true
+    else
+      throw (
+        builtins.toJSON {
+          code = "E_TOPOLOGY_NODE_DISCONNECTED";
+          site = siteKey;
+          nodes = disconnected;
+          message = "nodes exist in topology.nodes but are not connected by any topology.links";
+        }
+      );
+
+  coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
+
+  overlays = normalizeTransportOverlays siteKey topo declared;
+  overlayNames = map (o: o.name) overlays;
+
+  coreUplinks = lib.listToAttrs (
+    map (n: {
+      name = n;
+      value =
+        let
+          us = normalizeUplinksForNode siteKey n (nodes.${n}.uplinks or null);
+
+          _required = ensure (builtins.length us > 0) {
+            code = "E_CORE_UPLINKS_REQUIRED";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+              n
+              "uplinks"
+            ];
+            message = "core node '${n}' must define at least one uplink";
+            hints = [
+              "Set topology.nodes.${n}.uplinks = { wan = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+            ];
+          };
+        in
+        if _required then us else us;
+    }) coreNodes
+  );
+
+  uplinkNames = lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes);
+  externals = lib.unique (uplinkNames ++ overlayNames);
+
+  totalUplinks = builtins.foldl' (
+    acc: n: acc + (builtins.length (coreUplinks.${n} or [ ]))
+  ) 0 coreNodes;
+
+  anyMultiWan = totalUplinks > 1;
+
+  catalog = policy.catalog or { };
+  services = catalog.services or [ ];
+  serviceNames = map (s: s.name) services;
+  _uniqServices = assertUnique "service name" serviceNames;
+
+  tenants =
+    if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
+
+  tenantNames = map (t: t.name) tenants;
+  _uniqTenants = assertUnique "tenant name" tenantNames;
+
+  capIndex = buildCapabilityIndex policy;
+
+  rules0 = policy.rules or [ ];
+  ruleIds = map (r: if r ? id then r.id else null) rules0;
+  _uniqRuleIds = assertUnique "rule id" (lib.filter (x: x != null) ruleIds);
+
+  normalizedRules0 = lib.imap0 (
+    idx: r: normalizeRuleWithProvenance siteKey externals tenantNames capIndex idx r
+  ) rules0;
+
+  normalizedRules = sortRules normalizedRules0;
+
+  ingressExpanded = normalizeNatIngress siteKey uplinkNames policy;
+
+  natModel = {
+    enabled = builtins.length ingressExpanded > 0;
+    ingress = ingressExpanded;
+  };
+
+  communicationContract = {
+    allowedRelations = normalizedRules;
+    nat = natModel;
+  };
+
+  overlayHasExplicitAllow =
+    ovName:
+    builtins.any (
+      r: (r.action or "deny") == "allow" && (r.to ? external) && r.to.external == ovName
+    ) normalizedRules;
+
+  _overlayPolicyRequired =
+    if overlays == [ ] then
+      true
+    else
+      builtins.all (
+        ov:
+        ensure (overlayHasExplicitAllow ov.name) {
+          code = "E_OVERLAY_POLICY_MISSING";
+          site = siteKey;
+          path = [
+            "transport"
+            "overlays"
+          ];
+          message = "overlay '${ov.name}' requires explicit allow rule to external='${ov.name}'";
+          hints = [
+            "Add policy.rules entry allowing traffic to external='${ov.name}'."
+          ];
+        }
+      ) overlays;
+
+  localPool =
+    if semantic ? addressPools && semantic.addressPools ? local then
+      semantic.addressPools.local
+    else
+      null;
+
+  p2pPool =
+    if semantic ? addressPools && semantic.addressPools ? p2p then semantic.addressPools.p2p else null;
+
+  allocLoopV4 = allocator.mkIPv4Allocator localPool;
+  allocLoopV6 = allocator.mkIPv6Allocator localPool;
+
+  loopbacks = lib.listToAttrs (
+    lib.imap0 (idx: name: {
+      name = name;
+      value = {
+        ipv4 = allocLoopV4 idx;
+        ipv6 = allocLoopV6 idx;
+      };
+    }) nodeNamesSorted
+  );
+
+  allocP2pV4 = allocator.mkIPv4Allocator p2pPool;
+  allocP2pV6 = allocator.mkIPv6Allocator p2pPool;
+
+  adjacencyAddrs = lib.imap0 (
+    idx: pair:
+    let
+      a = builtins.elemAt pair 0;
+      b = builtins.elemAt pair 1;
+    in
+    {
+      endpoints = [
+        {
+          unit = a;
+          local = {
+            ipv4 = allocP2pV4 (idx * 2);
+            ipv6 = allocP2pV6 (idx * 2);
+          };
+        }
+        {
+          unit = b;
+          local = {
+            ipv4 = allocP2pV4 (idx * 2 + 1);
+            ipv6 = allocP2pV6 (idx * 2 + 1);
+          };
+        }
+      ];
+    }
+  ) links0;
+
+  mkUnitIsolation =
+    n:
+    let
+      role = nodes.${n}.role or null;
+      isolated = builtins.elem role [
+        "core"
+        "access"
+      ];
+    in
+    if isolated then
+      {
+        containers = [ "isolated-0" ];
+        isolated = true;
+      }
+    else
+      {
+        containers = [ "default" ];
+        isolated = false;
+      };
+
+  unitIsolation = lib.listToAttrs (
+    map (n: {
+      name = n;
+      value = mkUnitIsolation n;
+    }) nodeNamesSorted
+  );
+
+  model = {
+    id = canonicalSiteId;
+    enterprise = semantic.enterprise or "default";
+
+    domains = {
+      tenants = tenants;
+    };
+
+    attachment = semantic.attachments or [ ];
+
+    transit = {
+      ordering = links0;
+      adjacencies = adjacencyAddrs;
+    };
+
+    transport = {
+      overlays = overlays;
+    };
+
+    addressPools = semantic.addressPools or { };
+
+    routerLoopbacks = loopbacks;
+
+    units = unitIsolation;
+
+    uplinks = {
+      multiWan = anyMultiWan;
+      cores = coreUplinks;
+    };
+
+    inherit communicationContract;
+  };
+
+  _forced = builtins.deepSeq {
+    inherit
+      _noLegacyExternalPolicy
+      _addrSafe
+      _topoValid
+      _noDisconnectedNodes
+      _uniqServices
+      _uniqTenants
+      _uniqRuleIds
+      _overlayPolicyRequired
+      ;
+    normalizedRules = normalizedRules;
+    ingressExpanded = ingressExpanded;
+    coreUplinks = coreUplinks;
+    overlays = overlays;
+    externals = externals;
+  } true;
+
+in
+if _forced then model else model

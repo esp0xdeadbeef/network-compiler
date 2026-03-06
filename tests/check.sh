@@ -1,3 +1,4 @@
+# ./tests/check.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -17,6 +18,7 @@ negative_nix_cases=(
   "$ROOT/tests/negative/exposed-service-without-ingress.nix"
   "$ROOT/tests/negative/core-missing-upstreams.nix"
   "$ROOT/tests/negative/multi-wan-missing-upstream-selector.nix"
+  "$ROOT/tests/negative/nat-ingress-without-custom-core.nix"
   "$ROOT/tests/negative/overlay-without-core.nix"
   "$ROOT/tests/negative/overlay-on-non-core.nix"
   "$ROOT/tests/negative/overlay-defined-without-policy-rules.nix"

@@ -167,12 +167,18 @@
             };
           };
         };
+
         s-router-core-nebula = {
           role = "core";
           uplinks = {
             nebula = {
               ipv4 = [ "100.64.0.0/64" ];
               ipv6 = [ "fd42::/48" ];
+
+              ingressSubject = {
+                kind = "tenant";
+                name = "admin";
+              };
             };
           };
         };
@@ -180,9 +186,11 @@
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
+
         s-router-policy = {
           role = "policy";
         };
+
         s-router-access = {
           role = "access";
           attachments = [

@@ -13,10 +13,12 @@ else if builtins.isAttrs u then
     let
       v = u.${name};
     in
-    {
+    v
+    // {
       inherit name;
       ipv4 = v.ipv4 or [ ];
       ipv6 = v.ipv6 or [ ];
+      ingressSubject = v.ingressSubject or null;
     }
   ) names
 else

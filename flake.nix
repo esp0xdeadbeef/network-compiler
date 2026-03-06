@@ -86,7 +86,7 @@
 
             json="$(${pkgs.nix}/bin/nix eval --json --impure -f "$tmp")"
 
-            gitRev="$(${pkgs.git}/bin/git rev-parse HEAD)"
+            gitRev="$(${pkgs.git}/bin/git rev-parse HEAD 2>/dev/null || echo "unknown")"
             if ${pkgs.git}/bin/git diff --quiet && ${pkgs.git}/bin/git diff --cached --quiet; then
               gitDirty=false
             else

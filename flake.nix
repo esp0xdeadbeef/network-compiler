@@ -97,7 +97,7 @@
               --arg rev "$gitRev" \
               --argjson dirty "$gitDirty" \
               '.meta.compiler = { gitRev: $rev, gitDirty: $dirty }' \
-              | tee ./output-signed.json \
+              | tee ./output-compiler-signed.json \
               | ${pkgs.jq}/bin/jq -S
           '';
         };

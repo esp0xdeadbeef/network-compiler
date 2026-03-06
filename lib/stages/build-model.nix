@@ -113,6 +113,54 @@ let
 
   capIndex = buildCapabilityIndex policy;
 
+  _validateIngressSubjects =
+    let
+      allUplinks = lib.concatMap (n: coreUplinks.${n} or [ ]) coreNodes;
+
+      check =
+        u:
+        let
+          subj = u.ingressSubject or null;
+        in
+        if subj == null then
+          true
+        else
+          let
+            _kind =
+              ensure (subj.kind or null) == "tenant" {
+                code = "E_UPLINK_INGRESS_SUBJECT_KIND";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "nodes"
+                  u.name
+                  "uplinks"
+                  "ingressSubject"
+                  "kind"
+                ];
+                message = "uplink.ingressSubject.kind must be 'tenant'";
+                hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
+              };
+
+            _exists = ensure (builtins.elem subj.name tenantNames) {
+              code = "E_UPLINK_INGRESS_SUBJECT_UNKNOWN_TENANT";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                u.name
+                "uplinks"
+                "ingressSubject"
+                "name"
+              ];
+              message = "uplink ingressSubject references unknown tenant '${subj.name}'";
+              hints = [ "Declare tenant '${subj.name}' under ownership.prefixes." ];
+            };
+          in
+          true;
+    in
+    builtins.all check allUplinks;
+
   rules0 = policy.rules or [ ];
   ruleIds = map (r: if r ? id then r.id else null) rules0;
   _uniqRuleIds = assertUnique "rule id" (lib.filter (x: x != null) ruleIds);
@@ -282,6 +330,7 @@ let
       _uniqTenants
       _uniqRuleIds
       _overlayPolicyRequired
+      _validateIngressSubjects
       ;
     normalizedRules = normalizedRules;
     ingressExpanded = ingressExpanded;

@@ -124,11 +124,47 @@ let
     siteKey: path: cidr:
     if lib.hasInfix ":" cidr then parseIpv6Cidr siteKey path cidr else parseIpv4Cidr siteKey path cidr;
 
+  validateIngressSubject =
+    siteKey: path: ingressSubject:
+    if ingressSubject == null then
+      true
+    else
+      let
+        _shape = ensure (builtins.isAttrs ingressSubject) {
+          code = "E_UPLINK_INGRESS_SUBJECT_SHAPE";
+          site = siteKey;
+          path = path;
+          message = "uplink.ingressSubject must be an attrset or null";
+          hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
+        };
+
+        kind = ingressSubject.kind or null;
+        name = ingressSubject.name or null;
+
+        _kind = ensure (kind != null) {
+          code = "E_UPLINK_INGRESS_SUBJECT_KIND";
+          site = siteKey;
+          path = path ++ [ "kind" ];
+          message = "uplink.ingressSubject.kind is required";
+          hints = [ "Set kind = \"tenant\"." ];
+        };
+
+        _name = ensure (name != null && builtins.isString name && name != "") {
+          code = "E_UPLINK_INGRESS_SUBJECT_NAME";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "uplink.ingressSubject.name is required";
+          hints = [ "Set name = \"...\"." ];
+        };
+      in
+      true;
+
   validateUplinkPrefixes =
     siteKey: path: uplink:
     let
       ipv4 = uplink.ipv4 or [ ];
       ipv6 = uplink.ipv6 or [ ];
+      ingressSubject = uplink.ingressSubject or null;
 
       _v4shape = ensure (builtins.isList ipv4 && builtins.all builtins.isString ipv4) {
         code = "E_UPLINK_PREFIX_SHAPE";
@@ -156,6 +192,7 @@ let
 
       _v4ok = builtins.foldl' (acc: p: acc && validateOnePrefix siteKey (path ++ [ "ipv4" ]) p) true ipv4;
       _v6ok = builtins.foldl' (acc: p: acc && validateOnePrefix siteKey (path ++ [ "ipv6" ]) p) true ipv6;
+      _ingressSubjectOk = validateIngressSubject siteKey (path ++ [ "ingressSubject" ]) ingressSubject;
 
       _forced = builtins.deepSeq {
         inherit
@@ -164,6 +201,7 @@ let
           _nonEmpty
           _v4ok
           _v6ok
+          _ingressSubjectOk
           ;
       } true;
     in
@@ -206,10 +244,12 @@ let
               name
             ] v;
           in
-          {
+          v
+          // {
             inherit name;
             ipv4 = v.ipv4 or [ ];
             ipv6 = v.ipv6 or [ ];
+            ingressSubject = v.ingressSubject or null;
           }
         ) names;
       in

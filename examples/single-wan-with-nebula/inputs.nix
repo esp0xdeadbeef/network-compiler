@@ -29,7 +29,7 @@
         }
         {
           kind = "tenant";
-          name = "clients";
+          name = "client";
           ipv4 = "10.20.20.0/24";
           ipv6 = "fd42:dead:beef:20::/64";
         }
@@ -114,11 +114,11 @@
           action = "allow";
         }
         {
-          id = "deny-clients-to-mgmt-dns";
+          id = "deny-client-to-mgmt-dns";
           priority = 90;
           from = {
             kind = "tenant";
-            name = "clients";
+            name = "client";
           };
           to = {
             kind = "tenant";
@@ -128,11 +128,11 @@
           action = "deny";
         }
         {
-          id = "allow-clients-to-wan-any";
+          id = "allow-client-to-wan-any";
           priority = 200;
           from = {
             kind = "tenant";
-            name = "clients";
+            name = "client";
           };
           to = {
             external = "wan";
@@ -141,11 +141,11 @@
           action = "allow";
         }
         {
-          id = "deny-clients-to-mgmt";
+          id = "deny-client-to-mgmt";
           priority = 150;
           from = {
             kind = "tenant";
-            name = "clients";
+            name = "client";
           };
           to = {
             kind = "tenant";
@@ -191,20 +191,30 @@
           role = "policy";
         };
 
-        s-router-access = {
+        s-router-access-mgmt = {
           role = "access";
           attachments = [
             {
               kind = "tenant";
               name = "mgmt";
             }
+          ];
+        };
+        s-router-access-admin = {
+          role = "access";
+          attachments = [
             {
               kind = "tenant";
               name = "admin";
             }
+          ];
+        };
+        s-router-access-client = {
+          role = "access";
+          attachments = [
             {
               kind = "tenant";
-              name = "clients";
+              name = "client";
             }
           ];
         };
@@ -225,7 +235,16 @@
         ]
         [
           "s-router-policy"
-          "s-router-access"
+          "s-router-access-client"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access-admin"
+        ]
+
+        [
+          "s-router-policy"
+          "s-router-access-mgmt"
         ]
       ];
     };

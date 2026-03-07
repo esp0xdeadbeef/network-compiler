@@ -158,7 +158,7 @@
 
     topology = {
       nodes = {
-        s-router-core = {
+        s-router-core-wan = {
           role = "core";
           uplinks = {
             wan = {
@@ -167,27 +167,36 @@
             };
           };
         };
-
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
         s-router-policy = {
           role = "policy";
         };
-        s-router-access = {
+        s-router-access-mgmt = {
           role = "access";
           attachments = [
             {
               kind = "tenant";
               name = "mgmt";
             }
+          ];
+        };
+        s-router-access-admin = {
+          role = "access";
+          attachments = [
             {
               kind = "tenant";
               name = "admin";
             }
+          ];
+        };
+        s-router-access-client = {
+          role = "access";
+          attachments = [
             {
               kind = "tenant";
-              name = "clients";
+              name = "client";
             }
           ];
         };
@@ -195,7 +204,7 @@
 
       links = [
         [
-          "s-router-core"
+          "s-router-core-wan"
           "s-router-upstream-selector"
         ]
         [
@@ -204,7 +213,16 @@
         ]
         [
           "s-router-policy"
-          "s-router-access"
+          "s-router-access-client"
+        ]
+        [
+          "s-router-policy"
+          "s-router-access-admin"
+        ]
+
+        [
+          "s-router-policy"
+          "s-router-access-mgmt"
         ]
       ];
     };

@@ -1,4 +1,3 @@
-# ./tests/check.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -47,5 +46,45 @@ for name in "${positive_cases[@]}"; do
     | jq -S 'del(.meta)' \
     > /dev/null
 done
+
+echo "=== regression tests ==="
+single_wan_json="$(mktemp)"
+trap 'rm -f "$single_wan_json"' EXIT
+
+nix run "$ROOT#compile" -- "$ROOT/examples/single-wan/inputs.nix" > "$single_wan_json"
+
+jq -e '
+  [
+    .sites.esp0xdeadbeef."site-a".communicationContract.allowedRelations[]
+    | select(.source.id == "allow-wan-to-jump-host")
+    | select(.from == { kind: "external", name: "wan" })
+    | select(.to == { kind: "service", name: "jump-host" })
+  ] | length == 1
+' "$single_wan_json" > /dev/null
+
+jq -e '
+  [
+    .sites.esp0xdeadbeef."site-a".communicationContract.allowedRelations[]
+    | select(.source.id == "allow-wan-to-admin-web")
+    | select(.from == { kind: "external", name: "wan" })
+    | select(.to == { kind: "service", name: "admin-web" })
+  ] | length == 1
+' "$single_wan_json" > /dev/null
+
+jq -e '
+  [
+    .sites.esp0xdeadbeef."site-a".communicationContract.allowedRelations[]
+    | select(.source.id == "allow-wan-to-mgmt-icmp")
+    | select(.from == { kind: "external", name: "wan" })
+    | select(.to == { kind: "tenant", name: "mgmt" })
+  ] | length == 1
+' "$single_wan_json" > /dev/null
+
+jq -e '
+  [
+    .sites.esp0xdeadbeef."site-a".communicationContract.allowedRelations[]
+    | select(.from == { kind: "tenant-set", members: [] })
+  ] | length == 0
+' "$single_wan_json" > /dev/null
 
 echo "all tests passed"

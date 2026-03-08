@@ -93,8 +93,8 @@ let
       }) services
     );
 
-  normalizeTenantSubject =
-    siteKey: idx: path: tenantNames: subj:
+  normalizeSubject =
+    siteKey: idx: path: tenantNames: externals: subj:
     let
       _shape = ensure (builtins.isAttrs subj) {
         code = "E_CONTRACT_SUBJECT_SHAPE";
@@ -102,7 +102,9 @@ let
         path = path;
         message = "subject must be an attrset";
         hints = [
-          "Use { kind = \"tenant\"; name = \"...\"; } or { kind = \"tenant-set\"; members = [ ... ]; }."
+          "Use { kind = \"tenant\"; name = \"...\"; }."
+          "Or use { kind = \"tenant-set\"; members = [ ... ]; }."
+          "Or use { kind = \"external\"; name = \"wan\"; }."
         ];
       };
 
@@ -113,13 +115,18 @@ let
           (builtins.elem kind [
             "tenant"
             "tenant-set"
+            "external"
           ])
           {
             code = "E_CONTRACT_SUBJECT_KIND";
             site = siteKey;
             path = path ++ [ "kind" ];
-            message = "subject.kind must be 'tenant' or 'tenant-set'";
-            hints = [ "Use kind = \"tenant\" or kind = \"tenant-set\"." ];
+            message = "subject.kind must be 'tenant', 'tenant-set', or 'external'";
+            hints = [
+              "Use kind = \"tenant\"."
+              "Or kind = \"tenant-set\"."
+              "Or kind = \"external\"."
+            ];
           };
     in
     if kind == "tenant" then
@@ -146,7 +153,7 @@ let
         kind = "tenant";
         inherit name;
       }
-    else
+    else if kind == "tenant-set" then
       let
         members = subj.members or [ ];
 
@@ -173,6 +180,33 @@ let
       {
         kind = "tenant-set";
         inherit members;
+      }
+    else
+      let
+        name = subj.name or null;
+
+        _name = ensure (name != null && builtins.isString name && name != "") {
+          code = "E_CONTRACT_SUBJECT_NAME";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "external subject requires a non-empty name";
+          hints = [ "Set name = \"<uplink-or-overlay-name>\"." ];
+        };
+
+        _exists = ensure (builtins.elem name externals) {
+          code = "E_CONTRACT_UNKNOWN_EXTERNAL";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "relation references unknown external '${name}'";
+          hints = [
+            "Declare an uplink under topology.nodes.<core>.uplinks.<name>."
+            "Or declare a transport overlay with transport.overlays[].name."
+          ];
+        };
+      in
+      {
+        kind = "external";
+        inherit name;
       };
 
   normalizeTarget =
@@ -226,7 +260,7 @@ let
           "tenant-set"
         ]
       then
-        normalizeTenantSubject siteKey idx basePath tenantNames target
+        normalizeSubject siteKey idx basePath tenantNames externals target
       else if kind == "service" then
         let
           name = target.name or null;
@@ -289,12 +323,12 @@ let
   normalizeRelationWithProvenance =
     siteKey: externals: tenantNames: serviceIndex: trafficTypeIndex: idx: relation:
     let
-      from = normalizeTenantSubject siteKey idx [
+      from = normalizeSubject siteKey idx [
         "communicationContract"
         "relations"
         idx
         "from"
-      ] tenantNames (relation.from or { });
+      ] tenantNames externals (relation.from or { });
 
       to = normalizeTarget siteKey idx tenantNames serviceIndex externals (relation.to or null);
 

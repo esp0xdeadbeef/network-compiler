@@ -42,6 +42,7 @@ let
 
   ownership = site.ownership or { };
   prefixes = ownership.prefixes or [ ];
+  endpoints = ownership.endpoints or [ ];
 
   isTenantPrefix = p: builtins.isAttrs p && (p.kind or null) == "tenant" && (p.name or null) != null;
 
@@ -50,6 +51,13 @@ let
     ipv4 = p.ipv4 or null;
     ipv6 = p.ipv6 or null;
   }) (lib.filter isTenantPrefix prefixes);
+
+  isHostEndpoint = e: builtins.isAttrs e && (e.kind or null) == "host" && (e.name or null) != null;
+
+  hosts = map (e: {
+    name = e.name;
+    tenant = e.tenant or null;
+  }) (lib.filter isHostEndpoint endpoints);
 
   segments = {
     tenants = tenants;
@@ -122,7 +130,11 @@ in
 {
   enterprise = site.enterprise or "default";
 
-  inherit segments attachments;
+  inherit
+    segments
+    attachments
+    hosts
+    ;
 
   transit = {
     links = transitLinks;

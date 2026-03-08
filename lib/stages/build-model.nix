@@ -13,7 +13,7 @@ let
   normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
 
-  inherit (util) assertUnique ensure;
+  inherit (util) assertUnique ensure throwError;
   inherit (policyC)
     buildTrafficTypeIndex
     buildServiceIndex
@@ -122,6 +122,96 @@ let
   tenantNames = map (t: t.name) tenants;
   _uniqTenants = assertUnique "tenant name" tenantNames;
 
+  attachments = semantic.attachments or [ ];
+
+  tenantAccessUnits = builtins.foldl' (
+    acc: attachment:
+    let
+      segment = attachment.segment or "";
+      m = builtins.match "tenants:(.*)" segment;
+    in
+    if m == null then
+      acc
+    else
+      let
+        tenantName = builtins.elemAt m 0;
+        units0 = acc.${tenantName} or [ ];
+      in
+      acc
+      // {
+        "${tenantName}" = units0 ++ [ attachment.unit ];
+      }
+  ) { } attachments;
+
+  normalizedHosts0 = semantic.hosts or [ ];
+  hostNames = map (h: h.name) normalizedHosts0;
+  _uniqHosts = assertUnique "host name" hostNames;
+
+  resolveHostUnit =
+    host:
+    let
+      tenant = host.tenant or null;
+
+      _tenantPresent = ensure (tenant != null && builtins.isString tenant && tenant != "") {
+        code = "E_HOST_TENANT_REQUIRED";
+        site = siteKey;
+        path = [
+          "ownership"
+          "endpoints"
+          host.name or "unknown"
+          "tenant"
+        ];
+        message = "host '${host.name or "unknown"}' must define tenant";
+        hints = [ "Set ownership.endpoints[].tenant to an existing tenant name." ];
+      };
+
+      _tenantExists = ensure (builtins.elem tenant tenantNames) {
+        code = "E_HOST_UNKNOWN_TENANT";
+        site = siteKey;
+        path = [
+          "ownership"
+          "endpoints"
+          host.name or "unknown"
+          "tenant"
+        ];
+        message = "host '${host.name or "unknown"}' references unknown tenant '${toString tenant}'";
+        hints = [ "Declare tenant '${toString tenant}' under ownership.prefixes." ];
+      };
+
+      unitsForTenant = lib.sort builtins.lessThan (tenantAccessUnits.${tenant} or [ ]);
+
+      _accessUnitExists = ensure (unitsForTenant != [ ]) {
+        code = "E_HOST_NO_ACCESS_UNIT";
+        site = siteKey;
+        path = [
+          "ownership"
+          "endpoints"
+          host.name or "unknown"
+        ];
+        message = "host '${host.name or "unknown"}' belongs to tenant '${tenant}' but no access unit is attached to that tenant";
+        hints = [
+          "Attach tenant '${tenant}' to an access node under topology.nodes.<name>.attachments."
+        ];
+      };
+    in
+    builtins.elemAt unitsForTenant 0;
+
+  hosts = builtins.listToAttrs (
+    map (
+      host:
+      let
+        unit = resolveHostUnit host;
+      in
+      {
+        name = host.name;
+        value = {
+          tenant = host.tenant;
+          inherit unit;
+        };
+      }
+    ) normalizedHosts0
+  );
+
   trafficTypeIndex = buildTrafficTypeIndex communicationContractDeclared;
   serviceIndex = buildServiceIndex communicationContractDeclared;
 
@@ -153,6 +243,28 @@ let
         message = "service '${svc.name or "unknown"}' references unknown trafficType '${toString trafficTypeName}'";
         hints = [ "Declare the traffic type under communicationContract.trafficTypes." ];
       }
+  ) (communicationContractDeclared.services or [ ]);
+
+  _validateServiceProviders = builtins.all (
+    svc:
+    let
+      providers = svc.providers or [ ];
+    in
+    builtins.all (
+      provider:
+      ensure (builtins.hasAttr provider hosts) {
+        code = "E_CONTRACT_UNKNOWN_PROVIDER_HOST";
+        site = siteKey;
+        path = [
+          "communicationContract"
+          "services"
+          svc.name or "unknown"
+          "providers"
+        ];
+        message = "service '${svc.name or "unknown"}' references unknown provider host '${provider}'";
+        hints = [ "Declare the host under ownership.endpoints." ];
+      }
+    ) providers
   ) (communicationContractDeclared.services or [ ]);
 
   _validateIngressSubjects =
@@ -355,6 +467,8 @@ let
       tenants = tenants;
     };
 
+    hosts = hosts;
+
     attachment = semantic.attachments or [ ];
 
     transit = {
@@ -390,8 +504,10 @@ let
       _uniqTrafficTypes
       _uniqServices
       _uniqTenants
+      _uniqHosts
       _uniqRelationIds
       _validateServiceTrafficTypes
+      _validateServiceProviders
       _overlayPolicyRequired
       _validateIngressSubjects
       _hasExternalAllow
@@ -400,6 +516,7 @@ let
     coreUplinks = coreUplinks;
     overlays = overlays;
     externals = externals;
+    hosts = hosts;
   } true;
 
 in

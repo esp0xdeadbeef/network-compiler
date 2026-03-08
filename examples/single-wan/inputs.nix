@@ -241,6 +241,25 @@
         }
 
         {
+          id = "allow-wan-to-mgmt-icmp";
+
+          priority = 115;
+
+          from = {
+            kind = "external";
+            name = "wan";
+          };
+
+          to = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+
+          trafficType = "icmp";
+          action = "allow";
+        }
+
+        {
           id = "allow-wan-to-admin-web";
 
           priority = 120;

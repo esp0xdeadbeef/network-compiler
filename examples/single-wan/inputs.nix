@@ -29,137 +29,245 @@
         }
         {
           kind = "tenant";
-          name = "clients";
+          name = "client";
           ipv4 = "10.20.20.0/24";
           ipv6 = "fd42:dead:beef:20::/64";
         }
       ];
+
+      endpoints = [
+        {
+          kind = "host";
+          name = "s-sigma";
+          tenant = "mgmt";
+        }
+        {
+          kind = "host";
+          name = "web01";
+          tenant = "admin";
+        }
+      ];
     };
 
-    policy = {
-      catalog.services = [
+    communicationContract = {
+
+      trafficTypes = [
+
         {
-          kind = "service";
-          name = "dns-site";
+          name = "icmp";
           match = [
             {
-              l4 = "udp";
-              dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            }
-            {
-              l4 = "tcp";
-              dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              proto = "icmp";
+              family = "any";
             }
           ];
-          scope = "site";
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          provides = [ "resolver" ];
         }
+
         {
-          kind = "service";
-          name = "external-jump-host";
+          name = "dns";
           match = [
             {
-              l4 = "tcp";
+              proto = "udp";
+              dports = [ 53 ];
+              family = "any";
+            }
+            {
+              proto = "tcp";
+              dports = [ 53 ];
+              family = "any";
+            }
+          ];
+        }
+
+        {
+          name = "ssh";
+          match = [
+            {
+              proto = "tcp";
               dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
-          scope = "site";
-          exposure.external = true;
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
         }
+
+        {
+          name = "web";
+          match = [
+            {
+              proto = "tcp";
+              dports = [
+                80
+                443
+              ];
+              family = "any";
+            }
+          ];
+        }
+
+        {
+          name = "wireguard";
+          match = [
+            {
+              proto = "udp";
+              dports = [ 51820 ];
+              family = "any";
+            }
+          ];
+        }
+
       ];
 
-      nat.ingress = [
+      services = [
+
         {
-          fromExternal = "wan";
-          toService = {
-            kind = "service";
-            name = "external-jump-host";
-          };
+          name = "site-dns";
+          trafficType = "dns";
+          providers = [ "s-sigma" ];
         }
+
+        {
+          name = "jump-host";
+          trafficType = "ssh";
+          providers = [ "s-sigma" ];
+        }
+
+        {
+          name = "admin-web";
+          trafficType = "web";
+          providers = [ "web01" ];
+        }
+
       ];
 
-      rules = [
+      relations = [
         {
-          id = "allow-admin-to-mgmt-dns";
+          id = "allow-mgmt-internal";
+          priority = 10;
+          from = {
+            kind = "tenant-set";
+            members = [ "mgmt" ];
+          };
+          to = {
+            kind = "tenant-set";
+            members = [
+              "mgmt"
+              "admin"
+              "client"
+            ];
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+
+        {
+          id = "allow-icmp-anywhere";
+          priority = 20;
+          from = {
+            kind = "tenant-set";
+            members = [
+              "mgmt"
+              "admin"
+              "client"
+            ];
+          };
+          to = "any";
+          trafficType = "icmp";
+          action = "allow";
+        }
+
+        {
+          id = "deny-web-to-wan";
+
+          priority = 50;
+
+          from = {
+            kind = "tenant-set";
+            members = [
+              "mgmt"
+              "admin"
+              "client"
+            ];
+          };
+
+          to = {
+            kind = "external";
+            name = "wan";
+          };
+
+          trafficType = "web";
+          action = "deny";
+        }
+
+        {
+          id = "allow-tenants-to-wan";
+
           priority = 100;
+
           from = {
-            kind = "tenant";
-            name = "admin";
+            kind = "tenant-set";
+            members = [
+              "mgmt"
+              "admin"
+              "client"
+            ];
           };
+
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "external";
+            name = "wan";
           };
+
+          trafficType = "any";
           action = "allow";
         }
+
         {
-          id = "deny-clients-to-mgmt-dns";
-          priority = 90;
+          id = "allow-wan-to-jump-host";
+
+          priority = 110;
+
           from = {
-            kind = "tenant";
-            name = "clients";
+            kind = "external";
+            name = "wan";
           };
+
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "jump-host";
           };
-          action = "deny";
-        }
-        {
-          id = "allow-clients-to-wan-any";
-          priority = 200;
-          from = {
-            kind = "tenant";
-            name = "clients";
-          };
-          to = {
-            external = "wan";
-          };
-          proto = [ "any" ];
+
+          trafficType = "ssh";
           action = "allow";
         }
+
         {
-          id = "deny-clients-to-mgmt";
-          priority = 150;
+          id = "allow-wan-to-admin-web";
+
+          priority = 120;
+
           from = {
-            kind = "tenant";
-            name = "clients";
+            kind = "external";
+            name = "wan";
           };
+
           to = {
-            kind = "tenant";
-            name = "mgmt";
+            kind = "service";
+            name = "admin-web";
           };
-          action = "deny";
+
+          trafficType = "web";
+          action = "allow";
         }
       ];
     };
 
     topology = {
+
       nodes = {
+
         s-router-core-wan = {
           role = "core";
+
           uplinks = {
             wan = {
               ipv4 = [ "0.0.0.0/0" ];
@@ -167,12 +275,15 @@
             };
           };
         };
+
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
+
         s-router-policy = {
           role = "policy";
         };
+
         s-router-access-mgmt = {
           role = "access";
           attachments = [
@@ -182,6 +293,7 @@
             }
           ];
         };
+
         s-router-access-admin = {
           role = "access";
           attachments = [
@@ -191,6 +303,7 @@
             }
           ];
         };
+
         s-router-access-client = {
           role = "access";
           attachments = [
@@ -200,6 +313,7 @@
             }
           ];
         };
+
       };
 
       links = [
@@ -219,12 +333,13 @@
           "s-router-policy"
           "s-router-access-admin"
         ]
-
         [
           "s-router-policy"
           "s-router-access-mgmt"
         ]
       ];
+
     };
+
   };
 }

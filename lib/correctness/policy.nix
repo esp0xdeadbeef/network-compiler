@@ -4,253 +4,333 @@ let
   util = import ./util.nix { inherit lib; };
   inherit (util) ensure assertUnique throwError;
 
-  matchListToProto =
-    matches:
+  normalizeMatch =
+    idx: trafficTypeName: m:
     let
-      ms = if matches == null then [ ] else matches;
-
-      one =
-        m:
-        let
-          l4 = if builtins.isAttrs m && m ? l4 then m.l4 else "any";
-          dports = if builtins.isAttrs m && m ? dports then m.dports else [ ];
-        in
-        if l4 == "any" then
-          [ "any" ]
-        else if dports == [ ] then
-          [ l4 ]
+      proto =
+        if builtins.isAttrs m && m ? proto then
+          m.proto
+        else if builtins.isAttrs m && m ? l4 then
+          m.l4
         else
-          map (p: "${l4}/${toString p}") dports;
-    in
-    lib.unique (lib.concatMap one ms);
+          "any";
 
-  buildCapabilityIndex =
-    policy:
+      family =
+        if builtins.isAttrs m && m ? family then
+          m.family
+        else if builtins.isAttrs m && m ? families then
+          let
+            fs = m.families;
+          in
+          if fs == [ ] then "any" else builtins.elemAt fs 0
+        else
+          "any";
+
+      dports = if builtins.isAttrs m && m ? dports then m.dports else [ ];
+    in
+    {
+      inherit proto family dports;
+    };
+
+  buildTrafficTypeIndex =
+    communicationContract:
     let
-      catalog = policy.catalog or { };
-      services = catalog.services or [ ];
+      trafficTypes = communicationContract.trafficTypes or [ ];
 
-      _uniqServices = assertUnique "service name" (map (s: s.name) services);
+      _uniqTrafficTypes = assertUnique "traffic type name" (map (t: t.name) trafficTypes);
 
-      addService =
-        acc: svc:
-        let
-          provides = svc.provides or [ ];
-          proto = if svc ? match then matchListToProto svc.match else [ ];
-          addCap =
-            acc2: capName: if builtins.hasAttr capName acc2 then acc2 else acc2 // { "${capName}" = proto; };
-        in
-        builtins.foldl' addCap acc provides;
+      normalizeOne = t: {
+        name = t.name;
+        match = lib.imap0 (idx: m: normalizeMatch idx t.name m) (t.match or [ ]);
+      };
     in
-    builtins.foldl' addService { } services;
+    builtins.listToAttrs (
+      map (t: {
+        name = t.name;
+        value = normalizeOne t;
+      }) trafficTypes
+    );
 
-  capabilityProto =
-    capIndex: capName:
-    if builtins.hasAttr capName capIndex then
-      capIndex.${capName}
+  trafficTypeDef =
+    siteKey: idx: trafficTypeIndex: trafficTypeName:
+    if trafficTypeName == "any" then
+      {
+        name = "any";
+        match = [
+          {
+            proto = "any";
+            family = "any";
+            dports = [ ];
+          }
+        ];
+      }
+    else if builtins.hasAttr trafficTypeName trafficTypeIndex then
+      trafficTypeIndex.${trafficTypeName}
     else
       throwError {
-        code = "E_POLICY_UNKNOWN_CAPABILITY";
-        site = null;
+        code = "E_CONTRACT_UNKNOWN_TRAFFIC_TYPE";
+        site = siteKey;
         path = [
-          "policy"
-          "catalog"
-          "services"
+          "communicationContract"
+          "relations"
+          idx
+          "trafficType"
         ];
-        message = "referenced capability '${capName}' not provided by any service";
-        hints = [
-          "Add a service that provides '${capName}'."
-          "Or change the rule to reference an existing capability."
-        ];
+        message = "relation references unknown trafficType '${trafficTypeName}'";
+        hints = [ "Declare trafficTypes = [ { name = \"${trafficTypeName}\"; match = ...; } ]." ];
       };
 
-  mkRuleSource =
-    idx: rule:
+  buildServiceIndex =
+    communicationContract:
     let
-      rid = if rule ? id then rule.id else "rule-${toString idx}";
-      prio = if rule ? priority then rule.priority else 0;
+      services = communicationContract.services or [ ];
+      _uniqServices = assertUnique "service name" (map (s: s.name) services);
     in
-    {
-      kind = "rule";
-      index = idx;
-      id = rid;
-      priority = prio;
-    };
+    builtins.listToAttrs (
+      map (s: {
+        name = s.name;
+        value = s;
+      }) services
+    );
 
-  normalizeExternalRef =
-    siteKey: idx: externals: ext:
+  normalizeTenantSubject =
+    siteKey: idx: path: tenantNames: subj:
     let
-      _shape = ensure (builtins.isString ext && ext != "") {
-        code = "E_POLICY_EXTERNAL_SHAPE";
+      _shape = ensure (builtins.isAttrs subj) {
+        code = "E_CONTRACT_SUBJECT_SHAPE";
         site = siteKey;
-        path = [
-          "policy"
-          "rules"
-          idx
-          "to"
-          "external"
-        ];
-        message = "rule.to.external must be a non-empty string";
-        hints = [ "Set rule.to.external = \"<uplink-or-overlay-name>\"." ];
-      };
-
-      _noDefault = ensure (ext != "default") {
-        code = "E_POLICY_EXTERNAL_DEFAULT_FORBIDDEN";
-        site = siteKey;
-        path = [
-          "policy"
-          "rules"
-          idx
-          "to"
-          "external"
-        ];
-        message = "the keyword \"default\" must not be used for external routing";
+        path = path;
+        message = "subject must be an attrset";
         hints = [
-          "Replace external = \"default\" with an explicit uplink name (e.g. \"wan\")."
-          "For overlays, reference the explicit overlay name."
+          "Use { kind = \"tenant\"; name = \"...\"; } or { kind = \"tenant-set\"; members = [ ... ]; }."
         ];
       };
 
-      _exists = ensure (builtins.elem ext externals) {
-        code = "E_POLICY_UNKNOWN_EXTERNAL";
-        site = siteKey;
-        path = [
-          "policy"
-          "rules"
-          idx
-          "to"
-          "external"
-        ];
-        message = "rule references unknown external '${ext}'";
-        hints = [
-          "Declare an uplink under topology.nodes.<core>.uplinks.<name>."
-          "Or declare a transport overlay with transport.overlays[].name."
-        ];
-      };
-    in
-    ext;
+      kind = subj.kind or null;
 
-  normalizeRuleWithProvenance =
-    siteKey: externals: tenants: capIndex: idx: rule:
-    let
-      from0 = rule.from or { };
-      to0 = rule.to or { };
-
-      _fromShape = ensure ((from0 ? kind) && from0.kind == "tenant" && (from0 ? name)) {
-        code = "E_POLICY_RULE_FROM_SHAPE";
-        site = siteKey;
-        path = [
-          "policy"
-          "rules"
-          idx
-          "from"
-        ];
-        message = "rule.from must be { kind=\"tenant\"; name=...; }";
-        hints = [ "Set rule.from.kind = \"tenant\" and rule.from.name = \"...\"." ];
-      };
-
-      _fromExists = ensure (builtins.elem from0.name tenants) {
-        code = "E_POLICY_UNKNOWN_TENANT";
-        site = siteKey;
-        path = [
-          "policy"
-          "rules"
-          idx
-          "from"
-          "name"
-        ];
-        message = "rule references unknown tenant '${from0.name}'";
-        hints = [ "Declare tenant '${from0.name}' under ownership.prefixes." ];
-      };
-
-      from = {
-        subject = from0.name;
-      };
-
-      to =
-        if to0 ? external then
+      _kind =
+        ensure
+          (builtins.elem kind [
+            "tenant"
+            "tenant-set"
+          ])
           {
-            external = normalizeExternalRef siteKey idx externals to0.external;
-          }
-        else if (to0 ? kind) && to0.kind == "tenant" && (to0 ? name) then
-          let
-            _toExists = ensure (builtins.elem to0.name tenants) {
-              code = "E_POLICY_UNKNOWN_TENANT";
-              site = siteKey;
-              path = [
-                "policy"
-                "rules"
-                idx
-                "to"
-                "name"
-              ];
-              message = "rule references unknown tenant '${to0.name}'";
-              hints = [ "Declare tenant '${to0.name}' under ownership.prefixes." ];
-            };
-          in
-          (
-            {
-              subject = to0.name;
-            }
-            // (
-              if to0 ? capability then
-                let
-                  _capExists = ensure (builtins.hasAttr to0.capability capIndex) {
-                    code = "E_POLICY_UNKNOWN_CAPABILITY";
-                    site = siteKey;
-                    path = [
-                      "policy"
-                      "rules"
-                      idx
-                      "to"
-                      "capability"
-                    ];
-                    message = "rule references unknown capability '${to0.capability}'";
-                    hints = [ "Add a service providing '${to0.capability}'." ];
-                  };
-                in
-                {
-                  capability = to0.capability;
-                }
-              else
-                { }
-            )
-          )
-        else
-          throwError {
-            code = "E_POLICY_RULE_TO_SHAPE";
+            code = "E_CONTRACT_SUBJECT_KIND";
             site = siteKey;
-            path = [
-              "policy"
-              "rules"
-              idx
-              "to"
-            ];
-            message = "invalid rule.to";
-            hints = [
-              "Use { external = \"<uplink-or-overlay-name>\"; } for external targets."
-              "Or use { kind = \"tenant\"; name = \"...\"; } for tenant targets."
-            ];
+            path = path ++ [ "kind" ];
+            message = "subject.kind must be 'tenant' or 'tenant-set'";
+            hints = [ "Use kind = \"tenant\" or kind = \"tenant-set\"." ];
+          };
+    in
+    if kind == "tenant" then
+      let
+        name = subj.name or null;
+
+        _name = ensure (name != null && builtins.isString name && name != "") {
+          code = "E_CONTRACT_SUBJECT_NAME";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "tenant subject requires a non-empty name";
+          hints = [ "Set name = \"<tenant-name>\"." ];
+        };
+
+        _exists = ensure (builtins.elem name tenantNames) {
+          code = "E_CONTRACT_UNKNOWN_TENANT";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "relation references unknown tenant '${name}'";
+          hints = [ "Declare tenant '${name}' under ownership.prefixes." ];
+        };
+      in
+      {
+        kind = "tenant";
+        inherit name;
+      }
+    else
+      let
+        members = subj.members or [ ];
+
+        _membersShape =
+          ensure (builtins.isList members && builtins.all builtins.isString members && members != [ ])
+            {
+              code = "E_CONTRACT_SUBJECT_MEMBERS";
+              site = siteKey;
+              path = path ++ [ "members" ];
+              message = "tenant-set subject requires a non-empty members list";
+              hints = [ "Set members = [ \"tenant-a\" \"tenant-b\" ]." ];
+            };
+
+        _membersExist = builtins.all (name: builtins.elem name tenantNames) members;
+
+        _exists = ensure _membersExist {
+          code = "E_CONTRACT_UNKNOWN_TENANT";
+          site = siteKey;
+          path = path ++ [ "members" ];
+          message = "tenant-set includes unknown tenant";
+          hints = [ "Ensure every tenant-set member exists under ownership.prefixes." ];
+        };
+      in
+      {
+        kind = "tenant-set";
+        inherit members;
+      };
+
+  normalizeTarget =
+    siteKey: idx: tenantNames: serviceIndex: externals: target:
+    let
+      basePath = [
+        "communicationContract"
+        "relations"
+        idx
+        "to"
+      ];
+    in
+    if target == "any" then
+      "any"
+    else
+      let
+        _shape = ensure (builtins.isAttrs target) {
+          code = "E_CONTRACT_TARGET_SHAPE";
+          site = siteKey;
+          path = basePath;
+          message = "relation.to must be \"any\" or an attrset";
+          hints = [
+            "Use \"any\"."
+            "Or use { kind = \"external\"; name = \"wan\"; }."
+            "Or use { kind = \"service\"; name = \"dns\"; }."
+            "Or use { kind = \"tenant\"; name = \"mgmt\"; }."
+          ];
+        };
+
+        kind = target.kind or null;
+
+        _kind =
+          ensure
+            (builtins.elem kind [
+              "tenant"
+              "tenant-set"
+              "service"
+              "external"
+            ])
+            {
+              code = "E_CONTRACT_TARGET_KIND";
+              site = siteKey;
+              path = basePath ++ [ "kind" ];
+              message = "relation.to.kind must be tenant, tenant-set, service, or external";
+              hints = [ "Set kind to a supported target kind." ];
+            };
+      in
+      if
+        builtins.elem kind [
+          "tenant"
+          "tenant-set"
+        ]
+      then
+        normalizeTenantSubject siteKey idx basePath tenantNames target
+      else if kind == "service" then
+        let
+          name = target.name or null;
+
+          _name = ensure (name != null && builtins.isString name && name != "") {
+            code = "E_CONTRACT_TARGET_NAME";
+            site = siteKey;
+            path = basePath ++ [ "name" ];
+            message = "service target requires a non-empty name";
+            hints = [ "Set name = \"<service-name>\"." ];
           };
 
-      proto =
-        if rule ? proto then
-          rule.proto
-        else if to0 ? capability then
-          capabilityProto capIndex to0.capability
-        else
-          [ "any" ];
+          _exists = ensure (builtins.hasAttr name serviceIndex) {
+            code = "E_CONTRACT_UNKNOWN_SERVICE";
+            site = siteKey;
+            path = basePath ++ [ "name" ];
+            message = "relation references unknown service '${name}'";
+            hints = [ "Declare service '${name}' under communicationContract.services." ];
+          };
+        in
+        {
+          kind = "service";
+          inherit name;
+        }
+      else
+        let
+          name = target.name or null;
+
+          _name = ensure (name != null && builtins.isString name && name != "") {
+            code = "E_CONTRACT_TARGET_NAME";
+            site = siteKey;
+            path = basePath ++ [ "name" ];
+            message = "external target requires a non-empty name";
+            hints = [ "Set name = \"<uplink-or-overlay-name>\"." ];
+          };
+
+          _exists = ensure (builtins.elem name externals) {
+            code = "E_CONTRACT_UNKNOWN_EXTERNAL";
+            site = siteKey;
+            path = basePath ++ [ "name" ];
+            message = "relation references unknown external '${name}'";
+            hints = [
+              "Declare an uplink under topology.nodes.<core>.uplinks.<name>."
+              "Or declare a transport overlay with transport.overlays[].name."
+            ];
+          };
+        in
+        {
+          kind = "external";
+          inherit name;
+        };
+
+  mkRelationSource = idx: relation: {
+    kind = "relation";
+    index = idx;
+    id = relation.id or "relation-${toString idx}";
+    priority = relation.priority or 0;
+  };
+
+  normalizeRelationWithProvenance =
+    siteKey: externals: tenantNames: serviceIndex: trafficTypeIndex: idx: relation:
+    let
+      from = normalizeTenantSubject siteKey idx [
+        "communicationContract"
+        "relations"
+        idx
+        "from"
+      ] tenantNames (relation.from or { });
+
+      to = normalizeTarget siteKey idx tenantNames serviceIndex externals (relation.to or null);
+
+      action = relation.action or "deny";
+
+      _action =
+        ensure
+          (builtins.elem action [
+            "allow"
+            "deny"
+          ])
+          {
+            code = "E_CONTRACT_ACTION";
+            site = siteKey;
+            path = [
+              "communicationContract"
+              "relations"
+              idx
+              "action"
+            ];
+            message = "relation.action must be 'allow' or 'deny'";
+            hints = [ "Set action = \"allow\" or action = \"deny\"." ];
+          };
+
+      trafficTypeName = relation.trafficType or "any";
+      trafficType = trafficTypeDef siteKey idx trafficTypeIndex trafficTypeName;
     in
     {
-      source = mkRuleSource idx rule;
-      from = from;
-      to = to;
-      action = rule.action or "deny";
-      proto = proto;
+      source = mkRelationSource idx relation;
+      inherit from to action;
+      trafficType = trafficType.name;
+      match = trafficType.match;
     };
 
-  sortRules =
-    rules:
+  sortRelations =
+    relations:
     let
       cmp =
         a: b:
@@ -261,176 +341,44 @@ let
         else
           a.source.index < b.source.index;
     in
-    lib.sort cmp rules;
+    lib.sort cmp relations;
 
-  normalizeNatIngress =
-    siteKey: uplinks: policy:
-    let
-      catalog = policy.catalog or { };
-      services = catalog.services or [ ];
-      serviceNames = map (s: s.name) services;
+  relationFromIsInternal =
+    relation:
+    builtins.isAttrs relation.from
+    && builtins.elem (relation.from.kind or null) [
+      "tenant"
+      "tenant-set"
+    ];
 
-      isExternallyExposed =
-        s:
-        let
-          exposure = s.exposure or { };
-        in
-        (exposure.external or false) == true;
+  relationToIsExternal =
+    relation: builtins.isAttrs relation.to && (relation.to.kind or null) == "external";
 
-      exposedServices = map (s: s.name) (lib.filter isExternallyExposed services);
-
-      nat0 = policy.nat or { };
-      ingress0 = nat0.ingress or [ ];
-
-      normalizeFromExternal =
-        idx: n:
-        let
-          ext = n.fromExternal or null;
-
-          _present = ensure (ext != null) {
-            code = "E_NAT_INGRESS_MISSING_FROM_EXTERNAL";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-              "fromExternal"
-            ];
-            message = "nat.ingress[].fromExternal is required (no implicit default uplink)";
-            hints = [ "Set fromExternal to an explicit uplink name (e.g. \"wan\")." ];
-          };
-
-          _shape = ensure (builtins.isString ext && ext != "") {
-            code = "E_NAT_INGRESS_FROM_EXTERNAL_SHAPE";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-              "fromExternal"
-            ];
-            message = "nat.ingress[].fromExternal must be a non-empty string";
-            hints = [ "Set fromExternal = \"<uplink-name>\"." ];
-          };
-
-          _noDefault = ensure (ext != "default") {
-            code = "E_NAT_INGRESS_DEFAULT_FORBIDDEN";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-              "fromExternal"
-            ];
-            message = "the keyword \"default\" must not be used for external routing";
-            hints = [ "Replace fromExternal = \"default\" with an explicit uplink name (e.g. \"wan\")." ];
-          };
-
-          _exists = ensure (builtins.elem ext uplinks) {
-            code = "E_NAT_INGRESS_UNKNOWN_UPLINK";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-              "fromExternal"
-            ];
-            message = "nat.ingress references unknown uplink '${ext}'";
-            hints = [ "Declare topology.nodes.<core>.uplinks.${ext} with ipv4/ipv6 prefixes." ];
-          };
-        in
-        ext;
-
-      expandOne =
-        idx: n:
-        let
-          svcRef = n.toService or null;
-
-          _shape = ensure (svcRef != null && svcRef ? name) {
-            code = "E_NAT_INGRESS_SHAPE";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-            ];
-            message = "nat.ingress entry must reference toService.name";
-            hints = [ "Set nat.ingress[].toService.name = \"...\"." ];
-          };
-
-          svcName = svcRef.name;
-
-          _exists = ensure (builtins.elem svcName serviceNames) {
-            code = "E_POLICY_UNKNOWN_SERVICE";
-            site = siteKey;
-            path = [
-              "policy"
-              "nat"
-              "ingress"
-              idx
-              "toService"
-              "name"
-            ];
-            message = "nat.ingress references unknown service '${svcName}'";
-            hints = [ "Declare service '${svcName}' under policy.catalog.services." ];
-          };
-
-          fromExternal = normalizeFromExternal idx n;
-        in
-        {
-          inherit fromExternal;
-          toService = {
-            kind = "service";
-            name = svcName;
-          };
-        };
-
-      expanded = lib.imap0 expandOne ingress0;
-
-      _uniqNat = assertUnique "nat ingress service" (map (e: e.toService.name) expanded);
-
-      ingressNames = map (e: e.toService.name) expanded;
-
-      _exposedHaveNat = map (
-        svcName:
-        ensure (builtins.elem svcName ingressNames) {
-          code = "E_NAT_EXPOSED_MISSING_INGRESS";
-          site = siteKey;
-          path = [
-            "policy"
-            "nat"
-            "ingress"
-          ];
-          message = "externally exposed service '${svcName}' must have matching policy.nat.ingress entry";
-          hints = [
-            "Add a nat.ingress entry mapping fromExternal to ${svcName}."
-            "Or remove exposure.external = true from the service."
-          ];
-        }
-      ) exposedServices;
-
-      _forced = builtins.deepSeq {
-        inherit
-          _uniqNat
-          _exposedHaveNat
-          ;
-      } true;
-    in
-    if _forced then expanded else expanded;
+  ensureHasExternalAllow =
+    siteKey: relations:
+    ensure
+      (builtins.any (
+        r: (r.action or null) == "allow" && relationFromIsInternal r && relationToIsExternal r
+      ) relations)
+      {
+        code = "E_CONTRACT_MISSING_EXTERNAL_ALLOW";
+        site = siteKey;
+        path = [
+          "communicationContract"
+          "relations"
+        ];
+        message = "every site must declare at least one allow relation from an internal subject to an external network";
+        hints = [
+          "Add a relation like { from = { kind = \"tenant\"; name = \"mgmt\"; }; to = { kind = \"external\"; name = \"wan\"; }; trafficType = \"any\"; action = \"allow\"; }."
+        ];
+      };
 in
 {
   inherit
-    matchListToProto
-    buildCapabilityIndex
-    capabilityProto
-    mkRuleSource
-    normalizeRuleWithProvenance
-    sortRules
-    normalizeNatIngress
+    buildTrafficTypeIndex
+    buildServiceIndex
+    normalizeRelationWithProvenance
+    sortRelations
+    ensureHasExternalAllow
     ;
 }

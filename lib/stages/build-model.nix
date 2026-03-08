@@ -15,10 +15,11 @@ let
 
   inherit (util) assertUnique ensure;
   inherit (policyC)
-    buildCapabilityIndex
-    normalizeRuleWithProvenance
-    sortRules
-    normalizeNatIngress
+    buildTrafficTypeIndex
+    buildServiceIndex
+    normalizeRelationWithProvenance
+    sortRelations
+    ensureHasExternalAllow
     ;
   inherit (topoC) validateTopology;
   inherit (addressSafety) validateSite;
@@ -28,7 +29,22 @@ siteKey: declared: semantic:
 
 let
   topo = declared.topology or { };
-  policy = declared.policy or { };
+
+  communicationContract0 = declared.communicationContract or null;
+
+  _hasCommunicationContract =
+    ensure (communicationContract0 != null && builtins.isAttrs communicationContract0)
+      {
+        code = "E_CONTRACT_REQUIRED";
+        site = siteKey;
+        path = [ "communicationContract" ];
+        message = "every site must define communicationContract";
+        hints = [
+          "Add communicationContract = { trafficTypes = [ ]; services = [ ]; relations = [ ]; }."
+        ];
+      };
+
+  communicationContractDeclared = if _hasCommunicationContract then communicationContract0 else { };
 
   parts = splitSiteKey siteKey;
   canonicalSiteId = "${parts.enterprise}.${parts.siteName}";
@@ -100,18 +116,44 @@ let
 
   anyMultiWan = totalUplinks > 1;
 
-  catalog = policy.catalog or { };
-  services = catalog.services or [ ];
-  serviceNames = map (s: s.name) services;
-  _uniqServices = assertUnique "service name" serviceNames;
-
   tenants =
     if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
 
   tenantNames = map (t: t.name) tenants;
   _uniqTenants = assertUnique "tenant name" tenantNames;
 
-  capIndex = buildCapabilityIndex policy;
+  trafficTypeIndex = buildTrafficTypeIndex communicationContractDeclared;
+  serviceIndex = buildServiceIndex communicationContractDeclared;
+
+  trafficTypeNames = builtins.attrNames trafficTypeIndex;
+  serviceNames = builtins.attrNames serviceIndex;
+
+  _uniqTrafficTypes = assertUnique "traffic type name" trafficTypeNames;
+  _uniqServices = assertUnique "service name" serviceNames;
+
+  _validateServiceTrafficTypes = builtins.all (
+    svc:
+    let
+      trafficTypeName = svc.trafficType or null;
+    in
+    ensure
+      (
+        trafficTypeName != null
+        && (trafficTypeName == "any" || builtins.elem trafficTypeName trafficTypeNames)
+      )
+      {
+        code = "E_CONTRACT_UNKNOWN_TRAFFIC_TYPE";
+        site = siteKey;
+        path = [
+          "communicationContract"
+          "services"
+          svc.name or "unknown"
+          "trafficType"
+        ];
+        message = "service '${svc.name or "unknown"}' references unknown trafficType '${toString trafficTypeName}'";
+        hints = [ "Declare the traffic type under communicationContract.trafficTypes." ];
+      }
+  ) (communicationContractDeclared.services or [ ]);
 
   _validateIngressSubjects =
     let
@@ -126,21 +168,20 @@ let
           true
         else
           let
-            _kind =
-              ensure (subj.kind or null) == "tenant" {
-                code = "E_UPLINK_INGRESS_SUBJECT_KIND";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  u.name
-                  "uplinks"
-                  "ingressSubject"
-                  "kind"
-                ];
-                message = "uplink.ingressSubject.kind must be 'tenant'";
-                hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
-              };
+            _kind = ensure ((subj.kind or null) == "tenant") {
+              code = "E_UPLINK_INGRESS_SUBJECT_KIND";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                u.name
+                "uplinks"
+                "ingressSubject"
+                "kind"
+              ];
+              message = "uplink.ingressSubject.kind must be 'tenant'";
+              hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
+            };
 
             _exists = ensure (builtins.elem subj.name tenantNames) {
               code = "E_UPLINK_INGRESS_SUBJECT_UNKNOWN_TENANT";
@@ -161,33 +202,28 @@ let
     in
     builtins.all check allUplinks;
 
-  rules0 = policy.rules or [ ];
-  ruleIds = map (r: if r ? id then r.id else null) rules0;
-  _uniqRuleIds = assertUnique "rule id" (lib.filter (x: x != null) ruleIds);
+  relations0 = communicationContractDeclared.relations or [ ];
+  relationIds = map (r: if r ? id then r.id else null) relations0;
+  _uniqRelationIds = assertUnique "relation id" (lib.filter (x: x != null) relationIds);
 
-  normalizedRules0 = lib.imap0 (
-    idx: r: normalizeRuleWithProvenance siteKey externals tenantNames capIndex idx r
-  ) rules0;
+  normalizedRelations0 = lib.imap0 (
+    idx: r:
+    normalizeRelationWithProvenance siteKey externals tenantNames serviceIndex trafficTypeIndex idx r
+  ) relations0;
 
-  normalizedRules = sortRules normalizedRules0;
+  normalizedRelations = sortRelations normalizedRelations0;
 
-  ingressExpanded = normalizeNatIngress siteKey uplinkNames policy;
-
-  natModel = {
-    enabled = builtins.length ingressExpanded > 0;
-    ingress = ingressExpanded;
-  };
-
-  communicationContract = {
-    allowedRelations = normalizedRules;
-    nat = natModel;
-  };
+  _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
 
   overlayHasExplicitAllow =
     ovName:
     builtins.any (
-      r: (r.action or "deny") == "allow" && (r.to ? external) && r.to.external == ovName
-    ) normalizedRules;
+      r:
+      (r.action or "deny") == "allow"
+      && builtins.isAttrs r.to
+      && (r.to.kind or null) == "external"
+      && r.to.name == ovName
+    ) normalizedRelations;
 
   _overlayPolicyRequired =
     if overlays == [ ] then
@@ -202,9 +238,9 @@ let
             "transport"
             "overlays"
           ];
-          message = "overlay '${ov.name}' requires explicit allow rule to external='${ov.name}'";
+          message = "overlay '${ov.name}' requires explicit allow relation to external='${ov.name}'";
           hints = [
-            "Add policy.rules entry allowing traffic to external='${ov.name}'."
+            "Add communicationContract.relations entry allowing traffic to { kind = \"external\"; name = \"${ov.name}\"; }."
           ];
         }
       ) overlays;
@@ -287,6 +323,30 @@ let
     }) nodeNamesSorted
   );
 
+  compiledServices = map (
+    svc:
+    svc
+    // {
+      providers = svc.providers or [ ];
+    }
+  ) (communicationContractDeclared.services or [ ]);
+
+  compiledTrafficTypes = map (
+    name:
+    let
+      t = trafficTypeIndex.${name};
+    in
+    {
+      inherit (t) name match;
+    }
+  ) (lib.sort builtins.lessThan trafficTypeNames);
+
+  communicationContract = {
+    trafficTypes = compiledTrafficTypes;
+    services = compiledServices;
+    allowedRelations = normalizedRelations;
+  };
+
   model = {
     id = canonicalSiteId;
     enterprise = semantic.enterprise or "default";
@@ -322,18 +382,21 @@ let
 
   _forced = builtins.deepSeq {
     inherit
+      _hasCommunicationContract
       _noLegacyExternalPolicy
       _addrSafe
       _topoValid
       _noDisconnectedNodes
+      _uniqTrafficTypes
       _uniqServices
       _uniqTenants
-      _uniqRuleIds
+      _uniqRelationIds
+      _validateServiceTrafficTypes
       _overlayPolicyRequired
       _validateIngressSubjects
+      _hasExternalAllow
       ;
-    normalizedRules = normalizedRules;
-    ingressExpanded = ingressExpanded;
+    normalizedRelations = normalizedRelations;
     coreUplinks = coreUplinks;
     overlays = overlays;
     externals = externals;

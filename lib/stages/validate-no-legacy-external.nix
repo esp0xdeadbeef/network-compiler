@@ -3,23 +3,20 @@
 siteKey: declared:
 
 let
-  policy = declared.policy or { };
-  external = policy.external or null;
+  legacyPolicy = declared.policy or null;
 in
-if external == null then
+if legacyPolicy == null then
   true
 else
   throw (
     builtins.toJSON {
-      code = "E_POLICY_EXTERNAL_LEGACY_REMOVED";
+      code = "E_LEGACY_POLICY_REMOVED";
       site = siteKey;
-      path = [
-        "policy"
-        "external"
-      ];
-      message = "policy.external is removed; external routing must be derived only from explicit topology uplinks and policy rules";
+      path = [ "policy" ];
+      message = "policy is removed; use communicationContract instead";
       hints = [
-        "Remove policy.external entirely."
+        "Rename policy to communicationContract."
+        "Use communicationContract.trafficTypes, communicationContract.services, and communicationContract.relations."
       ];
     }
   )

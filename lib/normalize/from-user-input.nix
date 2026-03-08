@@ -14,7 +14,7 @@ let
         code = "E_INPUT_MISSING_TOPOLOGY";
         site = site.siteName or null;
         path = [ "topology" ];
-        message = "site.topology is required (legacy inputs removed)";
+        message = "site.topology is required";
         hints = [ "Add topology = { nodes = ...; links = ...; } to the site." ];
       };
 
@@ -33,13 +33,12 @@ let
         hints = [ "Add topology.nodes = { ... }." ];
       };
 
-  accessUnit =
+  accessUnits =
     let
       names = builtins.attrNames units;
       isAccess = n: ((units.${n}.role or null) == "access");
-      matches = lib.filter isAccess names;
     in
-    if builtins.length matches >= 1 then builtins.elemAt matches 0 else null;
+    lib.filter isAccess names;
 
   ownership = site.ownership or { };
   prefixes = ownership.prefixes or [ ];
@@ -103,14 +102,13 @@ let
     else
       "segments:${name}";
 
-  attachments =
-    if accessUnit == null then
-      [ ]
-    else
-      map (a: {
-        unit = accessUnit;
-        segment = segRef a;
-      }) (units.${accessUnit}.attachments or [ ]);
+  attachments = lib.concatMap (
+    unit:
+    map (a: {
+      inherit unit;
+      segment = segRef a;
+    }) (units.${unit}.attachments or [ ])
+  ) accessUnits;
 
   transitLinks = topo.links or [ ];
 

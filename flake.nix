@@ -147,7 +147,7 @@
             text = ''
               set -euo pipefail
 
-              find examples -type f -name 'inputs.nix' -print0 | while IFS= read -r -d ''\0 f; do
+              find examples -type f -name 'inputs.nix' -print0 | while IFS= read -r -d $'\0' f; do
                 echo ""
                 echo "=== $f ==="
                 ${pkgs.nix}/bin/nix run path:.

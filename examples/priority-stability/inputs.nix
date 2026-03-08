@@ -36,41 +36,34 @@
         };
       };
 
-      policy = {
-        catalog.services = [
+      communicationContract = {
+        trafficTypes = [
           {
-            kind = "service";
-            name = "dns-site";
-            scope = "site";
-            provides = [ "resolver" ];
-            zoneHint = {
-              kind = "tenant";
-              name = "mgmt";
-            };
+            name = "dns";
             match = [
               {
-                l4 = "udp";
+                proto = "udp";
                 dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
+                family = "any";
               }
               {
-                l4 = "tcp";
+                proto = "tcp";
                 dports = [ 53 ];
-                families = [
-                  "ipv4"
-                  "ipv6"
-                ];
+                family = "any";
               }
             ];
           }
         ];
 
-        nat.ingress = [ ];
+        services = [
+          {
+            name = "dns-site";
+            trafficType = "dns";
+            providers = [ ];
+          }
+        ];
 
-        rules = [
+        relations = [
           {
             id = "first-same-priority";
             action = "allow";
@@ -80,10 +73,10 @@
               name = "admin";
             };
             to = {
-              kind = "tenant";
-              name = "mgmt";
-              capability = "resolver";
+              kind = "service";
+              name = "dns-site";
             };
+            trafficType = "dns";
           }
           {
             id = "second-same-priority";
@@ -94,10 +87,24 @@
               name = "clients";
             };
             to = {
-              kind = "tenant";
-              name = "mgmt";
-              capability = "resolver";
+              kind = "service";
+              name = "dns-site";
             };
+            trafficType = "dns";
+          }
+          {
+            id = "allow-admin-to-wan";
+            action = "allow";
+            priority = 200;
+            from = {
+              kind = "tenant";
+              name = "admin";
+            };
+            to = {
+              kind = "external";
+              name = "wan";
+            };
+            trafficType = "any";
           }
         ];
       };

@@ -20,32 +20,10 @@
       }
     ];
 
-    policy = {
-      catalog.services = [
-        {
-          kind = "service";
-          name = "external-jump-host";
-          match = [
-            {
-              l4 = "tcp";
-              dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            }
-          ];
-          scope = "site";
-          exposure.external = true;
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-        }
-      ];
-
-      nat.ingress = [ ];
-      rules = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
+      relations = [ ];
     };
 
     topology = {

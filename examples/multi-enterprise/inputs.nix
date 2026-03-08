@@ -33,89 +33,49 @@
       }
     ];
 
-    policy = {
-      catalog.services = [
+    communicationContract = {
+      trafficTypes = [
         {
-          kind = "service";
-          name = "dns-site";
-          scope = "site";
-          provides = [ "resolver" ];
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
+          name = "dns";
           match = [
             {
-              l4 = "udp";
+              proto = "udp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
             {
-              l4 = "tcp";
+              proto = "tcp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
         }
         {
-          kind = "service";
-          name = "ntp-site";
-          scope = "site";
-          provides = [ "ntp" ];
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
+          name = "ntp";
           match = [
             {
-              l4 = "udp";
+              proto = "udp";
               dports = [ 123 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            }
-          ];
-        }
-        {
-          kind = "service";
-          name = "external-jump-host";
-          scope = "site";
-          exposure.external = true;
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          match = [
-            {
-              l4 = "tcp";
-              dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
         }
       ];
 
-      nat.ingress = [
+      services = [
         {
-          fromExternal = "wan";
-          toService = {
-            kind = "service";
-            name = "external-jump-host";
-          };
+          name = "dns-site";
+          trafficType = "dns";
+          providers = [ ];
+        }
+        {
+          name = "ntp-site";
+          trafficType = "ntp";
+          providers = [ ];
         }
       ];
 
-      rules = [
+      relations = [
         {
           id = "allow-admin-to-mgmt-dns";
           priority = 100;
@@ -124,10 +84,10 @@
             name = "admin";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "allow";
         }
         {
@@ -138,10 +98,10 @@
             name = "clients";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "deny";
         }
         {
@@ -152,9 +112,10 @@
             name = "clients";
           };
           to = {
-            external = "wan";
+            kind = "external";
+            name = "wan";
           };
-          proto = [ "any" ];
+          trafficType = "any";
           action = "allow";
         }
         {
@@ -168,6 +129,7 @@
             kind = "tenant";
             name = "mgmt";
           };
+          trafficType = "any";
           action = "deny";
         }
       ];
@@ -260,89 +222,49 @@
       }
     ];
 
-    policy = {
-      catalog.services = [
+    communicationContract = {
+      trafficTypes = [
         {
-          kind = "service";
-          name = "dns-site";
-          scope = "site";
-          provides = [ "resolver" ];
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
+          name = "dns";
           match = [
             {
-              l4 = "udp";
+              proto = "udp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
             {
-              l4 = "tcp";
+              proto = "tcp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
         }
         {
-          kind = "service";
-          name = "ntp-site";
-          scope = "site";
-          provides = [ "ntp" ];
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
+          name = "ntp";
           match = [
             {
-              l4 = "udp";
+              proto = "udp";
               dports = [ 123 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
-            }
-          ];
-        }
-        {
-          kind = "service";
-          name = "external-jump-host";
-          scope = "site";
-          exposure.external = true;
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          match = [
-            {
-              l4 = "tcp";
-              dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
         }
       ];
 
-      nat.ingress = [
+      services = [
         {
-          fromExternal = "wan";
-          toService = {
-            kind = "service";
-            name = "external-jump-host";
-          };
+          name = "dns-site";
+          trafficType = "dns";
+          providers = [ ];
+        }
+        {
+          name = "ntp-site";
+          trafficType = "ntp";
+          providers = [ ];
         }
       ];
 
-      rules = [
+      relations = [
         {
           id = "allow-admin-to-mgmt-dns";
           priority = 100;
@@ -351,10 +273,10 @@
             name = "admin";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "allow";
         }
         {
@@ -365,10 +287,10 @@
             name = "clients";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "deny";
         }
         {
@@ -379,9 +301,10 @@
             name = "clients";
           };
           to = {
-            external = "wan";
+            kind = "external";
+            name = "wan";
           };
-          proto = [ "any" ];
+          trafficType = "any";
           action = "allow";
         }
         {
@@ -395,6 +318,7 @@
             kind = "tenant";
             name = "mgmt";
           };
+          trafficType = "any";
           action = "deny";
         }
       ];

@@ -36,69 +36,49 @@
       ];
     };
 
-    policy = {
-      catalog.services = [
+    communicationContract = {
+      trafficTypes = [
         {
-          kind = "service";
-          name = "dns-site";
+          name = "dns";
           match = [
             {
-              l4 = "udp";
+              proto = "udp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
             {
-              l4 = "tcp";
+              proto = "tcp";
               dports = [ 53 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
-          scope = "site";
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          provides = [ "resolver" ];
         }
         {
-          kind = "service";
-          name = "external-jump-host";
+          name = "ssh";
           match = [
             {
-              l4 = "tcp";
+              proto = "tcp";
               dports = [ 22 ];
-              families = [
-                "ipv4"
-                "ipv6"
-              ];
+              family = "any";
             }
           ];
-          scope = "site";
-          exposure.external = true;
-          zoneHint = {
-            kind = "tenant";
-            name = "mgmt";
-          };
         }
       ];
 
-      nat.ingress = [
+      services = [
         {
-          fromExternal = "wan";
-          toService = {
-            kind = "service";
-            name = "external-jump-host";
-          };
+          name = "dns-site";
+          trafficType = "dns";
+          providers = [ ];
+        }
+        {
+          name = "external-jump-host";
+          trafficType = "ssh";
+          providers = [ ];
         }
       ];
 
-      rules = [
+      relations = [
         {
           id = "allow-admin-to-mgmt-dns";
           priority = 100;
@@ -107,10 +87,10 @@
             name = "admin";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "allow";
         }
         {
@@ -121,10 +101,10 @@
             name = "client";
           };
           to = {
-            kind = "tenant";
-            name = "mgmt";
-            capability = "resolver";
+            kind = "service";
+            name = "dns-site";
           };
+          trafficType = "dns";
           action = "deny";
         }
         {
@@ -135,9 +115,10 @@
             name = "client";
           };
           to = {
-            external = "wan";
+            kind = "external";
+            name = "wan";
           };
-          proto = [ "any" ];
+          trafficType = "any";
           action = "allow";
         }
         {
@@ -151,6 +132,7 @@
             kind = "tenant";
             name = "mgmt";
           };
+          trafficType = "any";
           action = "deny";
         }
       ];

@@ -20,10 +20,25 @@
       }
     ];
 
-    policy = {
-      catalog.services = [ ];
-      nat.ingress = [ ];
-      rules = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
+      relations = [
+        {
+          id = "allow-mgmt-to-east-west";
+          priority = 100;
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            name = "east-west";
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
     };
 
     transport.overlays = [

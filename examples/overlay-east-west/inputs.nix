@@ -20,11 +20,11 @@
       }
     ];
 
-    policy = {
-      catalog.services = [ ];
-      nat.ingress = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
 
-      rules = [
+      relations = [
         {
           id = "allow-mgmt-to-overlay-east-west";
           priority = 100;
@@ -33,9 +33,10 @@
             name = "mgmt";
           };
           to = {
-            external = "east-west";
+            kind = "external";
+            name = "east-west";
           };
-          proto = [ "any" ];
+          trafficType = "any";
           action = "allow";
         }
       ];
@@ -119,11 +120,11 @@
       }
     ];
 
-    policy = {
-      catalog.services = [ ];
-      nat.ingress = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
 
-      rules = [
+      relations = [
         {
           id = "allow-mgmt-to-overlay-east-west";
           priority = 100;
@@ -132,9 +133,10 @@
             name = "mgmt";
           };
           to = {
-            external = "east-west";
+            kind = "external";
+            name = "east-west";
           };
-          proto = [ "any" ];
+          trafficType = "any";
           action = "allow";
         }
       ];

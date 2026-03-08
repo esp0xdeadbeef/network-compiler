@@ -27,10 +27,30 @@
       }
     ];
 
-    policy = {
-      catalog.services = [ ];
-      nat.ingress = [ ];
-      rules = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+
+      services = [ ];
+
+      relations = [
+        {
+          id = "allow-tenants-to-isp-a";
+          priority = 100;
+          from = {
+            kind = "tenant-set";
+            members = [
+              "mgmt"
+              "adm"
+            ];
+          };
+          to = {
+            kind = "external";
+            name = "isp-a";
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
     };
 
     topology = {
@@ -128,10 +148,27 @@
       }
     ];
 
-    policy = {
-      catalog.services = [ ];
-      nat.ingress = [ ];
-      rules = [ ];
+    communicationContract = {
+      trafficTypes = [ ];
+
+      services = [ ];
+
+      relations = [
+        {
+          id = "allow-mgmt-to-isp-a";
+          priority = 100;
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            name = "isp-a";
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
     };
 
     topology = {

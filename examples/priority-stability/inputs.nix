@@ -125,17 +125,29 @@
             role = "policy";
           };
 
-          s-router-access = {
+          s-router-access-mgmt = {
             role = "access";
             attachments = [
               {
                 kind = "tenant";
                 name = "mgmt";
               }
+            ];
+          };
+
+          s-router-access-admin = {
+            role = "access";
+            attachments = [
               {
                 kind = "tenant";
                 name = "admin";
               }
+            ];
+          };
+
+          s-router-access-clients = {
+            role = "access";
+            attachments = [
               {
                 kind = "tenant";
                 name = "clients";
@@ -151,7 +163,15 @@
           ]
           [
             "s-router-policy"
-            "s-router-access"
+            "s-router-access-mgmt"
+          ]
+          [
+            "s-router-policy"
+            "s-router-access-admin"
+          ]
+          [
+            "s-router-policy"
+            "s-router-access-clients"
           ]
         ];
       };

@@ -1,6 +1,5 @@
 {
   esp0xdeadbeef.site-a = {
-
     pools = {
       p2p = {
         ipv4 = "10.10.0.0/24";
@@ -29,12 +28,11 @@
 
     communicationContract = {
       trafficTypes = [ ];
-
       services = [ ];
 
       relations = [
         {
-          id = "allow-tenants-to-isp-a";
+          id = "allow-tenants-to-wan";
           priority = 100;
           from = {
             kind = "tenant-set";
@@ -45,7 +43,7 @@
           };
           to = {
             kind = "external";
-            name = "isp-a";
+            name = "wan";
           };
           trafficType = "any";
           action = "allow";
@@ -58,16 +56,17 @@
         s-router-core-isp-a = {
           role = "core";
           uplinks = {
-            isp-a = {
+            wan = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
           };
         };
+
         s-router-core-isp-b = {
           role = "core";
           uplinks = {
-            isp-b = {
+            wan = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
@@ -77,9 +76,11 @@
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
+
         s-router-policy = {
           role = "policy";
         };
+
         s-router-access-adm = {
           role = "access";
           attachments = [
@@ -127,7 +128,6 @@
   };
 
   esp0xdeadbeef.site-b = {
-
     pools = {
       p2p = {
         ipv4 = "10.11.0.0/24";
@@ -150,12 +150,11 @@
 
     communicationContract = {
       trafficTypes = [ ];
-
       services = [ ];
 
       relations = [
         {
-          id = "allow-mgmt-to-isp-a";
+          id = "allow-mgmt-to-wan";
           priority = 100;
           from = {
             kind = "tenant";
@@ -163,7 +162,7 @@
           };
           to = {
             kind = "external";
-            name = "isp-a";
+            name = "wan";
           };
           trafficType = "any";
           action = "allow";
@@ -176,16 +175,17 @@
         s-router-core-isp-a = {
           role = "core";
           uplinks = {
-            isp-a = {
+            wan = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
           };
         };
+
         s-router-core-isp-b = {
           role = "core";
           uplinks = {
-            isp-b = {
+            wan = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
@@ -195,6 +195,7 @@
         s-router-upstream-selector = {
           role = "upstream-selector";
         };
+
         s-router-policy = {
           role = "policy";
         };

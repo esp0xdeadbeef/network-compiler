@@ -2,10 +2,13 @@
   description = "nixos-network-compiler";
 
   inputs = {
-
     nixpkgs.url = "github:NixOS/nixpkgs/0182a361324364ae3f436a63005877674cf45efb";
-
     nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
+
+    network-labs = {
+      url = "git+ssh://git@github.com/esp0xdeadbeef/network-labs.git";
+      flake = false;
+    };
   };
 
   outputs =
@@ -13,6 +16,7 @@
       self,
       nixpkgs,
       nixpkgs-network,
+      network-labs,
     }:
     let
       systems = [
@@ -25,10 +29,7 @@
       mkPkgs =
         system:
         let
-          patchedPkgs = import nixpkgs-network {
-            inherit system;
-          };
-
+          patchedPkgs = import nixpkgs-network { inherit system; };
           patchedNetwork = patchedPkgs.lib.network;
         in
         import nixpkgs {
@@ -46,25 +47,34 @@
         system: nixExpr:
         let
           pkgs = mkPkgs system;
+          labsPath = network-labs.outPath;
         in
         pkgs.writeShellApplication {
           name = "app";
+
           runtimeInputs = [
             pkgs.coreutils
             pkgs.nix
             pkgs.git
             pkgs.jq
           ];
+
           text = ''
             set -euo pipefail
 
             input="$1"
-            inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
+
+            if [[ "$input" == labs:* ]]; then
+              subpath="''${input#labs:}"
+              inputAbs="${labsPath}/''${subpath}"
+            else
+              inputAbs="$(${pkgs.coreutils}/bin/realpath "$input")"
+            fi
 
             tmp="$(mktemp)"
             trap 'rm -f "$tmp"' EXIT
 
-            cat > "$tmp" <<NIX
+            cat > "$tmp" <<EOF
             let
               flake = builtins.getFlake (toString ${self.outPath});
               lib = flake.inputs.nixpkgs.lib;
@@ -83,7 +93,7 @@
 
             in
             ${nixExpr}
-            NIX
+            EOF
 
             json="$(${pkgs.nix}/bin/nix eval --json --impure -f "$tmp")"
 
@@ -102,6 +112,7 @@
               | ${pkgs.jq}/bin/jq -S
           '';
         };
+
     in
     {
       lib = {
@@ -115,9 +126,7 @@
         let
           pkgs = mkPkgs system;
 
-          compileDrv = mkEvalApp system ''
-            compiled
-          '';
+          compileDrv = mkEvalApp system "compiled";
 
           debugDrv = mkEvalApp system ''
             {
@@ -137,24 +146,6 @@
             text = builtins.readFile ./tests/check.sh;
           };
 
-          compileAllDrv = pkgs.writeShellApplication {
-            name = "compile-all-examples";
-            runtimeInputs = [
-              pkgs.coreutils
-              pkgs.nix
-              pkgs.jq
-              pkgs.findutils
-            ];
-            text = ''
-              set -euo pipefail
-
-              find examples -type f -name 'inputs.nix' -print0 | while IFS= read -r -d $'\0' f; do
-                echo ""
-                echo "=== $f ==="
-                ${pkgs.nix}/bin/nix run path:.
-              done
-            '';
-          };
         in
         {
           compile = {
@@ -170,11 +161,6 @@
           check = {
             type = "app";
             program = "${checkDrv}/bin/check";
-          };
-
-          compile-all-examples = {
-            type = "app";
-            program = "${compileAllDrv}/bin/compile-all-examples";
           };
 
           default = {

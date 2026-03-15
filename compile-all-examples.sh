@@ -1,6 +1,9 @@
-find examples -name 'inputs.nix' -print0 |
-while IFS= read -r -d '' f; do
-  echo ""
-  echo "=== $f ==="
-  nix run path:.#compile -- "$f" | jq -c
-done
+#!/usr/bin/env bash
+example_repo=$(nix eval --raw --impure --expr 'builtins.fetchGit { url = "git@github.com:esp0xdeadbeef/network-labs.git";}')
+
+find $example_repo -name 'intent.nix' -print0 |
+  while IFS= read -r -d '' f; do
+    echo ""
+    echo "=== $f ==="
+    nix run path:.#compile -- "$f" | jq -c
+  done

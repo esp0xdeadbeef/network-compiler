@@ -1,251 +1,329 @@
+
+# nixos-network-compiler
+
+A deterministic compiler that converts **network intent** into a **platform-independent network model**.
+
+The compiler does **not** generate device configuration.  
+Instead it produces a stable intermediate representation that later stages can realize and render.
+
+* * *
+
 # Disclaimer
 
 This project exists primarily to support my own infrastructure.
 
-If it happens to be useful to others, great - just make sure to pin
-a specific version (see the Nix manual for how to do this).
+If it happens to be useful to others, great — but **pin a specific version** (see the Nix manual for flakes).
 
-If it does not fit your needs, feel free to fork it and adapt it.
-Pull requests are welcome, but they are unlikely to be merged if they
-conflict with the architectural model used here.
+The internal schema may change between versions.  
+Backward compatibility is **not guaranteed**.
 
-The internal model and schema may change between versions.
-Backward compatibility is not guaranteed.
-
-
-# Structural Levels
-
-The architecture follows ISA-88 responsibility layers.
-
-Each layer answers a different question about the network.  
-The repositories implement different layers.
-
-The boundary is strict:
-
-> The compiler defines communication semantics.  
-> The solver realizes those semantics into an executable fabric.
+Pull requests are welcome, but changes that conflict with the architectural model are unlikely to be merged.
 
 * * *
 
-## Enterprise — multi-site grouping
+# Reality Check
 
-**Responsibility: nixos-network-compiler**
+If your goal is simply:
 
-The Enterprise groups multiple independent Sites into a shared administrative domain.
+site-a ↔ site-b
+
+over a tunnel, this project is **completely unnecessary**.
+
+You could solve that with something like:
+
+```bash
+ip route add 10.20.0.0/24 via 10.0.0.2 dev wg0
+```
+
+Done.
+
+This repository exists because I chose to build something **much more complicated** instead.
+
+In other words:
+
+> This project is occasionally a **nuclear reactor used to boil water**.
+
+The goal is not just connectivity.
+
+The goal is **deterministic, reproducible network behavior**.
+
+Once networks require things like:
+
+* deterministic topology construction
+    
+* policy enforcement placement
+    
+* routing authority boundaries
+    
+* renderer-agnostic configuration
+    
+* reproducible addressing
+    
+
+the simple solutions stop scaling very quickly.
+
+So yes — for connecting two sites, this is massive overkill.
+
+But the moment the network stops being trivial, the structure starts to make sense.
+
+* * *
+
+# What this project does
+
+The compiler converts a **high-level network description** into a deterministic **network model**.
+
+Input describes:
+
+* sites
+* tenants
+* services
+* communication policy
+* topology
+* address pools
+* overlays
+    
+
+Output describes:
+
+* normalized topology
+* deterministic addressing
+* uplink structure
+* communication contracts
+* attachment relationships
+* routing domains
+* traversal ordering
+    
+
+The result is a **platform-independent description of a network site**.
+
+Later stages can turn this into:
+
+* router configuration
+* firewall rules
+* containerlab labs
+* NixOS modules
+* simulation environments
+    
+
+* * *
+
+# Position in the architecture
+
+The project is part of a multi-stage pipeline.
+
+| Layer | Responsibility |
+| --- | --- |
+| **Compiler** | defines communication semantics |
+| **Forwarding Model** | constructs deterministic forwarding structure |
+| **Control plane model** | derives control-plane mechanisms |
+| **Renderer** | generates platform configuration |
+
+Pipeline:
+
+intent  
+  ↓  
+compiler  
+  ↓  
+forwarding model  
+  ↓  
+control plane model
+  ↓  
+renderer
+
+This repository implements the **compiler stage**.
+
+* * *
+
+# Compiler responsibilities
+
+The compiler defines **what communication must be possible**.
+
+It does **not** decide:
+
+* routing protocols
+* route distribution
+* device configuration
+* firewall implementation
+    
+
+Those decisions belong to later stages.
+
+The compiler produces a **normalized network model** that is:
+
+* deterministic
+* platform neutral
+* renderer agnostic
+
+* * *
+
+# Policy model
+
+Network behavior is defined through a **communication contract**.
+
+The contract describes:
+
+| Component | Purpose |
+| --- | --- |
+| `trafficTypes` | protocol definitions |
+| `services` | logical services provided by hosts |
+| `relations` | allowed / denied communication |
+
+Example relation:
+
+```nix
+{  
+  id = "allow-admin-to-mgmt-dns";  
+  priority = 100;  
+  
+  from = {  
+    kind = "tenant";  
+    name = "admin";  
+  };  
+  
+  to = {  
+    kind = "service";  
+    name = "dns-site";  
+  };  
+  
+  trafficType = "dns";  
+  action = "allow";  
+}
+```
+
+This defines **behavioral intent**, not firewall rules.
+
+* * *
+
+# Topology model
+
+Topology describes **network execution structure**.
+
+Nodes represent **forwarding units**.
 
 Example:
 
-Codecorp  
-homelab  
-customer-a
+Access → Policy → Upstream Selector → Core
 
-It answers:
+Each node has a role:
 
-> Which Sites belong to the same authority domain?
-
-This layer exists to allow large or multi-organization deployments to share the same model without redesign.  
-Single-site setups may use a single implicit Enterprise.
-
-* * *
-
-## Site — authority boundary
-
-**Responsibility: nixos-network-compiler**
-
-A Site defines ownership and trust scope.
-
-Examples:
-
-Codesite-a  
-site-b  
-lab  
-laptop
-
-It answers:
-
-> Which address space is governed by the same authority?
-
-Comparable to a routing domain or administrative domain.
-
-The Site defines where communication rules apply.  
-It does not define how traffic flows between devices.
-
-* * *
-
-## Process Cell — communication behavior
-
-**Responsibility: nixos-network-compiler**
-
-The Process Cell defines allowed communication inside a Site.
-
-It describes:
-
-* reachable domains
-    
-* enforcement requirements
-    
-* external reachability requirements
-    
-* authority roles
-    
-* communication permissions
-    
-
-It answers:
-
-> What communication is valid?
-
-No topology exists at this layer.  
-No adjacency exists at this layer.  
-No addressing for links exists at this layer.
-
-The Process Cell is a behavioral contract.
-
-Without this layer, the network contains configuration but no defined meaning.
-
-* * *
-
-## Unit — execution context
-
-**Responsibility: shared**
-
-_Declared by:_ nixos-network-compiler  
-_Used by:_ nixos-fabric-solver
-
-A Unit is a runtime execution context capable of hosting responsibilities.
-
-Examples:
-
-Codepolicy instance  
-access instance  
-transit instance
-
-It answers:
-
-> Where may responsibilities execute?
-
-The compiler declares available Units.  
-The solver decides how responsibilities are distributed across them.
-
-A Unit is not a topology node and does not imply connectivity.
-
-* * *
-
-## Equipment Modules — responsibilities
-
-**Derived by: nixos-fabric-solver**
-
-Equipment Modules represent operational responsibilities required by the Process Cell.
-
-Examples:
-
-| Module | Meaning |
+| Role | Responsibility |
 | --- | --- |
-| access-gateway | terminates owned address domains |
-| policy-engine | enforces communication permissions |
-| transit-forwarder | carries traffic between responsibilities |
-| upstream-selector | provides external reachability |
-| authority-rib | owns routing decisions |
+| `access` | tenant attachment |
+| `policy` | enforcement |
+| `upstream-selector` | path selection |
+| `core` | external connectivity |
 
-They answer:
+The compiler ensures topology correctness:
 
-> Which responsibilities must exist for the Site to function?
-
-The compiler does not assign these.  
-The solver derives them from the Process Cell and assigns them to Units.
+* no disconnected nodes
+* valid uplink definitions
+* correct role presence
+* deterministic link ordering
+    
 
 * * *
 
-## Unit Connectivity — operational relationships
+# Deterministic guarantees
 
-**Responsibility: nixos-fabric-solver**
+For a given input, the compiler always produces the same output.
 
-The solver determines how Units must relate so responsibilities can interact.
+The resulting model guarantees:
 
-This includes:
-
-* adjacency relationships
-    
-* forwarding relationships
-    
-* responsibility ordering
+* deterministic address allocation
+* stable topology ordering
+* explicit authority boundaries
+* validated policy structure
     
 
-It answers:
-
-> How must responsibilities interact so behavior is realizable?
-
-This is the first layer where traffic traversal exists.
+The output is suitable for **further compilation stages**.
 
 * * *
 
-## Control Modules — execution mechanisms
+# Running the compiler
 
-**Prepared by: nixos-fabric-solver  
-Implemented by: platform renderers**
+Compile a site definition:
 
-Control Modules are executable configuration primitives.
+```bash
+nix run .#compile examples/single-wan/inputs.nix
+```
 
-Examples:
 
-* interface addressing
-    
-* forwarding state
-    
-* route entries
-    
-* enforcement attachment points
-    
+Compile all examples:
 
-They answer:
+```bash
+./compile-all-examples.sh
+```
 
-> What configuration must exist for a Unit to execute its responsibilities?
+Debug compilation:
 
-Control Modules remain platform-neutral until rendered.
+```bash
+nix run .#debug examples/single-wan/inputs.nix
+```
 
-* * *
+# Example output structure
 
-## Platform Implementation
+The compiler produces structured JSON:
 
-**Responsibility: renderer (e.g. NixOS module)**
+sites  
+ └ enterprise  
+     └ site  
+         ├ communicationContract  
+         ├ domains  
+         ├ hosts  
+         ├ transport  
+         ├ uplinks  
+         ├ routerLoopbacks  
+         └ transit
 
-Platform renderers translate Control Modules into device configuration.
-
-Examples:
-
-* systemd-networkd configuration
-    
-* nftables hooks
-    
-* routing configuration
-    
-
-They answer:
-
-> How does a specific system express the Control Modules?
-
-Different platforms implement the same Control Modules differently while preserving behavior.
+This output becomes the **input to the forwarding model stage**.
 
 * * *
 
-# Responsibility Summary
+# ISA-88 interpretation
 
-| Layer | Implemented by |
+The architecture loosely follows ISA-88 responsibility separation.
+
+| ISA-88 | Meaning here |
 | --- | --- |
-| Enterprise | nixos-network-compiler |
-| Site | nixos-network-compiler |
-| Process Cell | nixos-network-compiler |
-| Unit declaration | nixos-network-compiler |
-| Equipment Modules | nixos-fabric-solver |
-| Unit Connectivity | nixos-fabric-solver |
-| Control Modules | nixos-fabric-solver |
-| Platform configuration | renderer (e.g. NixOS) |
+| Enterprise | administrative grouping |
+| Site | authority boundary |
+| Process Cell | allowed communication behavior |
+| Unit | forwarding execution context |
+| Equipment Module | responsibility of a unit |
+| Control Module | implementation mechanism |
+
+The compiler stops at **Process Cell semantics**.
+
+Later stages realize these semantics into operational networks.
 
 * * *
 
-# Conceptual Flow
+# Architectural invariant
 
-Codecompiler → semantics  
-solver   → realization  
-renderer → execution
+The system maintains one rule:
 
+behavior  
+  → forwarding  
+  → realization  
+  → configuration
+
+Each stage reduces ambiguity without introducing platform assumptions.
+
+* * *
+
+# Tests
+
+Run the test suite:
+
+```bash
+nix run .#check
+```
+
+The test suite includes:
+
+* positive examples
+    
+* negative validation tests
+    
+* regression tests
+    

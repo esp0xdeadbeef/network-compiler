@@ -89,7 +89,7 @@
 
               inputs = readInputs "$inputAbs";
 
-              compiled = flake.lib.compile inputs;
+              compiled = (flake.lib.compile "${system}") inputs;
 
             in
             ${nixExpr}
@@ -116,9 +116,11 @@
     in
     {
       lib = {
-        compile = import ./lib/main.nix {
-          lib = (mkPkgs builtins.currentSystem).lib;
-        };
+        compile =
+          system:
+          import ./lib/main.nix {
+            lib = (mkPkgs system).lib;
+          };
       };
 
       apps = forAllSystems (

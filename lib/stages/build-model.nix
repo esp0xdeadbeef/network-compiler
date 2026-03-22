@@ -46,8 +46,6 @@ let
 
   communicationContractDeclared = if _hasCommunicationContract then communicationContract0 else { };
 
-  interfaceTags = communicationContractDeclared.interfaceTags or { };
-
   parts = splitSiteKey siteKey;
   canonicalSiteId = "${parts.enterprise}.${parts.siteName}";
 
@@ -285,11 +283,31 @@ let
             _kind = ensure ((subj.kind or null) == "tenant") {
               code = "E_UPLINK_INGRESS_SUBJECT_KIND";
               site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                u.name
+                "uplinks"
+                "ingressSubject"
+                "kind"
+              ];
+              message = "uplink.ingressSubject.kind must be 'tenant'";
+              hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
             };
 
             _exists = ensure (builtins.elem subj.name tenantNames) {
               code = "E_UPLINK_INGRESS_SUBJECT_UNKNOWN_TENANT";
               site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                u.name
+                "uplinks"
+                "ingressSubject"
+                "name"
+              ];
+              message = "uplink ingressSubject references unknown tenant '${subj.name}'";
+              hints = [ "Declare tenant '${subj.name}' under ownership.prefixes." ];
             };
           in
           true;
@@ -297,19 +315,133 @@ let
     builtins.all check allUplinks;
 
   relations0 = communicationContractDeclared.relations or [ ];
+  relationIds = map (r: if r ? id then r.id else null) relations0;
+  _uniqRelationIds = assertUnique "relation id" (lib.filter (x: x != null) relationIds);
 
-  normalizedRelations = sortRelations (
-    lib.imap0 (
-      idx: r:
-      normalizeRelationWithProvenance siteKey externals tenantNames serviceIndex trafficTypeIndex idx r
-    ) relations0
-  );
+  normalizedRelations0 = lib.imap0 (
+    idx: r:
+    normalizeRelationWithProvenance siteKey externals tenantNames serviceIndex trafficTypeIndex idx r
+  ) relations0;
+
+  normalizedRelations = sortRelations normalizedRelations0;
 
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
 
-  compiledServices = map (svc: svc // { providers = svc.providers or [ ]; }) (
-    communicationContractDeclared.services or [ ]
+  overlayHasExplicitAllow =
+    ovName:
+    builtins.any (
+      r:
+      (r.action or "deny") == "allow"
+      && builtins.isAttrs r.to
+      && (r.to.kind or null) == "external"
+      && r.to.name == ovName
+    ) normalizedRelations;
+
+  _overlayPolicyRequired =
+    if overlays == [ ] then
+      true
+    else
+      builtins.all (
+        ov:
+        ensure (overlayHasExplicitAllow ov.name) {
+          code = "E_OVERLAY_POLICY_MISSING";
+          site = siteKey;
+          path = [
+            "transport"
+            "overlays"
+          ];
+          message = "overlay '${ov.name}' requires explicit allow relation to external='${ov.name}'";
+          hints = [
+            "Add communicationContract.relations entry allowing traffic to { kind = \"external\"; name = \"${ov.name}\"; }."
+          ];
+        }
+      ) overlays;
+
+  localPool =
+    if semantic ? addressPools && semantic.addressPools ? local then
+      semantic.addressPools.local
+    else
+      null;
+
+  p2pPool =
+    if semantic ? addressPools && semantic.addressPools ? p2p then semantic.addressPools.p2p else null;
+
+  allocLoopV4 = allocator.mkIPv4Allocator localPool;
+  allocLoopV6 = allocator.mkIPv6Allocator localPool;
+
+  loopbacks = lib.listToAttrs (
+    lib.imap0 (idx: name: {
+      name = name;
+      value = {
+        ipv4 = allocLoopV4 idx;
+        ipv6 = allocLoopV6 idx;
+      };
+    }) nodeNamesSorted
   );
+
+  allocP2pV4 = allocator.mkIPv4Allocator p2pPool;
+  allocP2pV6 = allocator.mkIPv6Allocator p2pPool;
+
+  adjacencyAddrs = lib.imap0 (
+    idx: pair:
+    let
+      a = builtins.elemAt pair 0;
+      b = builtins.elemAt pair 1;
+    in
+    {
+      endpoints = [
+        {
+          unit = a;
+          local = {
+            ipv4 = allocP2pV4 (idx * 2);
+            ipv6 = allocP2pV6 (idx * 2);
+          };
+        }
+        {
+          unit = b;
+          local = {
+            ipv4 = allocP2pV4 (idx * 2 + 1);
+            ipv6 = allocP2pV6 (idx * 2 + 1);
+          };
+        }
+      ];
+    }
+  ) links0;
+
+  mkUnitIsolation =
+    n:
+    let
+      role = nodes.${n}.role or null;
+      isolated = builtins.elem role [
+        "core"
+        "access"
+      ];
+    in
+    if isolated then
+      {
+        containers = [ "isolated-0" ];
+        isolated = true;
+      }
+    else
+      {
+        containers = [ "default" ];
+        isolated = false;
+      };
+
+  unitIsolation = lib.listToAttrs (
+    map (n: {
+      name = n;
+      value = mkUnitIsolation n;
+    }) nodeNamesSorted
+  );
+
+  compiledServices = map (
+    svc:
+    svc
+    // {
+      providers = svc.providers or [ ];
+    }
+  ) (communicationContractDeclared.services or [ ]);
 
   compiledTrafficTypes = map (
     name:
@@ -321,18 +453,12 @@ let
     }
   ) (lib.sort builtins.lessThan trafficTypeNames);
 
-  communicationContract =
-    (builtins.removeAttrs communicationContractDeclared [
-      "relations"
-      "services"
-      "trafficTypes"
-    ])
-    // {
-      interfaceTags = interfaceTags;
-      trafficTypes = compiledTrafficTypes;
-      services = compiledServices;
-      allowedRelations = normalizedRelations;
-    };
+  communicationContract = (builtins.removeAttrs communicationContractDeclared [ "relations" ]) // {
+    interfaceTags = communicationContractDeclared.interfaceTags or { };
+    trafficTypes = compiledTrafficTypes;
+    services = compiledServices;
+    allowedRelations = normalizedRelations;
+  };
 
   model = {
     id = canonicalSiteId;
@@ -341,21 +467,25 @@ let
     domains = {
       tenants = tenants;
     };
+
     hosts = hosts;
+
     attachment = semantic.attachments or [ ];
 
     transit = {
       ordering = links0;
-      adjacencies = [ ];
+      adjacencies = adjacencyAddrs;
     };
 
     transport = {
       overlays = overlays;
     };
+
     addressPools = semantic.addressPools or { };
 
-    routerLoopbacks = { };
-    units = { };
+    routerLoopbacks = loopbacks;
+
+    units = unitIsolation;
 
     uplinks = {
       multiWan = anyMultiWan;
@@ -365,5 +495,30 @@ let
     inherit communicationContract;
   };
 
+  _forced = builtins.deepSeq {
+    inherit
+      _hasCommunicationContract
+      _noLegacyExternalPolicy
+      _addrSafe
+      _topoValid
+      _noDisconnectedNodes
+      _uniqTrafficTypes
+      _uniqServices
+      _uniqTenants
+      _uniqHosts
+      _uniqRelationIds
+      _validateServiceTrafficTypes
+      _validateServiceProviders
+      _overlayPolicyRequired
+      _validateIngressSubjects
+      _hasExternalAllow
+      ;
+    normalizedRelations = normalizedRelations;
+    coreUplinks = coreUplinks;
+    overlays = overlays;
+    externals = externals;
+    hosts = hosts;
+  } true;
+
 in
-model
+if _forced then model else model

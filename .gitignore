@@ -3,3 +3,4 @@
 #nixos.qcow2
 clab-fabric*
 clab-fabric/*
+vib.sh

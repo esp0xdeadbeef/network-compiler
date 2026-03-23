@@ -4,6 +4,17 @@ let
   util = import ./util.nix { inherit lib; };
   inherit (util) ensure assertUnique throwError;
 
+  normalizeLinkPair =
+    pair:
+    let
+      a = builtins.elemAt pair 0;
+      b = builtins.elemAt pair 1;
+    in
+    lib.sort builtins.lessThan [
+      a
+      b
+    ];
+
   neighborsMap =
     nodeNames: links:
     let
@@ -257,6 +268,42 @@ let
     else
       [ ];
 
+  logicalLinkName =
+    pair:
+    let
+      ordered = normalizeLinkPair pair;
+    in
+    "${builtins.elemAt ordered 0}<->${builtins.elemAt ordered 1}";
+
+  assertUniqueLogicalLinks =
+    siteKey: links:
+    let
+      names = lib.sort builtins.lessThan (map logicalLinkName links);
+
+      check =
+        prev: rest:
+        if rest == [ ] then
+          true
+        else
+          let
+            cur = builtins.head rest;
+          in
+          if prev == cur then
+            throwError {
+              code = "E_TOPO_DUPLICATE_LINK";
+              site = siteKey;
+              path = [
+                "topology"
+                "links"
+              ];
+              message = "duplicate logical link '${cur}'";
+              hints = [ "Remove duplicate or reversed-duplicate topology.links entries." ];
+            }
+          else
+            check cur (builtins.tail rest);
+    in
+    if names == [ ] then true else check (builtins.head names) (builtins.tail names);
+
   validateTopology =
     siteKey: topo:
     let
@@ -304,16 +351,29 @@ let
             code = "E_TOPO_UNKNOWN_NODE";
             site = siteKey;
           };
+
+          _notSelf = ensure (a != b) {
+            code = "E_TOPO_SELF_LINK";
+            site = siteKey;
+            path = [
+              "topology"
+              "links"
+            ];
+            message = "topology link endpoints must be distinct";
+            hints = [ "Replace self-links with links between two different nodes." ];
+          };
         in
         true;
 
       _linksOk = builtins.foldl' (acc: pair: acc && (checkLink pair)) true links;
+      normalizedLinks = map normalizeLinkPair links;
+      _uniqLinks = assertUniqueLogicalLinks siteKey normalizedLinks;
 
       touched = lib.unique (
         lib.concatMap (pair: [
           (builtins.elemAt pair 0)
           (builtins.elemAt pair 1)
-        ]) links
+        ]) normalizedLinks
       );
 
       _noIsolated = builtins.foldl' (
@@ -325,7 +385,7 @@ let
         }
       ) true nodeNames;
 
-      neigh = neighborsMap nodeNames links;
+      neigh = neighborsMap nodeNames normalizedLinks;
 
       start = if nodeNames == [ ] then null else builtins.elemAt (lib.sort builtins.lessThan nodeNames) 0;
 
@@ -395,6 +455,7 @@ let
           _hasPolicy
           _hasAccess
           _linksOk
+          _uniqLinks
           _noIsolated
           _connected
           coreUplinks

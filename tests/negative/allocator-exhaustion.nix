@@ -1,44 +1,26 @@
 {
   badsite = {
-    pools = {
-      p2p = {
-        ipv4 = "10.10.0.0/30";
-        ipv6 = "fd42:dead:beef:1000::/126";
-      };
-      loopback = {
-        ipv4 = "10.19.0.0/30";
-        ipv6 = "fd42:dead:beef:1900::/126";
-      };
-    };
-
-    ownership.prefixes = [
-      {
-        kind = "tenant";
-        name = "mgmt";
-        ipv4 = "10.20.10.0/24";
-        ipv6 = "fd42:dead:beef:10::/64";
-      }
-    ];
-
-    communicationContract = {
-      trafficTypes = [ ];
-      services = [ ];
-      relations = [
+    ownership = {
+      prefixes = [
         {
-          id = "allow-mgmt-to-wan";
-          priority = 100;
-          from = {
-            kind = "tenant";
-            name = "mgmt";
-          };
-          to = {
-            kind = "external";
-            name = "wan";
-          };
-          trafficType = "any";
-          action = "allow";
+          kind = "tenant";
+          name = "mgmt";
+          ipv4 = "10.20.10.0/24";
+          ipv6 = "fd42:dead:beef:10::/64";
         }
       ];
+    };
+
+    pools = {
+      p2p = {
+        ipv4 = "10.10.0.0/24";
+        ipv6 = "fd42:dead:beef:1000::/118";
+      };
+
+      loopback = {
+        ipv4 = "10.19.0.0/24";
+        ipv6 = "fd42:dead:beef:1900::/118";
+      };
     };
 
     topology = {
@@ -77,6 +59,43 @@
           "s-router-policy"
           "s-router-access"
         ]
+      ];
+    };
+
+    communicationContract = {
+      trafficTypes = [ ];
+
+      services = [ ];
+
+      relations = [
+        {
+          id = "duplicate-id";
+          priority = 100;
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            name = "wan";
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+        {
+          id = "duplicate-id";
+          priority = 200;
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            name = "wan";
+          };
+          trafficType = "any";
+          action = "deny";
+        }
       ];
     };
   };

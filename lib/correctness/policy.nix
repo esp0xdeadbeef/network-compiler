@@ -179,7 +179,7 @@ let
       in
       {
         kind = "tenant-set";
-        inherit members;
+        members = lib.sort builtins.lessThan members;
       }
     else
       let
@@ -313,10 +313,33 @@ let
           inherit name;
         };
 
-  mkRelationSource = idx: relation: {
+  subjectKey =
+    subj:
+    if subj.kind == "tenant" then
+      "tenant:${subj.name}"
+    else if subj.kind == "tenant-set" then
+      "tenant-set:${lib.concatStringsSep "," (lib.sort builtins.lessThan subj.members)}"
+    else
+      "external:${subj.name}";
+
+  targetKey =
+    target:
+    if target == "any" then
+      "any"
+    else if target.kind == "service" then
+      "service:${target.name}"
+    else
+      subjectKey target;
+
+  mkRelationSource = relation: from: to: trafficType: action: {
     kind = "relation";
-    index = idx;
-    id = relation.id or "relation-${toString idx}";
+    id =
+      if relation ? id then
+        relation.id
+      else
+        "relation:${subjectKey from}->${targetKey to}:${trafficType}:${action}:${
+          toString (relation.priority or 0)
+        }";
     priority = relation.priority or 0;
   };
 
@@ -355,10 +378,16 @@ let
 
       trafficTypeName = relation.trafficType or "any";
       trafficType = trafficTypeDef siteKey idx trafficTypeIndex trafficTypeName;
+
+      source = mkRelationSource relation from to trafficType.name action;
     in
     {
-      source = mkRelationSource idx relation;
-      inherit from to action;
+      inherit
+        source
+        from
+        to
+        action
+        ;
       trafficType = trafficType.name;
       match = trafficType.match;
     };
@@ -372,8 +401,16 @@ let
           true
         else if a.source.priority > b.source.priority then
           false
+        else if a.source.id < b.source.id then
+          true
+        else if a.source.id > b.source.id then
+          false
+        else if a.trafficType < b.trafficType then
+          true
+        else if a.trafficType > b.trafficType then
+          false
         else
-          a.source.index < b.source.index;
+          a.action < b.action;
     in
     lib.sort cmp relations;
 
@@ -387,6 +424,40 @@ let
 
   relationToIsExternal =
     relation: builtins.isAttrs relation.to && (relation.to.kind or null) == "external";
+
+  relationConflictKey =
+    relation: "${subjectKey relation.from}->${targetKey relation.to}:${relation.trafficType}";
+
+  ensureNoConflictingRelations =
+    siteKey: relations:
+    let
+      sorted = sortRelations relations;
+
+      step =
+        state: relation:
+        let
+          key = relationConflictKey relation;
+          prev = state.${key} or null;
+        in
+        if prev == null then
+          state // { "${key}" = relation.action; }
+        else if prev == relation.action then
+          state
+        else
+          throwError {
+            code = "E_CONTRACT_CONFLICTING_RELATIONS";
+            site = siteKey;
+            path = [
+              "communicationContract"
+              "relations"
+            ];
+            message = "conflicting relations for '${key}'";
+            hints = [ "Do not declare both allow and deny for the same normalized relation." ];
+          };
+
+      _visited = builtins.foldl' step { } sorted;
+    in
+    true;
 
   ensureHasExternalAllow =
     siteKey: relations:
@@ -413,6 +484,7 @@ in
     buildServiceIndex
     normalizeRelationWithProvenance
     sortRelations
+    ensureNoConflictingRelations
     ensureHasExternalAllow
     ;
 }

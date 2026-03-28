@@ -25,7 +25,7 @@
       services = [ ];
       relations = [
         {
-          id = "allow-mgmt-to-wan";
+          id = "allow-mgmt-to-uplink0";
           priority = 100;
           from = {
             kind = "tenant";
@@ -33,7 +33,7 @@
           };
           to = {
             kind = "external";
-            name = "wan";
+            uplinks = [ "uplink0" ];
           };
           trafficType = "any";
           action = "allow";
@@ -46,7 +46,7 @@
         s-router-core = {
           role = "core";
           uplinks = {
-            wan = {
+            uplink0 = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };

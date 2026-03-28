@@ -25,7 +25,7 @@
       services = [ ];
       relations = [
         {
-          id = "allow-mgmt-to-isps";
+          id = "allow-mgmt-to-wan";
           priority = 100;
           from = {
             kind = "tenant";
@@ -33,10 +33,7 @@
           };
           to = {
             kind = "external";
-            uplinks = [
-              "isp-a"
-              "isp-b"
-            ];
+            uplinks = [ "wan" ];
           };
           trafficType = "any";
           action = "allow";
@@ -46,18 +43,28 @@
 
     topology = {
       nodes = {
-        s-router-core = {
+        s-router-core-a = {
           role = "core";
           uplinks = {
-            isp-a = {
-              ipv4 = [ "0.0.0.0/0" ];
-              ipv6 = [ "::/0" ];
-            };
-            isp-b = {
+            wan = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
           };
+        };
+
+        s-router-core-b = {
+          role = "core";
+          uplinks = {
+            wan = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
+          };
+        };
+
+        s-router-upstream-selector = {
+          role = "upstream-selector";
         };
 
         s-router-policy = {
@@ -77,7 +84,15 @@
 
       links = [
         [
-          "s-router-core"
+          "s-router-core-a"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-core-b"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-upstream-selector"
           "s-router-policy"
         ]
         [

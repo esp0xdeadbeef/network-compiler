@@ -25,7 +25,7 @@
       services = [ ];
       relations = [
         {
-          id = "allow-mgmt-to-wan";
+          id = "allow-mgmt-to-uplink0";
           priority = 100;
           from = {
             kind = "tenant";
@@ -33,7 +33,7 @@
           };
           to = {
             kind = "external";
-            name = "wan";
+            uplinks = [ "uplink0" ];
           };
           trafficType = "any";
           action = "allow";

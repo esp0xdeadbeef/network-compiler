@@ -74,7 +74,7 @@ let
             ];
             message = "core node '${n}' must define at least one uplink";
             hints = [
-              "Set topology.nodes.${n}.uplinks = { wan = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+              "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
             ];
           };
         in
@@ -85,8 +85,6 @@ let
   uplinkNames = lib.sort builtins.lessThan (
     lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
   );
-
-  knownExternals = lib.sort builtins.lessThan (lib.unique (uplinkNames ++ overlayNames));
 
   tenants0 =
     if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
@@ -109,7 +107,9 @@ let
 
   normalizedRelations0 = lib.imap0 (
     idx: r:
-    normalizeRelationWithProvenance siteKey knownExternals tenantNames serviceIndex trafficTypeIndex idx
+    normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex
+      trafficTypeIndex
+      idx
       r
   ) relations0;
 

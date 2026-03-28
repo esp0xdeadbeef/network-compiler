@@ -28,7 +28,7 @@
         s-router-core = {
           role = "core";
           uplinks = {
-            wan = {
+            uplink0 = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };
@@ -77,7 +77,7 @@
           };
           to = {
             kind = "external";
-            name = "wan";
+            uplinks = [ "uplink0" ];
           };
           trafficType = "any";
           action = "allow";
@@ -91,7 +91,7 @@
           };
           to = {
             kind = "external";
-            name = "wan";
+            uplinks = [ "uplink0" ];
           };
           trafficType = "any";
           action = "deny";

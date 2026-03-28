@@ -31,7 +31,7 @@
         s-router-core = {
           role = "core";
           uplinks = {
-            wan = {
+            uplink0 = {
               ipv4 = [ "0.0.0.0/0" ];
               ipv6 = [ "::/0" ];
             };

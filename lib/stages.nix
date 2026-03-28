@@ -27,7 +27,7 @@ in
       out = {
         sites = compiledGrouped;
         meta = {
-          schemaVersion = 4;
+          schemaVersion = 5;
           provenance = {
             originalInputs = inputs;
           };

@@ -25,7 +25,7 @@
       services = [ ];
       relations = [
         {
-          id = "allow-mgmt-to-isp-a";
+          id = "allow-mgmt-to-isps";
           priority = 100;
           from = {
             kind = "tenant";
@@ -33,7 +33,10 @@
           };
           to = {
             kind = "external";
-            name = "isp-a";
+            uplinks = [
+              "isp-a"
+              "isp-b"
+            ];
           };
           trafficType = "any";
           action = "allow";

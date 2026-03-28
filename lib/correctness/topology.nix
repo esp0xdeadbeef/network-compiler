@@ -78,7 +78,7 @@ let
       _len = ensure (builtins.length parts == 2) {
         code = "E_UPLINK_INVALID_CIDR";
         site = siteKey;
-        path = path;
+        inherit path;
         message = "invalid IPv4 CIDR '${toString cidr}'";
         hints = [ "Use a.b.c.d/prefix." ];
       };
@@ -91,7 +91,7 @@ let
       _octLen = ensure (builtins.length octets == 4) {
         code = "E_UPLINK_INVALID_IPV4";
         site = siteKey;
-        path = path;
+        inherit path;
         message = "invalid IPv4 address '${base}'";
         hints = [ "Use four octets a.b.c.d." ];
       };
@@ -104,7 +104,7 @@ let
         ensure (0 <= v && v <= 255) {
           code = "E_UPLINK_INVALID_IPV4";
           site = siteKey;
-          path = path;
+          inherit path;
           message = "IPv4 octet out of range in '${base}'";
           hints = [ "Each octet must be 0..255." ];
         };
@@ -117,7 +117,7 @@ let
       _pref = ensure (0 <= prefix && prefix <= 32) {
         code = "E_UPLINK_INVALID_PREFIX";
         site = siteKey;
-        path = path;
+        inherit path;
         message = "invalid IPv4 prefix in '${cidr}'";
         hints = [ "Use /0..../32." ];
       };
@@ -144,7 +144,7 @@ let
         _shape = ensure (builtins.isAttrs ingressSubject) {
           code = "E_UPLINK_INGRESS_SUBJECT_SHAPE";
           site = siteKey;
-          path = path;
+          inherit path;
           message = "uplink.ingressSubject must be an attrset or null";
           hints = [ "Use ingressSubject = { kind = \"tenant\"; name = \"...\"; }." ];
         };
@@ -196,7 +196,7 @@ let
       _nonEmpty = ensure (ipv4 != [ ] || ipv6 != [ ]) {
         code = "E_UPLINK_PREFIX_EMPTY";
         site = siteKey;
-        path = path;
+        inherit path;
         message = "uplink must include at least one ipv4 and/or ipv6 prefix";
         hints = [ "Set ipv4 and/or ipv6 to a non-empty list of CIDR prefixes." ];
       };
@@ -304,6 +304,38 @@ let
     in
     if names == [ ] then true else check (builtins.head names) (builtins.tail names);
 
+  assertUniqueSiteUplinkNames =
+    siteKey: names:
+    let
+      sorted = lib.sort builtins.lessThan names;
+
+      check =
+        prev: rest:
+        if rest == [ ] then
+          true
+        else
+          let
+            cur = builtins.head rest;
+          in
+          if prev == cur then
+            throwError {
+              code = "E_UPLINK_NAME_NOT_UNIQUE";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+              ];
+              message = "uplink name '${cur}' must be unique across all core nodes in the site";
+              hints = [
+                "Rename one of the duplicate uplinks so external names stay unambiguous."
+                "Using 'wan' is fine when it appears only once in the site."
+              ];
+            }
+          else
+            check cur (builtins.tail rest);
+    in
+    if sorted == [ ] then true else check (builtins.head sorted) (builtins.tail sorted);
+
   validateTopology =
     siteKey: topo:
     let
@@ -400,7 +432,7 @@ let
         lib.sort builtins.lessThan nodeNames
       );
 
-      coreUplinks = lib.listToAttrs (
+      coreUplinks = builtins.listToAttrs (
         map (n: {
           name = n;
           value =
@@ -418,7 +450,7 @@ let
                 ];
                 message = "core node '${n}' must define at least one uplink";
                 hints = [
-                  "Set topology.nodes.${n}.uplinks = { wan = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+                  "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
                 ];
               };
             in
@@ -426,27 +458,26 @@ let
         }) coreNodes
       );
 
-      uplinkCounts = map (n: builtins.length (coreUplinks.${n} or [ ])) coreNodes;
+      allUplinkNames = lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes;
+      _uniqSiteUplinks = assertUniqueSiteUplinkNames siteKey allUplinkNames;
 
-      totalUplinks = builtins.foldl' (
-        acc: n: acc + (builtins.length (coreUplinks.${n} or [ ]))
-      ) 0 coreNodes;
+      totalUplinks = builtins.length allUplinkNames;
 
-      anyMultiWan = totalUplinks > 1;
-
-      _requiresUpstreamSelector = ensure (!anyMultiWan || builtins.elem "upstream-selector" roles) {
-        code = "E_TOPO_MISSING_UPSTREAM_SELECTOR";
-        site = siteKey;
-        path = [
-          "topology"
-          "nodes"
-        ];
-        message = "multiple uplinks require an upstream-selector node";
-        hints = [
-          "Add a node with role = \"upstream-selector\"."
-          "Connect it in topology.links between core and policy."
-        ];
-      };
+      _requiresUpstreamSelector =
+        ensure (!(totalUplinks > 1) || builtins.elem "upstream-selector" roles)
+          {
+            code = "E_TOPO_MISSING_UPSTREAM_SELECTOR";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+            ];
+            message = "multiple uplinks require an upstream-selector node";
+            hints = [
+              "Add a node with role = \"upstream-selector\"."
+              "Connect it in topology.links between core and policy."
+            ];
+          };
 
       _force = builtins.deepSeq {
         inherit
@@ -459,7 +490,7 @@ let
           _noIsolated
           _connected
           coreUplinks
-          uplinkCounts
+          _uniqSiteUplinks
           totalUplinks
           _requiresUpstreamSelector
           ;

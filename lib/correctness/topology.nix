@@ -361,6 +361,34 @@ let
         site = siteKey;
       };
 
+      _hasDownstreamSelector = ensure (builtins.elem "downstream-selector" roles) {
+        code = "E_TOPO_MISSING_DOWNSTREAM_SELECTOR";
+        site = siteKey;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "topology must include a downstream-selector node";
+        hints = [
+          "Add a node with role = \"downstream-selector\"."
+          "Connect it between access and policy in topology.links."
+        ];
+      };
+
+      _hasUpstreamSelector = ensure (builtins.elem "upstream-selector" roles) {
+        code = "E_TOPO_MISSING_UPSTREAM_SELECTOR";
+        site = siteKey;
+        path = [
+          "topology"
+          "nodes"
+        ];
+        message = "topology must include an upstream-selector node";
+        hints = [
+          "Add a node with role = \"upstream-selector\"."
+          "Connect it between policy and core in topology.links."
+        ];
+      };
+
       links = topo.links or [ ];
 
       checkLink =
@@ -461,38 +489,20 @@ let
       allUplinkNames = lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes;
       _uniqSiteUplinks = assertUniqueSiteUplinkNames siteKey allUplinkNames;
 
-      totalUplinks = builtins.length allUplinkNames;
-
-      _requiresUpstreamSelector =
-        ensure (!(totalUplinks > 1) || builtins.elem "upstream-selector" roles)
-          {
-            code = "E_TOPO_MISSING_UPSTREAM_SELECTOR";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-            ];
-            message = "multiple uplinks require an upstream-selector node";
-            hints = [
-              "Add a node with role = \"upstream-selector\"."
-              "Connect it in topology.links between core and policy."
-            ];
-          };
-
       _force = builtins.deepSeq {
         inherit
           _uniqNodes
           _hasCore
           _hasPolicy
           _hasAccess
+          _hasDownstreamSelector
+          _hasUpstreamSelector
           _linksOk
           _uniqLinks
           _noIsolated
           _connected
           coreUplinks
           _uniqSiteUplinks
-          totalUplinks
-          _requiresUpstreamSelector
           ;
       } true;
     in

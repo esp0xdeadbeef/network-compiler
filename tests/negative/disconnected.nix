@@ -53,8 +53,16 @@
           };
         };
 
+        s-router-upstream-selector = {
+          role = "upstream-selector";
+        };
+
         s-router-policy = {
           role = "policy";
+        };
+
+        s-router-downstream-selector = {
+          role = "downstream-selector";
         };
 
         s-router-access = {
@@ -71,7 +79,15 @@
       links = [
         [
           "s-router-core"
+          "s-router-upstream-selector"
+        ]
+        [
+          "s-router-upstream-selector"
           "s-router-policy"
+        ]
+        [
+          "s-router-policy"
+          "s-router-downstream-selector"
         ]
       ];
     };

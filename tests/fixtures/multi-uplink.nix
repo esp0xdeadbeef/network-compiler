@@ -84,6 +84,10 @@
             role = "policy";
           };
 
+          s-router-downstream-selector = {
+            role = "downstream-selector";
+          };
+
           s-router-access-adm = {
             role = "access";
             attachments = [
@@ -120,10 +124,14 @@
           ]
           [
             "s-router-policy"
+            "s-router-downstream-selector"
+          ]
+          [
+            "s-router-downstream-selector"
             "s-router-access-adm"
           ]
           [
-            "s-router-policy"
+            "s-router-downstream-selector"
             "s-router-access-mgmt"
           ]
         ];
@@ -205,6 +213,10 @@
             role = "policy";
           };
 
+          s-router-downstream-selector = {
+            role = "downstream-selector";
+          };
+
           s-router-access = {
             role = "access";
             attachments = [
@@ -231,6 +243,10 @@
           ]
           [
             "s-router-policy"
+            "s-router-downstream-selector"
+          ]
+          [
+            "s-router-downstream-selector"
             "s-router-access"
           ]
         ];

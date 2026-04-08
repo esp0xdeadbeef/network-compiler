@@ -26,6 +26,25 @@
 
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
 
+      readValue =
+        valueOrPath:
+        if builtins.isPath valueOrPath then
+          readValue (builtins.toString valueOrPath)
+        else if builtins.isString valueOrPath then
+          if valueOrPath == "" then
+            { }
+          else if builtins.match ".*\\.json$" valueOrPath != null then
+            builtins.fromJSON (builtins.readFile valueOrPath)
+          else
+            let
+              value = import valueOrPath;
+            in
+            if builtins.isFunction value then value { } else value
+        else if builtins.isFunction valueOrPath then
+          valueOrPath { }
+        else
+          valueOrPath;
+
       mkPkgs =
         system:
         let
@@ -41,6 +60,41 @@
               };
             })
           ];
+        };
+
+      mkSystemLib =
+        system:
+        let
+          pkgs = mkPkgs system;
+          compile = import ./lib/main.nix {
+            lib = pkgs.lib;
+          };
+        in
+        rec {
+          inherit compile;
+
+          readInput = readValue;
+
+          compileValue = value: compile value;
+
+          compilePath = valueOrPath: compile (readValue valueOrPath);
+
+          writeJSON =
+            {
+              value ? null,
+              path ? null,
+              name ? "output-compiler.json",
+            }:
+            let
+              resolvedValue =
+                if value != null then
+                  value
+                else if path != null then
+                  readValue path
+                else
+                  throw "network-compiler: writeJSON requires value or path";
+            in
+            pkgs.writeText name (builtins.toJSON (compile resolvedValue));
         };
 
       mkEvalApp =
@@ -116,12 +170,12 @@
     in
     {
       lib = {
-        compile =
-          system:
-          import ./lib/main.nix {
-            lib = (mkPkgs system).lib;
-          };
+        compile = system: (mkSystemLib system).compile;
+        compilePath = system: (mkSystemLib system).compilePath;
+        writeJSON = system: (mkSystemLib system).writeJSON;
       };
+
+      libBySystem = forAllSystems mkSystemLib;
 
       apps = forAllSystems (
         system:

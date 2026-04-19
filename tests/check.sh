@@ -3,6 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+signed_json_out="$(mktemp)"
+trap 'rm -f "$signed_json_out"' EXIT
+export OUTPUT_COMPILER_SIGNED_JSON="$signed_json_out"
+
 positive_cases=(
 single-wan
 multi-wan

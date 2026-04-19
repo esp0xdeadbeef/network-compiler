@@ -467,6 +467,34 @@ That is one of the primary reasons the model is intentionally rigid.
 
 ---
 
+# Why this exists (design goals)
+
+This toolchain exists because I want all of the following at the same time:
+
+* **S88-style separation** (clear responsibility boundaries between stages)
+* **Deterministic IPv4/IPv6 layouts** (predictable addressing and stable identities)
+* **Explicit containment** (a rogue uplink/core must not affect other uplinks or bypass policy)
+* **Overlays evaluated by policy** (e.g. NAS backup over an overlay that must traverse policy)
+* **Intent distilled from configuration** (high-level `intent.nix`, separate realization/inventory)
+* **Scale without rewriting layers** (single-wan → multi-wan → multi-enterprise without changing the pipeline)
+* **Protocol plurality downstream** (static/BGP/other routing protocols derived from deterministic model output)
+
+If you only need “two sites over a tunnel”, none of this is worth it.
+
+---
+
+# Current limitation (important)
+
+The compiler validates staged topology and policy structure, but it does **not** (yet) guarantee *policy-driven dedicated L2 separation*.
+
+`topology.links` expresses stage adjacency as node pairs, and downstream stages currently assume “one p2p link per node pair”.
+That means `intent.nix` cannot yet express “dedicated lanes” whose existence is derived from policy/egress intent.
+
+The planned direction is to derive dedicated “L2 lanes” in the forwarding-model stage and bind them via inventory in the control-plane-model stage.
+See `network-forwarding-model/TODO.md` (in that repo) for the lane-aware p2p plan.
+
+---
+
 # Platform independence
 
 The compiler output is designed to be platform-independent.
@@ -521,10 +549,16 @@ Pin versions if you depend on it.
 
 # Running the compiler
 
-Compile a site definition:
+Compile a site definition (local fixture):
 
 ```bash
-nix run .#compile examples/single-wan/inputs.nix
+nix run .#compile -- tests/fixtures/single-uplink.nix
+```
+
+Compile an example from `network-labs` (via the flake input):
+
+```bash
+nix run .#compile -- labs:examples/single-wan/intent.nix
 ```
 
 Compile all examples:
@@ -536,7 +570,7 @@ Compile all examples:
 Debug compilation:
 
 ```bash
-nix run .#debug examples/single-wan/inputs.nix
+nix run .#debug -- tests/fixtures/single-uplink.nix
 ```
 
 ---
@@ -652,4 +686,3 @@ Not a side effect.
 
 If that architecture fits your goals, the model can scale cleanly.
 If it does not, this repository is probably not the right tool.
-

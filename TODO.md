@@ -2,17 +2,17 @@
 
 ## Policy-Driven Dedicated Transit Links ("L2 Lanes")
 
-The compiler defines communication semantics and a canonical staged architecture, but it does not currently provide a way
-to *guarantee* that policy/egress intent implies dedicated L2 separation between stages.
+Status: implemented downstream (forwarding-model derives lanes; CPM binds strictly via inventory).
 
-This is tracked as a forwarding-model feature (lane-aware p2p / multi-link), but the compiler may need to evolve to:
+The compiler stays lane-agnostic on purpose:
 
-- document the current limitation: `topology.links` is a list of node pairs, so only one logical link per node pair is expressible.
-- ensure the compiler output remains sufficient for forwarding model to derive lanes deterministically from:
-  - `communicationContract.relations` (especially `to.kind="external"` / `uplinks`)
-  - attachments (tenants/services)
-  - overlay intent (`transport.overlays`)
+- It defines the canonical staged architecture and explicit communication semantics.
+- It does not decide whether lanes are realized as VLAN trunks, subifs, dedicated links, etc.
+- It does not emit multiple parallel transit links itself; the forwarding-model derives those from compiler intent.
 
-Non-goal: the compiler should not decide VLAN/subif/etc realization details.
-That remains a realization/inventory concern downstream.
+Remaining work:
 
+- Keep tightening the compiler-side input contract so lane derivation stays deterministic:
+  - ensure external/uplink selectors are explicit (`to.kind="external"`, use `uplinks = [ ... ]` for real uplinks)
+  - ensure allow/deny relations reference existing tenants/uplinks/services
+  - keep uplink naming unambiguous (unique uplink names across cores when required)

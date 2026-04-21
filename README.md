@@ -149,6 +149,33 @@ Later stages can turn this into:
 
 ---
 
+# Normalized compiler contract
+
+The compiler exports semantic site data, not realization bindings.
+
+Downstream stages should rely on the normalized site payload for:
+
+* relations
+* services
+* tenant prefixes
+* canonical staged topology
+* stable stage-node identities
+* upstream semantic provenance
+
+Overlay intent is compiler-owned semantic input, but not all overlay realization consequences are expressed
+directly in the normalized site payload yet. Downstream stages should therefore treat the compiler as the
+source of overlay semantics, while forwarding-model owns the forwarding consequences of those semantics.
+
+The compiler must not emit:
+
+* host uplink assignments
+* bridge names
+* VLAN IDs
+* container runtime names
+* renderer-specific routing mode
+
+---
+
 # What this project does not do
 
 This compiler does **not**:

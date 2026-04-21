@@ -125,4 +125,6 @@ jq -e '
 ] | length == 0
 ' "$single_wan_json" > /dev/null
 
+"$ROOT/tests/test-dual-wan-branch-overlay.sh"
+
 echo "all tests passed"

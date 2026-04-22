@@ -4,3 +4,5 @@
 clab-fabric*
 clab-fabric/*
 vib.sh
+output-*.json
+output-*-signed.json

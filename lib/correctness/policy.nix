@@ -196,7 +196,7 @@ let
         };
 
   normalizeSubject =
-    siteKey: idx: path: tenantNames: overlayNames: uplinkNames: subj:
+    siteKey: idx: path: tenantNames: serviceIndex: overlayNames: uplinkNames: subj:
     let
       _shape = ensure (builtins.isAttrs subj) {
         code = "E_CONTRACT_SUBJECT_SHAPE";
@@ -206,6 +206,7 @@ let
         hints = [
           "Use { kind = \"tenant\"; name = \"...\"; }."
           "Or use { kind = \"tenant-set\"; members = [ ... ]; }."
+          "Or use { kind = \"service\"; name = \"...\"; }."
           "Or use { kind = \"external\"; name = \"wan\"; }."
           "Or use { kind = \"external\"; uplinks = [ \"isp-a\" \"isp-b\" ]; }."
         ];
@@ -219,15 +220,17 @@ let
             "tenant"
             "tenant-set"
             "external"
+            "service"
           ])
           {
             code = "E_CONTRACT_SUBJECT_KIND";
             site = siteKey;
             path = path ++ [ "kind" ];
-            message = "subject.kind must be 'tenant', 'tenant-set', or 'external'";
+            message = "subject.kind must be 'tenant', 'tenant-set', 'service', or 'external'";
             hints = [
               "Use kind = \"tenant\"."
               "Or kind = \"tenant-set\"."
+              "Or kind = \"service\"."
               "Or kind = \"external\"."
             ];
           };
@@ -284,6 +287,30 @@ let
         kind = "tenant-set";
         members = lib.sort builtins.lessThan members;
       }
+    else if kind == "service" then
+      let
+        name = subj.name or null;
+
+        _name = ensure (name != null && builtins.isString name && name != "") {
+          code = "E_CONTRACT_SUBJECT_NAME";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "service subject requires a non-empty name";
+          hints = [ "Set name = \"<service-name>\"." ];
+        };
+
+        _exists = ensure (builtins.hasAttr name serviceIndex) {
+          code = "E_CONTRACT_UNKNOWN_SERVICE";
+          site = siteKey;
+          path = path ++ [ "name" ];
+          message = "relation references unknown service '${name}'";
+          hints = [ "Declare service '${name}' under communicationContract.services." ];
+        };
+      in
+      {
+        kind = "service";
+        inherit name;
+      }
     else
       normalizeExternalSelector siteKey path overlayNames uplinkNames subj;
 
@@ -339,7 +366,7 @@ let
           "tenant-set"
         ]
       then
-        normalizeSubject siteKey idx basePath tenantNames overlayNames uplinkNames target
+        normalizeSubject siteKey idx basePath tenantNames serviceIndex overlayNames uplinkNames target
       else if kind == "service" then
         let
           name = target.name or null;
@@ -373,6 +400,8 @@ let
       "tenant:${subj.name}"
     else if subj.kind == "tenant-set" then
       "tenant-set:${lib.concatStringsSep "," (lib.sort builtins.lessThan subj.members)}"
+    else if subj.kind == "service" then
+      "service:${subj.name}"
     else if subj ? uplinks then
       "external-uplinks:${lib.concatStringsSep "," (lib.sort builtins.lessThan subj.uplinks)}"
     else
@@ -407,7 +436,7 @@ let
         "relations"
         idx
         "from"
-      ] tenantNames overlayNames uplinkNames (relation.from or { });
+      ] tenantNames serviceIndex overlayNames uplinkNames (relation.from or { });
 
       to = normalizeTarget siteKey idx tenantNames serviceIndex overlayNames uplinkNames (
         relation.to or null

@@ -125,6 +125,61 @@ jq -e '
 ] | length == 0
 ' "$single_wan_json" > /dev/null
 
+service_subject_input="$(mktemp)"
+trap 'rm -f "$single_wan_json" "$service_subject_input"' EXIT
+
+cat > "$service_subject_input" <<EOF
+let
+  base = import $ROOT/tests/fixtures/single-uplink.nix;
+in
+base
+// {
+  esp0xdeadbeef =
+    base.esp0xdeadbeef
+    // {
+      "site-a" =
+        base.esp0xdeadbeef."site-a"
+        // {
+          communicationContract =
+            base.esp0xdeadbeef."site-a".communicationContract
+            // {
+              relations =
+                base.esp0xdeadbeef."site-a".communicationContract.relations
+                ++ [
+                  {
+                    id = "allow-jump-host-to-uplink0";
+                    priority = 100;
+                    from = {
+                      kind = "service";
+                      name = "jump-host";
+                    };
+                    to = {
+                      kind = "external";
+                      uplinks = [ "uplink0" ];
+                    };
+                    trafficType = "any";
+                    action = "allow";
+                  }
+                ];
+            };
+        };
+    };
+}
+EOF
+
+service_subject_json="$(mktemp)"
+trap 'rm -f "$single_wan_json" "$service_subject_input" "$service_subject_json"' EXIT
+nix run "$ROOT#compile" -- "$service_subject_input" > "$service_subject_json"
+
+jq -e '
+[
+.sites.esp0xdeadbeef."site-a".relations[]
+| select(.source.id == "allow-jump-host-to-uplink0")
+| select(.from == { kind: "service", name: "jump-host" })
+| select(.to == { kind: "external", uplinks: [ "uplink0" ] })
+] | length == 1
+' "$service_subject_json" > /dev/null
+
 "$ROOT/tests/test-dual-wan-branch-overlay.sh"
 
 echo "all tests passed"

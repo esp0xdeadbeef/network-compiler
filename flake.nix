@@ -6,7 +6,7 @@
     nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
 
     network-labs = {
-      url = "git+ssh://git@github.com/esp0xdeadbeef/network-labs.git";
+      url = "github:esp0xdeadbeef/network-labs";
       flake = false;
     };
   };

@@ -125,8 +125,50 @@ jq -e '
 ] | length == 0
 ' "$single_wan_json" > /dev/null
 
+tenant_ra6_input="$(mktemp)"
+trap 'rm -f "$single_wan_json" "$tenant_ra6_input"' EXIT
+
+cat > "$tenant_ra6_input" <<EOF
+let
+  base = import $ROOT/tests/fixtures/single-uplink.nix;
+in
+base
+// {
+  esp0xdeadbeef =
+    base.esp0xdeadbeef
+    // {
+      "site-a" =
+        base.esp0xdeadbeef."site-a"
+        // {
+          ownership =
+            base.esp0xdeadbeef."site-a".ownership
+            // {
+              prefixes = [
+                (
+                  builtins.head base.esp0xdeadbeef."site-a".ownership.prefixes
+                  // {
+                    ra6Prefixes = [ "2001:db8:feed::/64" ];
+                  }
+                )
+              ];
+            };
+        };
+    };
+}
+EOF
+
+tenant_ra6_json="$(mktemp)"
+trap 'rm -f "$single_wan_json" "$tenant_ra6_input" "$tenant_ra6_json"' EXIT
+nix run "$ROOT#compile" -- "$tenant_ra6_input" > "$tenant_ra6_json"
+
+jq -e '
+.sites.esp0xdeadbeef."site-a".tenants[]
+| select(.name == "mgmt")
+| .ra6Prefixes == [ "2001:db8:feed::/64" ]
+' "$tenant_ra6_json" > /dev/null
+
 service_subject_input="$(mktemp)"
-trap 'rm -f "$single_wan_json" "$service_subject_input"' EXIT
+trap 'rm -f "$single_wan_json" "$tenant_ra6_input" "$tenant_ra6_json" "$service_subject_input"' EXIT
 
 cat > "$service_subject_input" <<EOF
 let
@@ -168,7 +210,7 @@ base
 EOF
 
 service_subject_json="$(mktemp)"
-trap 'rm -f "$single_wan_json" "$service_subject_input" "$service_subject_json"' EXIT
+trap 'rm -f "$single_wan_json" "$tenant_ra6_input" "$tenant_ra6_json" "$service_subject_input" "$service_subject_json"' EXIT
 nix run "$ROOT#compile" -- "$service_subject_input" > "$service_subject_json"
 
 jq -e '

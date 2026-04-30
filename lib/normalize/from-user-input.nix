@@ -4,7 +4,7 @@ site:
 
 let
   util = import ../correctness/util.nix { inherit lib; };
-  inherit (util) ensure;
+  attachmentRef = import ./attachment-ref.nix { inherit lib; };
 
   topo =
     if site ? topology && builtins.isAttrs site.topology then
@@ -70,51 +70,7 @@ let
     services = [ ];
   };
 
-  segRef =
-    seg:
-    let
-      _ = ensure (builtins.isAttrs seg) {
-        code = "E_INPUT_ATTACHMENT_SHAPE";
-        site = site.siteName or null;
-        path = [
-          "topology"
-          "nodes"
-        ];
-        message = "attachment must be an attrset";
-        hints = [ "Use { kind = \"tenant\"; name = \"...\"; }." ];
-      };
-
-      kind = seg.kind or null;
-      name = seg.name or null;
-
-      _k = ensure (kind != null) {
-        code = "E_INPUT_ATTACHMENT_MISSING_KIND";
-        site = site.siteName or null;
-        path = [
-          "topology"
-          "nodes"
-        ];
-        message = "attachment.kind is required";
-        hints = [ "Set attachment.kind = \"tenant\" or \"service\"." ];
-      };
-
-      _n = ensure (name != null) {
-        code = "E_INPUT_ATTACHMENT_MISSING_NAME";
-        site = site.siteName or null;
-        path = [
-          "topology"
-          "nodes"
-        ];
-        message = "attachment.name is required";
-        hints = [ "Set attachment.name = \"...\"." ];
-      };
-    in
-    if kind == "tenant" then
-      "tenants:${name}"
-    else if kind == "service" then
-      "services:${name}"
-    else
-      "segments:${name}";
+  segRef = seg: attachmentRef { inherit site util seg; };
 
   attachments = lib.concatMap (
     unit:

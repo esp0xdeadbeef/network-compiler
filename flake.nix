@@ -130,7 +130,7 @@
 
             cat > "$tmp" <<EOF
             let
-              flake = builtins.getFlake (toString ${self.outPath});
+              flake = builtins.getFlake "path:${self.outPath}";
               lib = flake.inputs.nixpkgs.lib;
 
               readInputs =

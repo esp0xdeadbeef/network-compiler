@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
+"$ROOT/tests/test-nix-file-loc.sh"
+
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT
 export OUTPUT_COMPILER_SIGNED_JSON="$signed_json_out"

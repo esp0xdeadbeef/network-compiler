@@ -2,9 +2,27 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-example_root="${repo_root}/../network-labs/examples"
 
 fail() { echo "$1" >&2; exit 1; }
+
+archive_json="$(mktemp)"
+trap 'rm -f "${archive_json}"' EXIT
+
+nix flake archive --json "path:${repo_root}" > "${archive_json}"
+
+example_root="$(
+  ARCHIVE_JSON="${archive_json}" nix eval --impure --raw --expr '
+    let
+      archived = builtins.fromJSON (builtins.readFile (builtins.getEnv "ARCHIVE_JSON"));
+      labs = archived.inputs."network-labs" or null;
+      labsPath = if labs == null then null else labs.path or null;
+    in
+      if labsPath == null then
+        throw "tests: missing archived network-labs input path"
+      else
+        "${labsPath}/examples"
+  '
+)"
 
 run_one() {
   local example_name="$1"

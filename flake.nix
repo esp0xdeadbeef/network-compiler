@@ -202,7 +202,10 @@
               pkgs.jq
               pkgs.gnugrep
             ];
-            text = builtins.readFile ./tests/check.sh;
+            text = ''
+              export NETWORK_COMPILER_ROOT=${self.outPath}
+            ''
+            + builtins.readFile ./tests/check.sh;
           };
 
         in

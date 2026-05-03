@@ -19,19 +19,7 @@ mapfile -t oversized < <(
     | sort -nr
 )
 
-mapfile -t hard_oversized < <(
-  printf '%s\n' "${oversized[@]}" | awk -v hard_limit="$hard_limit" '$1 >= hard_limit { print }'
-)
-
-if ((${#hard_oversized[@]} > 0)); then
-  printf 'Tracked Nix files at or above %s lines must be split before this test can pass.\n' "$hard_limit" >&2
-  printf '%s\n' "${hard_oversized[@]}" >&2
-  exit 1
-fi
-
-if ((${#oversized[@]} == 0)); then
-  exit 0
-fi
+((${#oversized[@]} == 0)) && exit 0
 
 if [[ ! -f "$regression_note" ]]; then
   printf 'Nix files over %s lines require regression.md LOC state and reason notes.\n' "$limit" >&2
@@ -48,10 +36,12 @@ note_block="$(
 )"
 
 fail=0
+hard_fail=0
+
 for entry in "${oversized[@]}"; do
   lines="${entry%% *}"
   path="${entry#* }"
-  note_line="$(printf '%s\n' "$note_block" | awk -v path="$path" '$2 == path { print; found = 1; exit }')"
+  note_line="$(printf '%s\n' "$note_block" | awk -v path="$path" '$2 == path { print; exit }')"
 
   if [[ -z "$note_line" ]]; then
     printf 'Missing regression.md LOC note for %s (%s lines).\n' "$path" "$lines" >&2
@@ -73,14 +63,26 @@ for entry in "${oversized[@]}"; do
     fail=1
   fi
 
-  if [[ "$state" != "watch" ]]; then
-    printf 'LOC note for %s must use state=watch; files at or above %s lines fail before notes are checked.\n' "$path" "$hard_limit" >&2
+  if (( lines >= hard_limit )); then
+    hard_fail=1
+    if [[ "$state" != "split-required" ]]; then
+      printf 'LOC note for %s must use state=split-required at or above %s lines.\n' "$path" "$hard_limit" >&2
+      fail=1
+    fi
+  elif [[ "$state" != "watch" ]]; then
+    printf 'LOC note for %s must use state=watch below %s lines.\n' "$path" "$hard_limit" >&2
     fail=1
   fi
 done
 
 if (( fail != 0 )); then
   printf '\nExpected format inside %s / %s:\n' "$start_marker" "$end_marker" >&2
-  printf '<lines> <path> | state=watch | reason=<why this file remains above the soft limit>\n' >&2
+  printf '<lines> <path> | state=watch|split-required | reason=<single responsibility or split target>\n' >&2
+  exit 1
+fi
+
+if (( hard_fail != 0 )); then
+  printf 'Tracked Nix files at or above %s lines must be split before this test can pass.\n' "$hard_limit" >&2
+  printf '%s\n' "${oversized[@]}" | awk -v hard="$hard_limit" '$1 >= hard' >&2
   exit 1
 fi

@@ -226,5 +226,6 @@ jq -e '
 ' "$service_subject_json" > /dev/null
 
 "$ROOT/tests/test-dual-wan-branch-overlay.sh"
+"$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

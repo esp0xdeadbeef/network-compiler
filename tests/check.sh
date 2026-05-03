@@ -27,6 +27,7 @@ negative_nix_cases=(
 "$ROOT/tests/negative/overlay-defined-without-policy-rules.nix"
 "$ROOT/tests/negative/duplicate-uplink-name.nix"
 "$ROOT/tests/negative/legacy-external-name-uplink.nix"
+"$ROOT/tests/negative/non-pair-link.nix"
 )
 
 resolve_example() {

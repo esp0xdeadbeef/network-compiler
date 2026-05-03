@@ -10,5 +10,5 @@ a current state and reason. Files at or above the hard limit fail immediately
 and must be split before tests can pass.
 
 <!-- nix-file-loc:start -->
-235 flake.nix | state=watch | reason=contains flake inputs plus app/check builders; next split is moving app builders under a flake/ module
+235 flake.nix | state=watch | reason=mkEvalApp and checkDrv still define the compile/debug/check app contract around self.outPath; split into flake/apps.nix when app names and generated shell behavior can stay identical
 <!-- nix-file-loc:end -->

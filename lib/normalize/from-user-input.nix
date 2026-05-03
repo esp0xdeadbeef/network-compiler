@@ -56,6 +56,9 @@ let
     // lib.optionalAttrs (p ? ra6Prefixes) {
       ra6Prefixes = p.ra6Prefixes;
     }
+    // lib.optionalAttrs (p ? routedPrefixes) {
+      routedPrefixes = p.routedPrefixes;
+    }
   ) (lib.filter isTenantPrefix prefixes);
 
   isHostEndpoint = e: builtins.isAttrs e && (e.kind or null) == "host" && (e.name or null) != null;

@@ -19,7 +19,7 @@ let
         lib.filter (x: x != null) [
           (p.ipv4 or null)
           (p.ipv6 or null)
-        ]
+        ] ++ lib.filter (x: x != null) (map (routed: routed.ipv6 or null) (p.routedPrefixes or [ ]))
       ) prefixes0;
 
       tenantRangesAll = map parseAny tenantCidrs;

@@ -8,6 +8,7 @@ let
 
   normalizeUplinksForNode = import ./normalize-uplinks.nix { inherit lib; };
   normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
+  buildOverlayAttachments = import ./overlay-attachments.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
@@ -117,6 +118,7 @@ let
   _uniqRelationIds = assertUnique "relation id" normalizedRelationIds;
 
   normalizedRelations = sortRelations normalizedRelations0;
+  overlayAttachments = buildOverlayAttachments siteKey nodes normalizedRelations overlays;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
@@ -156,6 +158,7 @@ let
     tenants = tenants;
     services = compiledServices;
     relations = normalizedRelations;
+    overlayAttachments = overlayAttachments;
   };
 
   _forced = builtins.deepSeq {
@@ -175,6 +178,7 @@ let
     tenants = tenants;
     services = compiledServices;
     relations = normalizedRelations;
+    overlayAttachments = overlayAttachments;
   } true;
 
 in

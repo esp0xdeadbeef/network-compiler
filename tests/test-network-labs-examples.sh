@@ -23,6 +23,7 @@ examples_root="${labs_root}/examples"
   echo "missing network-labs examples root: ${examples_root}" >&2
   exit 1
 }
+labs_profiles_root="${labs_root}/labs"
 
 found=0
 while IFS= read -r -d '' intent_path; do
@@ -32,7 +33,16 @@ while IFS= read -r -d '' intent_path; do
   nix run "${repo_root}#compile" -- "${intent_path}" | jq -e 'has("sites") and has("meta")' >/dev/null
 done < <(find "${examples_root}" -mindepth 2 -maxdepth 2 -name intent.nix -print0 | sort -z)
 
+if [[ -d "${labs_profiles_root}" ]]; then
+  while IFS= read -r -d '' compiler_input_path; do
+    found=1
+    rel="${compiler_input_path#"${labs_root}/"}"
+    echo "checking network-labs lab compiler input: ${rel%/getCompilerInput.nix}"
+    nix run "${repo_root}#compile" -- "${compiler_input_path}" | jq -e 'has("sites") and has("meta")' >/dev/null
+  done < <(find "${labs_profiles_root}" -mindepth 3 -maxdepth 3 -name getCompilerInput.nix -print0 | sort -z)
+fi
+
 if (( found == 0 )); then
-  echo "no network-labs examples found under ${examples_root}" >&2
+  echo "no network-labs examples or labs found under ${labs_root}" >&2
   exit 1
 fi

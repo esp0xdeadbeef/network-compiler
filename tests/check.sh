@@ -227,6 +227,7 @@ jq -e '
 
 "$ROOT/tests/test-dual-wan-branch-overlay.sh"
 "$ROOT/tests/test-overlay-canonical-access-attachment.sh"
+"$ROOT/tests/test-overlay-peer-sites.sh"
 "$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

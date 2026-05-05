@@ -39,6 +39,16 @@ let
     idx: ov:
     let
       term = resolveTerminateOn idx ov;
+      rawPeerSite = ov.peerSite or ov.peer or ov.toSite or null;
+      peerSites =
+        if builtins.isList (ov.peerSites or null) then
+          map toString ov.peerSites
+        else if builtins.isList (ov.peers or null) then
+          map toString ov.peers
+        else if rawPeerSite != null then
+          [ (toString rawPeerSite) ]
+        else
+          [ ];
 
       _termExists =
         if builtins.elem term nodeNames then
@@ -80,7 +90,8 @@ let
     in
     builtins.deepSeq { inherit _termExists _termIsCore; } {
       name = ov.name or "overlay-${toString idx}";
-      peerSite = ov.peerSite or ov.peer or ov.toSite;
+      peerSite = if peerSites == [ ] then null else builtins.head peerSites;
+      peerSites = peerSites;
       terminateOn = term;
       mustTraverse = ov.mustTraverse or [ ];
     };

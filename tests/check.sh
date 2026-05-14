@@ -32,6 +32,8 @@ negative_nix_cases=(
 "$ROOT/tests/negative/duplicate-uplink-name.nix"
 "$ROOT/tests/negative/legacy-external-name-uplink.nix"
 "$ROOT/tests/negative/non-pair-link.nix"
+"$ROOT/tests/negative/core-to-core-link.nix"
+"$ROOT/tests/negative/policy-bypass-link.nix"
 )
 
 resolve_example() {
@@ -230,6 +232,7 @@ jq -e '
 ' "$service_subject_json" > /dev/null
 
 "$ROOT/tests/test-dual-wan-branch-overlay.sh"
+"$ROOT/tests/test-canonical-traffic-paths.sh"
 "$ROOT/tests/test-overlay-canonical-access-attachment.sh"
 "$ROOT/tests/test-overlay-peer-sites.sh"
 "$ROOT/tests/test-network-labs-examples.sh"

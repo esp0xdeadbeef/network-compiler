@@ -9,6 +9,7 @@ let
   normalizeUplinksForNode = import ./normalize-uplinks.nix { inherit lib; };
   normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
   buildOverlayAttachments = import ./overlay-attachments.nix { inherit lib; };
+  buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
@@ -119,6 +120,7 @@ let
 
   normalizedRelations = sortRelations normalizedRelations0;
   overlayAttachments = buildOverlayAttachments siteKey nodes normalizedRelations overlays;
+  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks normalizedRelations;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
@@ -159,6 +161,7 @@ let
     services = compiledServices;
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
+    trafficPaths = trafficPaths;
   };
 
   _forced = builtins.deepSeq {
@@ -179,6 +182,7 @@ let
     services = compiledServices;
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
+    trafficPaths = trafficPaths;
   } true;
 
 in

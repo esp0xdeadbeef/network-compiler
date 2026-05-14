@@ -4,10 +4,12 @@ let
   util = import ./util.nix { inherit lib; };
   graph = import ./topology/graph.nix { inherit lib; };
   links = import ./topology/links.nix { inherit lib; };
+  stageLinks = import ./topology/stage-links.nix { inherit lib; };
   uplinks = import ./topology/uplinks.nix { inherit lib; };
   inherit (util) ensure assertUnique throwError;
   inherit (graph) neighborsMap bfs;
   inherit (links) validateLinks;
+  inherit (stageLinks) validateCanonicalStageLinks;
   inherit (uplinks) normalizeUplinks;
 
   assertUniqueSiteUplinkNames =
@@ -97,6 +99,7 @@ let
 
       links = topo.links or [ ];
       normalizedLinks = validateLinks siteKey nodeNames links;
+      _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes normalizedLinks;
 
       touched = lib.unique (
         lib.concatMap (pair: [
@@ -166,6 +169,7 @@ let
           _hasAccess
           _hasDownstreamSelector
           _hasUpstreamSelector
+          _canonicalStageLinks
           _noIsolated
           _connected
           coreUplinks

@@ -512,13 +512,24 @@ If you only need “two sites over a tunnel”, none of this is worth it.
 
 # Current limitation (important)
 
-The compiler validates staged topology and policy structure, but it does **not** (yet) guarantee *policy-driven dedicated L2 separation*.
+The compiler validates staged topology, policy structure, and per-relation
+traffic traversal. It does **not** emit kernel routes or renderer-specific
+interfaces.
 
-`topology.links` expresses stage adjacency as node pairs, and downstream stages currently assume “one p2p link per node pair”.
-That means `intent.nix` cannot yet express “dedicated lanes” whose existence is derived from policy/egress intent.
+Traffic traversal is represented as semantic paths through the canonical fabric.
+Those paths tell downstream stages which staged authorities must be crossed for
+each communication relation.
 
-The planned direction is to derive dedicated “L2 lanes” in the forwarding-model stage and bind them via inventory in the control-plane-model stage.
-See `network-forwarding-model/TODO.md` (in that repo) for the lane-aware p2p plan.
+Overlay-underlay recursion is still represented as separate policy-controlled
+relations. For example, hostile access traffic to a Nebula egress core and the
+Nebula core's own underlay egress to a WAN/ISP core are separate relations, each
+with its own canonical path and `p2pIsolationKey`. Downstream stages must not
+collapse those into a direct core-to-core shortcut.
+
+The compiler hard-fails non-canonical topology links, including direct
+core-to-core links and policy-bypass links. If two cores need to communicate,
+the traffic must be modeled as policy-controlled traversal through the staged
+fabric, not as a direct p2p edge.
 
 ---
 
@@ -571,6 +582,170 @@ This output becomes the **input to the forwarding model stage**.
 
 The exact internal schema may evolve.
 Pin versions if you depend on it.
+
+## Traffic path output
+
+The compiler maps **traffic traversal**, not IP routing tables.
+
+Given a small input file such as:
+
+```nix
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        p2p.ipv6 = "fd42:dead:beef:1000::/118";
+        loopback.ipv4 = "10.19.0.0/24";
+        loopback.ipv6 = "fd42:dead:beef:1900::/118";
+      };
+
+      ownership.prefixes = [
+        {
+          kind = "tenant";
+          name = "mgmt";
+          ipv4 = "10.20.10.0/24";
+          ipv6 = "fd42:dead:beef:20::/64";
+        }
+      ];
+
+      communicationContract.relations = [
+        {
+          id = "allow-mgmt-to-uplink0";
+          priority = 100;
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            uplinks = [ "uplink0" ];
+          };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
+
+      topology.nodes = {
+        s-router-access = {
+          role = "access";
+          attachments = [
+            {
+              kind = "tenant";
+              name = "mgmt";
+            }
+          ];
+        };
+        s-router-downstream-selector.role = "downstream-selector";
+        s-router-policy.role = "policy";
+        s-router-upstream-selector.role = "upstream-selector";
+        s-router-core = {
+          role = "core";
+          uplinks.uplink0 = {
+            ipv4 = [ "0.0.0.0/0" ];
+            ipv6 = [ "::/0" ];
+          };
+        };
+      };
+
+      topology.links = [
+        [ "s-router-access" "s-router-downstream-selector" ]
+        [ "s-router-downstream-selector" "s-router-policy" ]
+        [ "s-router-policy" "s-router-upstream-selector" ]
+        [ "s-router-upstream-selector" "s-router-core" ]
+      ];
+    };
+  };
+}
+```
+
+The compiled site includes a traffic path shaped like:
+
+```json
+{
+  "relationId": "allow-mgmt-to-uplink0",
+  "source": {
+    "kind": "tenant",
+    "name": "mgmt"
+  },
+  "destination": {
+    "kind": "external",
+    "uplinks": [ "uplink0" ]
+  },
+  "action": "allow",
+  "trafficType": "any",
+  "stagePath": [
+    "access",
+    "downstream-selector",
+    "policy",
+    "upstream-selector",
+    "core"
+  ],
+  "nodePath": [
+    "s-router-access",
+    "s-router-downstream-selector",
+    "s-router-policy",
+    "s-router-upstream-selector",
+    "s-router-core"
+  ],
+  "nodePathAlternatives": [
+    [
+      "s-router-access",
+      "s-router-downstream-selector",
+      "s-router-policy",
+      "s-router-upstream-selector",
+      "s-router-core"
+    ]
+  ],
+  "corePathNodes": [ "s-router-core" ],
+  "requiresPolicy": true,
+  "forbidsCoreToCoreP2P": true,
+  "p2pIsolationKey": "allow-mgmt-to-uplink0"
+}
+```
+
+Important properties:
+
+* `stagePath` is the canonical authority sequence.
+* `nodePath` is the selected staged node sequence for the relation.
+* `nodePathAlternatives` is where multi-uplink relations expose multiple
+  possible core paths.
+* `p2pIsolationKey` is the relation identity downstream stages can use to keep
+  policy-distinct p2p lanes separate.
+* `forbidsCoreToCoreP2P = true` means a WAN core, Nebula core, simulated ISP
+  core, or similar core role must not be directly linked to another core to
+  satisfy this relation.
+
+For a multi-site or overlay egress flow, the compiler should model each policy
+leg as traffic traversal:
+
+```text
+hostile client
+  -> branch access
+  -> downstream-selector
+  -> policy
+  -> upstream-selector
+  -> branch Nebula core
+
+branch Nebula core underlay egress
+  -> access/core underlay attachment as modeled
+  -> downstream-selector
+  -> policy
+  -> upstream-selector
+  -> WAN/ISP core
+
+remote site Nebula ingress/egress
+  -> upstream-selector
+  -> policy
+  -> upstream-selector
+  -> WAN/ISP core
+```
+
+Each leg gets its own policy relation and therefore its own path and isolation
+key. The forwarding model may then construct deterministic forwarding lanes
+from these compiler paths, and the control-plane model binds those lanes to
+inventory realization. Renderers only materialize the explicit downstream
+contracts.
 
 ---
 

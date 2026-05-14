@@ -8,6 +8,7 @@ if [[ "${NETWORK_REPO_SWEEP:-0}" != "1" && "${NETWORK_REPO_DIRECT_TEST_OK:-0}" !
 fi
 
 "$ROOT/tests/test-nix-file-loc.sh"
+"$ROOT/tests/test-regression-md-resolved-states.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

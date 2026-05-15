@@ -11,6 +11,7 @@ let
   buildOverlayAttachments = import ./overlay-attachments.nix { inherit lib; };
   buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
+  validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
   inherit (policyC)
@@ -88,8 +89,7 @@ let
     lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
   );
 
-  tenants0 =
-    if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
+  tenants0 = if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
 
   tenants = lib.sort (a: b: a.name < b.name) tenants0;
 
@@ -104,15 +104,12 @@ let
 
   _uniqTrafficTypes = assertUnique "traffic type name" trafficTypeNames;
   _uniqServices = assertUnique "service name" serviceNames;
-
   relations0 = communicationContractDeclared.relations or [ ];
+  _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic relations0;
 
   normalizedRelations0 = lib.imap0 (
     idx: r:
-    normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex
-      trafficTypeIndex
-      idx
-      r
+    normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex trafficTypeIndex idx r
   ) relations0;
 
   normalizedRelationIds = map (r: r.source.id) normalizedRelations0;
@@ -120,7 +117,7 @@ let
 
   normalizedRelations = sortRelations normalizedRelations0;
   overlayAttachments = buildOverlayAttachments siteKey nodes normalizedRelations overlays;
-  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks normalizedRelations;
+  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts normalizedRelations;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
@@ -182,6 +179,7 @@ let
       _topoValid
       _uniqTrafficTypes
       _uniqServices
+      _serviceProvidersLocal
       _uniqTenants
       _uniqRelationIds
       _noConflictingRelations

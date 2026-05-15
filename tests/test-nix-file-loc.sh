@@ -13,7 +13,11 @@ mapfile -t oversized < <(
   git ls-files -z '*.nix' \
     | xargs -0 -r wc -l \
     | awk -v limit="$limit" '
-      $2 != "total" && $2 !~ /(^|\/)(tests?|fixtures)\// && $1 > limit {
+      $2 != "total" &&
+      $2 != "flake.nix" &&
+      $2 != "flake.lock" &&
+      $2 !~ /(^|\/)(tests?|fixtures)\// &&
+      $1 > limit {
         print $1 " " $2
       }' \
     | sort -nr
@@ -37,6 +41,7 @@ note_block="$(
 
 fail=0
 hard_fail=0
+soft_fail=0
 
 for entry in "${oversized[@]}"; do
   lines="${entry%% *}"
@@ -69,15 +74,29 @@ for entry in "${oversized[@]}"; do
       printf 'LOC note for %s must use state=split-required at or above %s lines.\n' "$path" "$hard_limit" >&2
       fail=1
     fi
-  elif [[ "$state" != "watch" ]]; then
-    printf 'LOC note for %s must use state=watch below %s lines.\n' "$path" "$hard_limit" >&2
-    fail=1
+  else
+    soft_fail=1
+    if [[ "$state" == "watch" ]]; then
+      printf 'LOC note for %s uses state=watch. FIX IT.\n' "$path" >&2
+      fail=1
+    elif [[ "$state" != "split-required" ]]; then
+      printf 'LOC note for %s must use state=split-required below %s lines. FIX IT.\n' "$path" "$hard_limit" >&2
+      fail=1
+    fi
+    printf 'Tracked Nix file over soft LOC limit must be split before this test can pass: %s (%s lines).\n' "$path" "$lines" >&2
   fi
 done
 
+if (( soft_fail != 0 )); then
+  fail=1
+fi
+
 if (( fail != 0 )); then
+  if (( hard_fail == 0 )); then
+    printf 'Tracked Nix files over %s lines must be split before this test can pass.\n' "$limit" >&2
+  fi
   printf '\nExpected format inside %s / %s:\n' "$start_marker" "$end_marker" >&2
-  printf '<lines> <path> | state=watch|split-required | reason=<single responsibility or split target>\n' >&2
+  printf '<lines> <path> | state=split-required | reason=<split target>\n' >&2
   exit 1
 fi
 

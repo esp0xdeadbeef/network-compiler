@@ -128,7 +128,17 @@ let
   relationTargetsOverlay =
     overlayName:
     builtins.any (
-      r: builtins.isAttrs r.to && (r.to.kind or null) == "external" && (r.to.name or null) == overlayName
+      r:
+      (
+        builtins.isAttrs r.to
+        && (r.to.kind or null) == "external"
+        && (r.to.name or null) == overlayName
+      )
+      || (
+        builtins.isAttrs r.from
+        && (r.from.kind or null) == "external"
+        && (r.from.name or null) == overlayName
+      )
     ) normalizedRelations;
 
   _overlaysReferenced = builtins.all (

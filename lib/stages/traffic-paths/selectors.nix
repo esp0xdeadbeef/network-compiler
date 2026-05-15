@@ -1,6 +1,6 @@
 { lib }:
 
-siteKey: nodes: coreUplinks:
+siteKey: nodes: coreUplinks: serviceIndex: hosts:
 
 let
   util = import ../../correctness/util.nix { inherit lib; };
@@ -45,20 +45,56 @@ let
     in
     if matches == [ ] then [ (firstRole "core") ] else matches;
 
+  hostTenant =
+    providerName:
+    let
+      matches = lib.filter (
+        host:
+        builtins.isAttrs host
+        && toString (host.name or "") == toString providerName
+        && (host.tenant or null) != null
+      ) hosts;
+    in
+    if matches == [ ] then null else toString ((builtins.head matches).tenant);
+
+  serviceTenants =
+    serviceName:
+    let
+      service = serviceIndex.${serviceName} or null;
+      providers =
+        if service != null && builtins.isList (service.providers or null) then
+          service.providers
+        else
+          [ ];
+    in
+    lib.unique (lib.filter (tenant: tenant != null) (map hostTenant providers));
+
+  endpointTenants =
+    endpoint:
+    if !(builtins.isAttrs endpoint) then
+      [ ]
+    else if (endpoint.kind or null) == "tenant" then
+      [ endpoint.name ]
+    else if (endpoint.kind or null) == "tenant-set" then
+      endpoint.members or [ ]
+    else if (endpoint.kind or null) == "service" && (endpoint.name or null) != null then
+      serviceTenants endpoint.name
+    else
+      [ ];
+
   accessForEndpoint =
     endpoint:
     let
-      tenantName =
-        if builtins.isAttrs endpoint && (endpoint.kind or null) == "tenant" then endpoint.name else null;
+      tenantNames = endpointTenants endpoint;
       matches =
-        if tenantName == null then
+        if tenantNames == [ ] then
           [ ]
         else
           lib.filter (
             name:
             builtins.any (
               attachment:
-              (attachment.kind or null) == "tenant" && (attachment.name or null) == tenantName
+              (attachment.kind or null) == "tenant" && builtins.elem (attachment.name or null) tenantNames
             ) (nodes.${name}.attachments or [ ])
           ) (nodesByRole "access");
     in

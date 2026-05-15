@@ -1,10 +1,10 @@
 { lib }:
 
-siteKey: nodes: coreUplinks: normalizedRelations:
+siteKey: nodes: coreUplinks: serviceIndex: hosts: normalizedRelations:
 
 let
   util = import ../correctness/util.nix { inherit lib; };
-  selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks;
+  selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks serviceIndex hosts;
   inherit (util) throwError;
   inherit (selectors) firstRole coresForExternal accessForEndpoint;
 
@@ -67,12 +67,21 @@ let
       toAccess = if toStage == "access" then accessForEndpoint relation.to else null;
 
       nodeForStage =
-        core:
+        core: idx:
         stage:
         if stage == "core" then
           core
         else if stage == "access" then
-          if fromAccess != null then fromAccess else if toAccess != null then toAccess else firstRole "access"
+          if idx == 0 && fromAccess != null then
+            fromAccess
+          else if idx == (builtins.length stages - 1) && toAccess != null then
+            toAccess
+          else if fromAccess != null then
+            fromAccess
+          else if toAccess != null then
+            toAccess
+          else
+            firstRole "access"
         else if stage == "downstream-selector" then
           firstRole "downstream-selector"
         else if stage == "policy" then
@@ -88,7 +97,7 @@ let
             hints = [ "Keep traffic paths on the compiler canonical staged fabric." ];
           };
 
-      nodePathAlternatives = map (core: map (nodeForStage core) stages) pathCores;
+      nodePathAlternatives = map (core: lib.imap0 (nodeForStage core) stages) pathCores;
     in
     {
       relationId = relation.source.id;

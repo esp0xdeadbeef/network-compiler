@@ -36,6 +36,7 @@ negative_nix_cases=(
 "$ROOT/tests/negative/non-pair-link.nix"
 "$ROOT/tests/negative/core-to-core-link.nix"
 "$ROOT/tests/negative/policy-bypass-link.nix"
+"$ROOT/tests/negative/unknown-service-provider.nix"
 )
 
 resolve_example() {

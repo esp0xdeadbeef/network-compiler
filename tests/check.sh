@@ -9,6 +9,7 @@ fi
 
 "$ROOT/tests/test-nix-file-loc.sh"
 "$ROOT/tests/test-regression-md-resolved-states.sh"
+"$ROOT/tests/test-overlay-ingress-policy-reference.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

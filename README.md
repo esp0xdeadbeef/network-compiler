@@ -716,40 +716,89 @@ Important properties:
   core, or similar core role must not be directly linked to another core to
   satisfy this relation.
 
-For a multi-site or overlay egress flow, the compiler should model each policy
-leg as traffic traversal:
+For a multi-site or overlay egress flow, the compiler must model each policy
+leg as traffic traversal and must keep Nebula underlay/control traffic separate
+from payload traffic forwarded through the overlay. From the perspective of a
+hostile client behind the NixOS access router that exits through Hetzner WAN,
+the intended model is:
 
 ```text
-hostile client
-  -> branch access
-  -> downstream-selector
-  -> policy
-  -> upstream-selector
-  -> branch Nebula core
+NixOS hostile payload leg
+  nixos-hostile01
+  -> nixos-router-access-hostile
+  -> nixos-router-downstream
+  -> nixos-router-policy
+  -> nixos-router-upstream
+  -> nixos-router-core-nebula
 
-branch Nebula core underlay egress
-  -> access/core underlay attachment as modeled
-  -> downstream-selector
-  -> policy
-  -> upstream-selector
-  -> WAN/ISP core
+NixOS Nebula underlay/control leg
+  nixos-router-core-nebula
+  -> NixOS underlay/client-side access attachment
+  -> nixos-router-downstream
+  -> nixos-router-policy
+  -> nixos-router-upstream
+  -> nixos-router-core-isp-a or nixos-router-core-isp-b
+  -> internet
+  -> Hetzner public UDP 4242
 
-remote site Nebula ingress/egress
-  -> remote Nebula core
-  -> upstream-selector
-  -> policy
-  -> upstream-selector
-  -> WAN/ISP core
+Hetzner public lighthouse ingress leg
+  internet
+  -> Hetzner host public NAT/forward for UDP 4242
+  -> hetz-router-core
+  -> hetz-router-upstream
+  -> hetz-router-policy
+  -> hetz-router-downstream
+  -> hetz-router-access-dmz
+  -> hetz-router-lighthouse:4242
+
+Hetzner local Nebula-client underlay/control leg
+  hetz-router-nebula-core
+  -> Hetzner underlay/client-side access attachment
+  -> hetz-router-downstream
+  -> hetz-router-policy
+  -> hetz-router-downstream
+  -> hetz-router-access-dmz
+  -> hetz-router-lighthouse:4242
+
+Nebula overlay payload crossing
+  nixos-router-core-nebula
+  -> Nebula overlay
+  -> hetz-router-nebula-core
+
+Hetzner forwarded overlay payload egress leg
+  hetz-router-nebula-core
+  -> hetz-router-nebula-upstream
+  -> hetz-router-policy
+  -> hetz-router-nebula-upstream
+  -> hetz-router-core
+  -> Hetzner WAN
+  -> internet
 ```
 
 Each leg gets its own policy relation and therefore its own path and isolation
-key. In particular, overlay ingress at a remote site is not itself WAN
-authorization: traffic that exits a Nebula core for that site's internet egress
-must re-enter the remote site's staged policy path before it reaches the WAN/ISP
-core. The forwarding model may then construct deterministic forwarding lanes
-from these compiler paths, and the control-plane model binds those lanes to
-inventory realization. Renderers only materialize the explicit downstream
-contracts.
+key. The UDP 4242 lighthouse path is service reachability for Nebula
+underlay/control traffic; it is not the hostile payload escaping locally and it
+is not a port forward for a local Nebula client. The public port forward is only
+for traffic arriving from the public internet to the DMZ lighthouse service.
+Local Nebula clients, including `hetz-router-nebula-core`, reach that same DMZ
+service through their modeled underlay/client-side access attachment.
+
+For every `transport.overlays[]` entry, intent must also declare an allow
+relation from `external <overlay-name>` using a concrete non-`any` traffic type
+to either an explicit WAN uplink selector or a service. The service or traffic
+type owns the actual socket details: WireGuard could be UDP 80, Nebula could be
+UDP 4242, and another overlay can use a different protocol/port without changing
+the overlay model.
+
+Overlay ingress at a remote site is not itself WAN authorization. After payload
+traffic crosses the overlay into `hetz-router-nebula-core`, it must enter
+the remote site's forwarded overlay egress leg and pass through
+`hetz-router-policy` before it reaches `hetz-router-core` and Hetzner WAN. The
+forwarding model may then construct deterministic forwarding lanes from these
+compiler paths, and the control-plane model binds those lanes to inventory
+realization. Renderers only materialize the explicit downstream contracts and
+must not invent either the underlay/client-side access attachment or the
+forwarded overlay egress path from node names.
 
 ---
 

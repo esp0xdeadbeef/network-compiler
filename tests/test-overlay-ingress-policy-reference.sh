@@ -16,6 +16,14 @@ cat >"$input_file" <<'EOF'
     ownership.prefixes = [
       { kind = "tenant"; name = "client"; ipv4 = "10.90.20.0/24"; }
     ];
+    communicationContract.trafficTypes = [
+      {
+        name = "nebula";
+        match = [
+          { proto = "udp"; dports = [ 4242 ]; family = "any"; }
+        ];
+      }
+    ];
     communicationContract.relations = [
       {
         id = "allow-client-to-wan";
@@ -31,6 +39,14 @@ cat >"$input_file" <<'EOF'
         from = { kind = "external"; name = "east-west"; };
         to = { kind = "external"; name = "wan"; };
         trafficType = "any";
+        action = "allow";
+      }
+      {
+        id = "allow-overlay-underlay-to-wan";
+        priority = 110;
+        from = { kind = "external"; name = "east-west"; };
+        to = { kind = "external"; name = "wan"; };
+        trafficType = "nebula";
         action = "allow";
       }
     ];

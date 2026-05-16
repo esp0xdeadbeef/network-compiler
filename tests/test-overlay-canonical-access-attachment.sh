@@ -33,7 +33,14 @@ cat > "$input_file" <<'EOF'
       ];
 
       communicationContract = {
-        trafficTypes = [ ];
+        trafficTypes = [
+          {
+            name = "nebula";
+            match = [
+              { proto = "udp"; dports = [ 4242 ]; family = "any"; }
+            ];
+          }
+        ];
         services = [ ];
         relations = [
           {
@@ -42,6 +49,14 @@ cat > "$input_file" <<'EOF'
             from = { kind = "tenant"; name = "mgmt"; };
             to = { kind = "external"; name = "east-west"; };
             trafficType = "any";
+            action = "allow";
+          }
+          {
+            id = "allow-east-west-underlay-to-wan";
+            priority = 110;
+            from = { kind = "external"; name = "east-west"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "nebula";
             action = "allow";
           }
         ];

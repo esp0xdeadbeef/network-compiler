@@ -9,6 +9,7 @@ let
   normalizeUplinksForNode = import ./normalize-uplinks.nix { inherit lib; };
   normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
   buildOverlayAttachments = import ./overlay-attachments.nix { inherit lib; };
+  validateOverlayModel = import ./validate-overlay-model.nix { inherit lib; };
   buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
@@ -122,35 +123,7 @@ let
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
 
-  relationTargetsOverlay =
-    overlayName:
-    builtins.any (
-      r:
-      (
-        builtins.isAttrs r.to
-        && (r.to.kind or null) == "external"
-        && (r.to.name or null) == overlayName
-      )
-      || (
-        builtins.isAttrs r.from
-        && (r.from.kind or null) == "external"
-        && (r.from.name or null) == overlayName
-      )
-    ) normalizedRelations;
-
-  _overlaysReferenced = builtins.all (
-    overlayName:
-    ensure (relationTargetsOverlay overlayName) {
-      code = "E_OVERLAY_DEFINED_WITHOUT_POLICY_RULES";
-      site = siteKey;
-      path = [
-        "transport"
-        "overlays"
-      ];
-      message = "overlay '${overlayName}' is defined but has no communicationContract relation";
-      hints = [ "Add a relation that references external '${overlayName}'." ];
-    }
-  ) overlayNames;
+  _overlayModelExplicit = validateOverlayModel siteKey trafficTypeIndex normalizedRelations overlays;
 
   compiledServices = map (
     name:
@@ -185,7 +158,7 @@ let
       _uniqRelationIds
       _noConflictingRelations
       _hasExternalAllow
-      _overlaysReferenced
+      _overlayModelExplicit
       ;
     tenants = tenants;
     services = compiledServices;

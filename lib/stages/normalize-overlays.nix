@@ -87,14 +87,16 @@ let
               hints = [ "Set terminateOn to a node with role = \"core\"." ];
             }
           );
+      normalized =
+        {
+          name = ov.name or "overlay-${toString idx}";
+          peerSite = if peerSites == [ ] then null else builtins.head peerSites;
+          peerSites = peerSites;
+          terminateOn = term;
+          mustTraverse = ov.mustTraverse or [ ];
+        };
     in
-    builtins.deepSeq { inherit _termExists _termIsCore; } {
-      name = ov.name or "overlay-${toString idx}";
-      peerSite = if peerSites == [ ] then null else builtins.head peerSites;
-      peerSites = peerSites;
-      terminateOn = term;
-      mustTraverse = ov.mustTraverse or [ ];
-    };
+    builtins.deepSeq { inherit _termExists _termIsCore; } normalized;
 
 in
 lib.imap0 normalizeOne overlays0

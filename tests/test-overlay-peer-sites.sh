@@ -16,6 +16,12 @@ cat >"$input_file" <<'EOF'
     ownership.prefixes = [
       { kind = "tenant"; name = "lan"; ipv4 = "10.20.10.0/24"; }
     ];
+    communicationContract.trafficTypes = [
+      { name = "wireguard"; match = [ { proto = "udp"; dports = [ 51820 ]; family = "any"; } ]; }
+    ];
+    communicationContract.services = [
+      { name = "overlay-lighthouse"; trafficType = "wireguard"; }
+    ];
     communicationContract.relations = [
       {
         id = "allow-lan-east-west";
@@ -23,6 +29,14 @@ cat >"$input_file" <<'EOF'
         from = { kind = "tenant"; name = "lan"; };
         to = { kind = "external"; name = "east-west"; };
         trafficType = "any";
+        action = "allow";
+      }
+      {
+        id = "allow-east-west-underlay-to-lighthouse";
+        priority = 110;
+        from = { kind = "external"; name = "east-west"; };
+        to = { kind = "service"; name = "overlay-lighthouse"; };
+        trafficType = "wireguard";
         action = "allow";
       }
     ];
@@ -57,8 +71,15 @@ cat >"$input_file" <<'EOF'
     ownership.prefixes = [
       { kind = "tenant"; name = "remote-a"; ipv4 = "10.40.10.0/24"; }
     ];
+    communicationContract.trafficTypes = [
+      { name = "wireguard"; match = [ { proto = "udp"; dports = [ 51820 ]; family = "any"; } ]; }
+    ];
+    communicationContract.services = [
+      { name = "overlay-lighthouse"; trafficType = "wireguard"; }
+    ];
     communicationContract.relations = [
       { id = "allow-remote-a"; priority = 100; from = { kind = "tenant"; name = "remote-a"; }; to = { kind = "external"; name = "east-west"; }; trafficType = "any"; action = "allow"; }
+      { id = "allow-remote-a-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "service"; name = "overlay-lighthouse"; }; trafficType = "wireguard"; action = "allow"; }
     ];
     transport.overlays = [
       { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; mustTraverse = [ "policy" ]; }
@@ -81,8 +102,15 @@ cat >"$input_file" <<'EOF'
     ownership.prefixes = [
       { kind = "tenant"; name = "remote-b"; ipv4 = "10.60.10.0/24"; }
     ];
+    communicationContract.trafficTypes = [
+      { name = "wireguard"; match = [ { proto = "udp"; dports = [ 51820 ]; family = "any"; } ]; }
+    ];
+    communicationContract.services = [
+      { name = "overlay-lighthouse"; trafficType = "wireguard"; }
+    ];
     communicationContract.relations = [
       { id = "allow-remote-b"; priority = 100; from = { kind = "tenant"; name = "remote-b"; }; to = { kind = "external"; name = "east-west"; }; trafficType = "any"; action = "allow"; }
+      { id = "allow-remote-b-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "service"; name = "overlay-lighthouse"; }; trafficType = "wireguard"; action = "allow"; }
     ];
     transport.overlays = [
       { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; mustTraverse = [ "policy" ]; }
@@ -106,6 +134,7 @@ nix run "$ROOT#compile" -- "$input_file" >"$output_json"
 if jq -e '
   .meta.provenance.originalInputs.acme.ams.transport.overlays[0].peerSites
     == [ "acme.remote-a", "acme.remote-b" ]
+ 
   and .sites.acme.ams.overlayAttachments."east-west".canonicalPath
     == [ "core-overlay", "upstream", "policy", "downstream", "access", "overlay:east-west" ]
   and .sites.acme.ams.overlayAttachments."east-west".terminatesOn == [ "core-overlay" ]

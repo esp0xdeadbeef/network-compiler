@@ -735,6 +735,7 @@ branch Nebula core underlay egress
   -> WAN/ISP core
 
 remote site Nebula ingress/egress
+  -> remote Nebula core
   -> upstream-selector
   -> policy
   -> upstream-selector
@@ -742,7 +743,10 @@ remote site Nebula ingress/egress
 ```
 
 Each leg gets its own policy relation and therefore its own path and isolation
-key. The forwarding model may then construct deterministic forwarding lanes
+key. In particular, overlay ingress at a remote site is not itself WAN
+authorization: traffic that exits a Nebula core for that site's internet egress
+must re-enter the remote site's staged policy path before it reaches the WAN/ISP
+core. The forwarding model may then construct deterministic forwarding lanes
 from these compiler paths, and the control-plane model binds those lanes to
 inventory realization. Renderers only materialize the explicit downstream
 contracts.

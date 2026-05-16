@@ -169,6 +169,7 @@ let
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
     trafficPaths = trafficPaths;
+    hostNatIngress = topo.hostNatIngress or { };
   };
 
   _forced = builtins.deepSeq {
@@ -191,6 +192,7 @@ let
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
     trafficPaths = trafficPaths;
+    hostNatIngress = topo.hostNatIngress or { };
   } true;
 
 in

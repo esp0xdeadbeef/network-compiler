@@ -10,6 +10,7 @@ fi
 "$ROOT/tests/test-nix-file-loc.sh"
 "$ROOT/tests/test-regression-md-resolved-states.sh"
 "$ROOT/tests/test-overlay-ingress-policy-reference.sh"
+"$ROOT/tests/test-uplink-name-ambiguity.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT
@@ -33,6 +34,7 @@ negative_nix_cases=(
 "$ROOT/tests/negative/overlay-defined-without-policy-rules.nix"
 "$ROOT/tests/negative/duplicate-uplink-name.nix"
 "$ROOT/tests/negative/legacy-external-name-uplink.nix"
+"$ROOT/tests/negative/external-core-loop.nix"
 "$ROOT/tests/negative/non-pair-link.nix"
 "$ROOT/tests/negative/core-to-core-link.nix"
 "$ROOT/tests/negative/policy-bypass-link.nix"

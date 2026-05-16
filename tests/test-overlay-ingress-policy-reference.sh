@@ -67,11 +67,35 @@ EOF
 nix run "$ROOT#compile" -- "$input_file" >"$output_json"
 
 if jq -e '
-  [.sites.esp.hetz.relations[]
-    | select(.source.id == "allow-overlay-ingress-to-wan")
-    | select(.from == { kind: "external", name: "east-west" })
-    | select(.to == { kind: "external", name: "wan" })
-  ] | length == 1
+  (
+    [.sites.esp.hetz.relations[]
+      | select(.source.id == "allow-overlay-ingress-to-wan")
+      | select(.from == { kind: "external", name: "east-west" })
+      | select(.to == { kind: "external", name: "wan" })
+    ] | length == 1
+  )
+  and (
+    .sites.esp.hetz.trafficPaths[]
+    | select(.relationId == "allow-overlay-ingress-to-wan")
+    | select(.stagePath == [
+        "core",
+        "upstream-selector",
+        "policy",
+        "upstream-selector",
+        "core"
+      ])
+    | select(.nodePath == [
+        "hetz-router-nebula-core",
+        "hetz-router-upstream",
+        "hetz-router-policy",
+        "hetz-router-upstream",
+        "hetz-router-core"
+      ])
+    | select(.corePathNodes == [
+        "hetz-router-nebula-core",
+        "hetz-router-core"
+      ])
+  )
 ' "$output_json" >/dev/null; then
   echo "PASS overlay-ingress-policy-reference"
 else

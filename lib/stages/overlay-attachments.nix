@@ -1,8 +1,11 @@
 { lib }:
 
-siteKey: nodes: normalizedRelations: overlays:
+siteKey: nodes: serviceIndex: hosts: normalizedRelations: overlays:
 
 let
+  util = import ../correctness/util.nix { inherit lib; };
+  inherit (util) throwError;
+
   nodeNames = lib.sort builtins.lessThan (builtins.attrNames nodes);
 
   nodesByRole =
@@ -40,8 +43,32 @@ let
       [ relation.from.name ]
     else if (relation.from.kind or null) == "tenant-set" then
       relation.from.members or [ ]
+    else if (relation.from.kind or null) == "service" then
+      let
+        service = serviceIndex.${relation.from.name} or null;
+        providers =
+          if service != null && builtins.isList (service.providers or null) then
+            service.providers
+          else
+            [ ];
+        hostTenant =
+          providerName:
+          let
+            matches = lib.filter (
+              host:
+              builtins.isAttrs host
+              && toString (host.name or "") == toString providerName
+              && (host.tenant or null) != null
+            ) hosts;
+          in
+          if matches == [ ] then null else toString ((builtins.head matches).tenant);
+      in
+      lib.unique (lib.filter (tenant: tenant != null) (map hostTenant providers))
     else
       [ ];
+
+  overlayHasAccessRelation =
+    overlayName: builtins.any (relationAllowsOverlay overlayName) normalizedRelations;
 
   overlayAccessNodes =
     overlayName:
@@ -62,7 +89,23 @@ let
     overlay:
     let
       accessNodes = overlayAccessNodes overlay.name;
-      accessNode = if accessNodes == [ ] then firstRole "access" else builtins.head accessNodes;
+      accessNode =
+        if accessNodes == [ ] then
+          throwError {
+            code = "E_OVERLAY_ACCESS_ATTACHMENT_REQUIRED";
+            site = siteKey;
+            path = [
+              "communicationContract"
+              "relations"
+            ];
+            message = "overlay '${overlay.name}' requires an explicit tenant allow relation to own the access attachment";
+            hints = [
+              "Add an allow relation from a tenant or tenant-set to external '${overlay.name}'."
+              "Do not rely on compiler, forwarding-model, control-plane, or renderer fallback to pick an access node."
+            ];
+          }
+        else
+          builtins.head accessNodes;
       upstream = firstRole "upstream-selector";
       policy = firstRole "policy";
       downstream = firstRole "downstream-selector";
@@ -87,4 +130,6 @@ let
     };
 
 in
-builtins.listToAttrs (map buildOne overlays)
+builtins.listToAttrs (
+  map buildOne (lib.filter (overlay: overlayHasAccessRelation overlay.name) overlays)
+)

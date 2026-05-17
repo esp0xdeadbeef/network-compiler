@@ -117,7 +117,7 @@ let
   _uniqRelationIds = assertUnique "relation id" normalizedRelationIds;
 
   normalizedRelations = sortRelations normalizedRelations0;
-  overlayAttachments = buildOverlayAttachments siteKey nodes normalizedRelations overlays;
+  overlayAttachments = buildOverlayAttachments siteKey nodes serviceIndex semantic.hosts normalizedRelations overlays;
   trafficPaths = buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts normalizedRelations;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;

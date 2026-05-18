@@ -11,6 +11,7 @@ fi
 "$ROOT/tests/test-regression-md-resolved-states.sh"
 "$ROOT/tests/test-overlay-ingress-policy-reference.sh"
 "$ROOT/tests/test-uplink-name-ambiguity.sh"
+"$ROOT/tests/test-runtime-routed-prefix-contract.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT
@@ -243,6 +244,7 @@ jq -e '
 "$ROOT/tests/test-canonical-traffic-paths.sh"
 "$ROOT/tests/test-overlay-canonical-access-attachment.sh"
 "$ROOT/tests/test-overlay-peer-sites.sh"
+"$ROOT/tests/test-overlay-address-pools.sh"
 "$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

@@ -59,6 +59,21 @@ let
 
   overlays = normalizeTransportOverlays siteKey topo declared;
   overlayNames = lib.sort builtins.lessThan (lib.unique (map (o: o.name) overlays));
+  overlayPool =
+    if builtins.isAttrs ((declared.pools or { }).overlay or null) then
+      (declared.pools or { }).overlay
+    else
+      { };
+  overlayAddressPools =
+    if overlayPool == { } then
+      { }
+    else
+      builtins.listToAttrs (
+        map (overlayName: {
+          name = overlayName;
+          value = overlayPool;
+        }) overlayNames
+      );
 
   coreUplinks = builtins.listToAttrs (
     map (n: {
@@ -141,6 +156,7 @@ let
     services = compiledServices;
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
+    overlayAddressPools = overlayAddressPools;
     trafficPaths = trafficPaths;
     hostNatIngress = topo.hostNatIngress or { };
   };
@@ -164,6 +180,7 @@ let
     services = compiledServices;
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
+    overlayAddressPools = overlayAddressPools;
     trafficPaths = trafficPaths;
     hostNatIngress = topo.hostNatIngress or { };
   } true;

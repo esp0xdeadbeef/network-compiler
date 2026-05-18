@@ -158,7 +158,9 @@ Downstream stages should rely on the normalized site payload for:
 * relations
 * services
 * tenant prefixes
+* runtime routed-prefix contracts
 * canonical staged topology
+* overlay address pools
 * stable stage-node identities
 * upstream semantic provenance
 

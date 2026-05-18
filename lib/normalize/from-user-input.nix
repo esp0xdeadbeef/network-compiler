@@ -91,6 +91,8 @@ let
 
   localPool = if pools ? loopback then pools.loopback else null;
 
+  ipv6 = site.ipv6 or { };
+
 in
 {
   enterprise = site.enterprise or "default";
@@ -99,6 +101,7 @@ in
     segments
     attachments
     hosts
+    ipv6
     ;
 
   transit = {

@@ -12,6 +12,7 @@ fi
 "$ROOT/tests/test-overlay-ingress-policy-reference.sh"
 "$ROOT/tests/test-uplink-name-ambiguity.sh"
 "$ROOT/tests/test-runtime-routed-prefix-contract.sh"
+"$ROOT/tests/test-ipv6-intent-contract.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

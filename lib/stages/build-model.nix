@@ -154,6 +154,7 @@ let
   model = {
     tenants = tenants;
     services = compiledServices;
+    ipv6 = semantic.ipv6 or { };
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
     overlayAddressPools = overlayAddressPools;
@@ -178,6 +179,7 @@ let
       ;
     tenants = tenants;
     services = compiledServices;
+    ipv6 = semantic.ipv6 or { };
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
     overlayAddressPools = overlayAddressPools;

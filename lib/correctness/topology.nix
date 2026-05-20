@@ -26,19 +26,20 @@ let
             cur = builtins.head rest;
           in
           if prev == cur then
-            throwError {
-              code = "E_UPLINK_NAME_NOT_UNIQUE";
-              site = siteKey;
-              path = [
-                "topology"
-                "nodes"
-              ];
-              message = "uplink name '${cur}' must be unique across all core nodes in the site";
-              hints = [
-                "Rename one of the duplicate uplinks so external names stay unambiguous."
-                "Using 'wan' is fine when it appears only once in the site."
-              ];
-            }
+            throwError
+              {
+                code = "E_UPLINK_NAME_NOT_UNIQUE";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "nodes"
+                ];
+                message = "uplink name '${cur}' must be unique across all core nodes in the site";
+                hints = [
+                  "Rename one of the duplicate uplinks so external names stay unambiguous."
+                  "Using 'wan' is fine when it appears only once in the site."
+                ];
+              }
           else
             check cur (builtins.tail rest);
     in
@@ -102,20 +103,25 @@ let
       _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes normalizedLinks;
 
       touched = lib.unique (
-        lib.concatMap (pair: [
-          (builtins.elemAt pair 0)
-          (builtins.elemAt pair 1)
-        ]) normalizedLinks
+        lib.concatMap
+          (pair: [
+            (builtins.elemAt pair 0)
+            (builtins.elemAt pair 1)
+          ])
+          normalizedLinks
       );
 
-      _noIsolated = builtins.foldl' (
-        acc: n:
-        acc
-        && ensure (builtins.elem n touched) {
-          code = "E_TOPO_DISCONNECTED";
-          site = siteKey;
-        }
-      ) true nodeNames;
+      _noIsolated = builtins.foldl'
+        (
+          acc: n:
+            acc
+            && ensure (builtins.elem n touched) {
+              code = "E_TOPO_DISCONNECTED";
+              site = siteKey;
+            }
+        )
+        true
+        nodeNames;
 
       neigh = neighborsMap nodeNames normalizedLinks;
 
@@ -133,49 +139,53 @@ let
       );
 
       coreUplinks = builtins.listToAttrs (
-        map (n: {
-          name = n;
-          value =
-            let
-              us = normalizeUplinks siteKey n (nodes.${n}.uplinks or null);
+        map
+          (n: {
+            name = n;
+            value =
+              let
+                us = normalizeUplinks siteKey n (nodes.${n}.uplinks or null);
 
-              _required = ensure (builtins.length us > 0) {
-                code = "E_CORE_UPLINKS_REQUIRED";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  n
-                  "uplinks"
-                ];
-                message = "core node '${n}' must define at least one uplink";
-                hints = [
-                  "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
-                ];
-              };
-            in
-            if _required then us else us;
-        }) coreNodes
+                _required = ensure (builtins.length us > 0) {
+                  code = "E_CORE_UPLINKS_REQUIRED";
+                  site = siteKey;
+                  path = [
+                    "topology"
+                    "nodes"
+                    n
+                    "uplinks"
+                  ];
+                  message = "core node '${n}' must define at least one uplink";
+                  hints = [
+                    "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+                  ];
+                };
+              in
+              if _required then us else us;
+          })
+          coreNodes
       );
 
       allUplinkNames = lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes;
       _uniqSiteUplinks = assertUniqueSiteUplinkNames siteKey allUplinkNames;
 
-      _force = builtins.deepSeq {
-        inherit
-          _uniqNodes
-          _hasCore
-          _hasPolicy
-          _hasAccess
-          _hasDownstreamSelector
-          _hasUpstreamSelector
-          _canonicalStageLinks
-          _noIsolated
-          _connected
-          coreUplinks
-          _uniqSiteUplinks
-          ;
-      } true;
+      _force = builtins.deepSeq
+        {
+          inherit
+            _uniqNodes
+            _hasCore
+            _hasPolicy
+            _hasAccess
+            _hasDownstreamSelector
+            _hasUpstreamSelector
+            _canonicalStageLinks
+            _noIsolated
+            _connected
+            coreUplinks
+            _uniqSiteUplinks
+            ;
+        }
+        true;
     in
     builtins.seq _force true;
 in

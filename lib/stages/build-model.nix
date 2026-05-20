@@ -13,6 +13,7 @@ let
   buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
+  buildCompiledServices = import ./compiled-services.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
   inherit (policyC)
@@ -69,36 +70,40 @@ let
       { }
     else
       builtins.listToAttrs (
-        map (overlayName: {
-          name = overlayName;
-          value = overlayPool;
-        }) overlayNames
+        map
+          (overlayName: {
+            name = overlayName;
+            value = overlayPool;
+          })
+          overlayNames
       );
 
   coreUplinks = builtins.listToAttrs (
-    map (n: {
-      name = n;
-      value =
-        let
-          us = normalizeUplinksForNode siteKey n (nodes.${n}.uplinks or null);
+    map
+      (n: {
+        name = n;
+        value =
+          let
+            us = normalizeUplinksForNode siteKey n (nodes.${n}.uplinks or null);
 
-          _required = ensure (builtins.length us > 0) {
-            code = "E_CORE_UPLINKS_REQUIRED";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              n
-              "uplinks"
-            ];
-            message = "core node '${n}' must define at least one uplink";
-            hints = [
-              "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
-            ];
-          };
-        in
-        if _required then us else us;
-    }) coreNodes
+            _required = ensure (builtins.length us > 0) {
+              code = "E_CORE_UPLINKS_REQUIRED";
+              site = siteKey;
+              path = [
+                "topology"
+                "nodes"
+                n
+                "uplinks"
+              ];
+              message = "core node '${n}' must define at least one uplink";
+              hints = [
+                "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+              ];
+            };
+          in
+          if _required then us else us;
+      })
+      coreNodes
   );
 
   uplinkNames = lib.sort builtins.lessThan (
@@ -123,10 +128,12 @@ let
   relations0 = communicationContractDeclared.relations or [ ];
   _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic relations0;
 
-  normalizedRelations0 = lib.imap0 (
-    idx: r:
-    normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex trafficTypeIndex idx r
-  ) relations0;
+  normalizedRelations0 = lib.imap0
+    (
+      idx: r:
+        normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex trafficTypeIndex idx r
+    )
+    relations0;
 
   normalizedRelationIds = map (r: r.source.id) normalizedRelations0;
   _uniqRelationIds = assertUnique "relation id" normalizedRelationIds;
@@ -140,16 +147,7 @@ let
 
   _overlayModelExplicit = validateOverlayModel siteKey trafficTypeIndex normalizedRelations overlays;
 
-  compiledServices = map (
-    name:
-    let
-      svc = serviceIndex.${name};
-    in
-    {
-      name = svc.name;
-      trafficType = svc.trafficType or "any";
-    }
-  ) (lib.sort builtins.lessThan serviceNames);
+  compiledServices = buildCompiledServices serviceIndex serviceNames;
 
   model = {
     tenants = tenants;
@@ -162,30 +160,32 @@ let
     hostNatIngress = topo.hostNatIngress or { };
   };
 
-  _forced = builtins.deepSeq {
-    inherit
-      _hasCommunicationContract
-      _noLegacyExternalPolicy
-      _addrSafe
-      _topoValid
-      _uniqTrafficTypes
-      _uniqServices
-      _serviceProvidersLocal
-      _uniqTenants
-      _uniqRelationIds
-      _noConflictingRelations
-      _hasExternalAllow
-      _overlayModelExplicit
-      ;
-    tenants = tenants;
-    services = compiledServices;
-    ipv6 = semantic.ipv6 or { };
-    relations = normalizedRelations;
-    overlayAttachments = overlayAttachments;
-    overlayAddressPools = overlayAddressPools;
-    trafficPaths = trafficPaths;
-    hostNatIngress = topo.hostNatIngress or { };
-  } true;
+  _forced = builtins.deepSeq
+    {
+      inherit
+        _hasCommunicationContract
+        _noLegacyExternalPolicy
+        _addrSafe
+        _topoValid
+        _uniqTrafficTypes
+        _uniqServices
+        _serviceProvidersLocal
+        _uniqTenants
+        _uniqRelationIds
+        _noConflictingRelations
+        _hasExternalAllow
+        _overlayModelExplicit
+        ;
+      tenants = tenants;
+      services = compiledServices;
+      ipv6 = semantic.ipv6 or { };
+      relations = normalizedRelations;
+      overlayAttachments = overlayAttachments;
+      overlayAddressPools = overlayAddressPools;
+      trafficPaths = trafficPaths;
+      hostNatIngress = topo.hostNatIngress or { };
+    }
+    true;
 
 in
 builtins.seq _forced model

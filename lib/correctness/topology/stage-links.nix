@@ -41,9 +41,12 @@ let
 
   validateCanonicalStageLinks =
     siteKey: nodes: links:
-    builtins.foldl' (
-      acc: pair: acc && validateCanonicalStageLink siteKey nodes pair
-    ) true links;
+    builtins.foldl'
+      (
+        acc: pair: acc && validateCanonicalStageLink siteKey nodes pair
+      )
+      true
+      links;
 
 in
 {

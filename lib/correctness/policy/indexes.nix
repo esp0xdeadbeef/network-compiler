@@ -45,10 +45,12 @@ let
       };
     in
     builtins.listToAttrs (
-      map (t: {
-        name = t.name;
-        value = normalizeOne t;
-      }) trafficTypes
+      map
+        (t: {
+          name = t.name;
+          value = normalizeOne t;
+        })
+        trafficTypes
     );
 
   trafficTypeDef =
@@ -87,10 +89,12 @@ let
       _uniqServices = assertUnique "service name" (map (s: s.name) services);
     in
     builtins.listToAttrs (
-      map (s: {
-        name = s.name;
-        value = s;
-      }) services
+      map
+        (s: {
+          name = s.name;
+          value = s;
+        })
+        services
     );
 in
 {

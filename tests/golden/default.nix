@@ -1,4 +1,4 @@
-{ }:
+{}:
 
 let
   singleWan = import ./single-wan.nix;

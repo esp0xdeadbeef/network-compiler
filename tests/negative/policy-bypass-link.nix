@@ -39,7 +39,7 @@
         downstream.role = "downstream-selector";
         access = {
           role = "access";
-          attachments = [ { kind = "tenant"; name = "mgmt"; } ];
+          attachments = [{ kind = "tenant"; name = "mgmt"; }];
         };
       };
 

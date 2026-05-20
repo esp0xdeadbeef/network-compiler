@@ -46,27 +46,31 @@ let
 
   isTenantPrefix = p: builtins.isAttrs p && (p.kind or null) == "tenant" && (p.name or null) != null;
 
-  tenants = map (
-    p:
-    {
-      name = p.name;
-      ipv4 = p.ipv4 or null;
-      ipv6 = p.ipv6 or null;
-    }
-    // lib.optionalAttrs (p ? ra6Prefixes) {
-      ra6Prefixes = p.ra6Prefixes;
-    }
-    // lib.optionalAttrs (p ? routedPrefixes) {
-      routedPrefixes = p.routedPrefixes;
-    }
-  ) (lib.filter isTenantPrefix prefixes);
+  tenants = map
+    (
+      p:
+      {
+        name = p.name;
+        ipv4 = p.ipv4 or null;
+        ipv6 = p.ipv6 or null;
+      }
+      // lib.optionalAttrs (p ? ra6Prefixes) {
+        ra6Prefixes = p.ra6Prefixes;
+      }
+      // lib.optionalAttrs (p ? routedPrefixes) {
+        routedPrefixes = p.routedPrefixes;
+      }
+    )
+    (lib.filter isTenantPrefix prefixes);
 
   isHostEndpoint = e: builtins.isAttrs e && (e.kind or null) == "host" && (e.name or null) != null;
 
-  hosts = map (e: {
-    name = e.name;
-    tenant = e.tenant or null;
-  }) (lib.filter isHostEndpoint endpoints);
+  hosts = map
+    (e: {
+      name = e.name;
+      tenant = e.tenant or null;
+    })
+    (lib.filter isHostEndpoint endpoints);
 
   segments = {
     tenants = tenants;
@@ -75,13 +79,17 @@ let
 
   segRef = seg: attachmentRef { inherit site util seg; };
 
-  attachments = lib.concatMap (
-    unit:
-    map (a: {
-      inherit unit;
-      segment = segRef a;
-    }) (units.${unit}.attachments or [ ])
-  ) accessUnits;
+  attachments = lib.concatMap
+    (
+      unit:
+      map
+        (a: {
+          inherit unit;
+          segment = segRef a;
+        })
+        (units.${unit}.attachments or [ ])
+    )
+    accessUnits;
 
   transitLinks = topo.links or [ ];
 

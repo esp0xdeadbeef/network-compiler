@@ -12,11 +12,11 @@
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      nixpkgs-network,
-      network-labs,
+    { self
+    , nixpkgs
+    , nixpkgs-network
+    , network-labs
+    ,
     }:
     let
       systems = [
@@ -80,10 +80,10 @@
           compilePath = valueOrPath: compile (readValue valueOrPath);
 
           writeJSON =
-            {
-              value ? null,
-              path ? null,
-              name ? "output-compiler.json",
+            { value ? null
+            , path ? null
+            , name ? "output-compiler.json"
+            ,
             }:
             let
               resolvedValue =

@@ -1,9 +1,9 @@
 { lib }:
 
-{
-  site,
-  util,
-  seg,
+{ site
+, util
+, seg
+,
 }:
 
 let

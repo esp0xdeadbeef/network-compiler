@@ -75,9 +75,11 @@ let
         ];
       };
     in
-    builtins.deepSeq {
-      inherit _referenced _hasUnderlayRelation;
-    } true;
+    builtins.deepSeq
+      {
+        inherit _referenced _hasUnderlayRelation;
+      }
+      true;
 
 in
 siteKey: trafficTypeIndex: normalizedRelations: overlays:

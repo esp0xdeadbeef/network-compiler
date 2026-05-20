@@ -6,12 +6,15 @@ let
   go =
     v:
     if builtins.isAttrs v then
-      builtins.listToAttrs (
-        map (k: {
-          name = k;
-          value = go v.${k};
-        }) (sortedKeys v)
-      )
+      builtins.listToAttrs
+        (
+          map
+            (k: {
+              name = k;
+              value = go v.${k};
+            })
+            (sortedKeys v)
+        )
     else if builtins.isList v then
       map go v
     else

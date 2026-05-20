@@ -1,7 +1,7 @@
-{
-  lib,
-  normalizeSite,
-  buildModel,
+{ lib
+, normalizeSite
+, buildModel
+,
 }:
 
 siteKey: declared:

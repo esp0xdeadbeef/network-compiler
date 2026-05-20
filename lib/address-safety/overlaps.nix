@@ -17,13 +17,14 @@ let
             cur = builtins.head rest;
           in
           if overlaps prev cur then
-            throwError {
-              code = "E_ADDR_OVERLAP";
-              site = null;
-              path = [ "address" ];
-              message = "overlapping ${what}: '${prev.raw}' and '${cur.raw}'";
-              hints = [ "Ensure CIDRs do not overlap." ];
-            }
+            throwError
+              {
+                code = "E_ADDR_OVERLAP";
+                site = null;
+                path = [ "address" ];
+                message = "overlapping ${what}: '${prev.raw}' and '${cur.raw}'";
+                hints = [ "Ensure CIDRs do not overlap." ];
+              }
           else
             check cur (builtins.tail rest);
     in
@@ -34,19 +35,22 @@ let
     let
       checkOne =
         a:
-        map (
-          b:
-          if overlaps a b then
-            throwError {
-              code = "E_ADDR_OVERLAP";
-              site = null;
-              path = [ "address" ];
-              message = "overlapping ${what}: '${a.raw}' and '${b.raw}'";
-              hints = [ "Separate pool ranges from tenant prefixes." ];
-            }
-          else
-            true
-        ) right;
+        map
+          (
+            b:
+            if overlaps a b then
+              throwError
+                {
+                  code = "E_ADDR_OVERLAP";
+                  site = null;
+                  path = [ "address" ];
+                  message = "overlapping ${what}: '${a.raw}' and '${b.raw}'";
+                  hints = [ "Separate pool ranges from tenant prefixes." ];
+                }
+            else
+              true
+          )
+          right;
     in
     map checkOne left;
 in

@@ -32,7 +32,12 @@ let
         "relations"
         idx
         "from"
-      ] tenantNames serviceIndex overlayNames uplinkNames (relation.from or { });
+      ]
+        tenantNames
+        serviceIndex
+        overlayNames
+        uplinkNames
+        (relation.from or { });
 
       to = normalizeTarget siteKey idx tenantNames serviceIndex overlayNames uplinkNames (
         relation.to or null
@@ -145,9 +150,11 @@ let
   ensureHasExternalAllow =
     siteKey: relations:
     ensure
-      (builtins.any (
-        r: (r.action or null) == "allow" && relationFromIsInternal r && relationToIsExternal r
-      ) relations)
+      (builtins.any
+        (
+          r: (r.action or null) == "allow" && relationFromIsInternal r && relationToIsExternal r
+        )
+        relations)
       {
         code = "E_CONTRACT_MISSING_EXTERNAL_ALLOW";
         site = siteKey;

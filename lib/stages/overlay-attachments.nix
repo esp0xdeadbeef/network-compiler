@@ -21,12 +21,16 @@ let
 
   tenantAccessNodes =
     tenant:
-    lib.filter (
-      name:
-      builtins.any (
-        attachment: (attachment.kind or null) == "tenant" && (attachment.name or null) == tenant
-      ) (nodes.${name}.attachments or [ ])
-    ) (nodesByRole "access");
+    lib.filter
+      (
+        name:
+        builtins.any
+          (
+            attachment: (attachment.kind or null) == "tenant" && (attachment.name or null) == tenant
+          )
+          (nodes.${name}.attachments or [ ])
+      )
+      (nodesByRole "access");
 
   relationAllowsOverlay =
     overlayName: relation:
@@ -54,12 +58,14 @@ let
         hostTenant =
           providerName:
           let
-            matches = lib.filter (
-              host:
-              builtins.isAttrs host
-              && toString (host.name or "") == toString providerName
-              && (host.tenant or null) != null
-            ) hosts;
+            matches = lib.filter
+              (
+                host:
+                builtins.isAttrs host
+                && toString (host.name or "") == toString providerName
+                && (host.tenant or null) != null
+              )
+              hosts;
           in
           if matches == [ ] then null else toString ((builtins.head matches).tenant);
       in
@@ -73,9 +79,11 @@ let
   overlayAccessNodes =
     overlayName:
     lib.unique (
-      lib.concatMap (
-        relation: lib.concatMap tenantAccessNodes (relationTenants relation)
-      ) (lib.filter (relationAllowsOverlay overlayName) normalizedRelations)
+      lib.concatMap
+        (
+          relation: lib.concatMap tenantAccessNodes (relationTenants relation)
+        )
+        (lib.filter (relationAllowsOverlay overlayName) normalizedRelations)
     );
 
   nonOverlayCoreFor =
@@ -91,19 +99,20 @@ let
       accessNodes = overlayAccessNodes overlay.name;
       accessNode =
         if accessNodes == [ ] then
-          throwError {
-            code = "E_OVERLAY_ACCESS_ATTACHMENT_REQUIRED";
-            site = siteKey;
-            path = [
-              "communicationContract"
-              "relations"
-            ];
-            message = "overlay '${overlay.name}' requires an explicit tenant allow relation to own the access attachment";
-            hints = [
-              "Add an allow relation from a tenant or tenant-set to external '${overlay.name}'."
-              "Do not rely on compiler, forwarding-model, control-plane, or renderer fallback to pick an access node."
-            ];
-          }
+          throwError
+            {
+              code = "E_OVERLAY_ACCESS_ATTACHMENT_REQUIRED";
+              site = siteKey;
+              path = [
+                "communicationContract"
+                "relations"
+              ];
+              message = "overlay '${overlay.name}' requires an explicit tenant allow relation to own the access attachment";
+              hints = [
+                "Add an allow relation from a tenant or tenant-set to external '${overlay.name}'."
+                "Do not rely on compiler, forwarding-model, control-plane, or renderer fallback to pick an access node."
+              ];
+            }
         else
           builtins.head accessNodes;
       upstream = firstRole "upstream-selector";

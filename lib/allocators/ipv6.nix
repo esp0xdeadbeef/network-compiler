@@ -22,20 +22,21 @@ let
                 n = lib.network.ipv6.nextAddress a;
               in
               if n == null then
-                err.throwError {
-                  code = "E_ALLOCATOR_POOL_EXHAUSTED";
-                  site = null;
-                  path = [
-                    "addressPools"
-                    "local"
-                    "ipv6"
-                  ];
-                  message = "IPv6 pool exhausted ('${pool.ipv6}'), idx=${toString idx}";
-                  hints = [
-                    "Increase the IPv6 pool size (use a shorter prefix)."
-                    "Or reduce the number of allocated units."
-                  ];
-                }
+                err.throwError
+                  {
+                    code = "E_ALLOCATOR_POOL_EXHAUSTED";
+                    site = null;
+                    path = [
+                      "addressPools"
+                      "local"
+                      "ipv6"
+                    ];
+                    message = "IPv6 pool exhausted ('${pool.ipv6}'), idx=${toString idx}";
+                    hints = [
+                      "Increase the IPv6 pool size (use a shorter prefix)."
+                      "Or reduce the number of allocated units."
+                    ];
+                  }
               else
                 n;
 

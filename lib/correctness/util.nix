@@ -21,16 +21,17 @@ let
             cur = builtins.head rest;
           in
           if prev == cur then
-            throwError {
-              code = "E_DUPLICATE";
-              site = null;
-              path = [ what ];
-              message = "duplicate ${what} '${cur}'";
-              hints = [
-                "Ensure '${cur}' is only defined once."
-                "If this name is generated, ensure the generator is deterministic and collision-free."
-              ];
-            }
+            throwError
+              {
+                code = "E_DUPLICATE";
+                site = null;
+                path = [ what ];
+                message = "duplicate ${what} '${cur}'";
+                hints = [
+                  "Ensure '${cur}' is only defined once."
+                  "If this name is generated, ensure the generator is deterministic and collision-free."
+                ];
+              }
           else
             check cur (builtins.tail rest);
     in

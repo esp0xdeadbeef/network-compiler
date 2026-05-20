@@ -41,16 +41,18 @@ let
       _v6ok = builtins.foldl' (acc: p: acc && validateOnePrefix siteKey (path ++ [ "ipv6" ]) p) true ipv6;
       _ingressSubjectOk = validateIngressSubject siteKey (path ++ [ "ingressSubject" ]) ingressSubject;
 
-      _forced = builtins.deepSeq {
-        inherit
-          _v4shape
-          _v6shape
-          _nonEmpty
-          _v4ok
-          _v6ok
-          _ingressSubjectOk
-          ;
-      } true;
+      _forced = builtins.deepSeq
+        {
+          inherit
+            _v4shape
+            _v6shape
+            _nonEmpty
+            _v4ok
+            _v6ok
+            _ingressSubjectOk
+            ;
+        }
+        true;
     in
     if _forced then true else true;
 
@@ -64,41 +66,44 @@ let
 
         _uniq = assertUnique "uplink name" names;
 
-        uplinks = map (
-          name:
-          let
-            v = u.${name};
+        uplinks = map
+          (
+            name:
+            let
+              v = u.${name};
 
-            _shape = ensure (builtins.isAttrs v) {
-              code = "E_UPLINK_ENTRY_SHAPE";
-              site = siteKey;
-              path = [
+              _shape = ensure (builtins.isAttrs v) {
+                code = "E_UPLINK_ENTRY_SHAPE";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "nodes"
+                  nodeName
+                  "uplinks"
+                  name
+                ];
+                message = "uplink '${name}' must be an attrset";
+                hints = [ "Use uplinks.${name} = { ipv4 = [\"...\"]; ipv6 = [\"...\"]; }." ];
+              };
+
+              _valid = validateUplinkPrefixes siteKey [
                 "topology"
                 "nodes"
                 nodeName
                 "uplinks"
                 name
-              ];
-              message = "uplink '${name}' must be an attrset";
-              hints = [ "Use uplinks.${name} = { ipv4 = [\"...\"]; ipv6 = [\"...\"]; }." ];
-            };
-
-            _valid = validateUplinkPrefixes siteKey [
-              "topology"
-              "nodes"
-              nodeName
-              "uplinks"
-              name
-            ] v;
-          in
-          v
-          // {
-            inherit name;
-            ipv4 = v.ipv4 or [ ];
-            ipv6 = v.ipv6 or [ ];
-            ingressSubject = v.ingressSubject or null;
-          }
-        ) names;
+              ]
+                v;
+            in
+            v
+            // {
+              inherit name;
+              ipv4 = v.ipv4 or [ ];
+              ipv6 = v.ipv6 or [ ];
+              ingressSubject = v.ingressSubject or null;
+            }
+          )
+          names;
       in
       if _uniq then uplinks else uplinks
     else

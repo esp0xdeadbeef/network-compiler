@@ -14,13 +14,15 @@ let
       ownership = declared.ownership or { };
       prefixes0 = ownership.prefixes or [ ];
 
-      tenantCidrs = lib.concatMap (
-        p:
-        lib.filter (x: x != null) [
-          (p.ipv4 or null)
-          (p.ipv6 or null)
-        ] ++ lib.filter (x: x != null) (map (routed: routed.ipv6 or null) (p.routedPrefixes or [ ]))
-      ) prefixes0;
+      tenantCidrs = lib.concatMap
+        (
+          p:
+          lib.filter (x: x != null) [
+            (p.ipv4 or null)
+            (p.ipv6 or null)
+          ] ++ lib.filter (x: x != null) (map (routed: routed.ipv6 or null) (p.routedPrefixes or [ ]))
+        )
+        prefixes0;
 
       tenantRangesAll = map parseAny tenantCidrs;
       tenantRangesV4 = lib.filter (r: r.version == 4) tenantRangesAll;
@@ -28,13 +30,15 @@ let
 
       pools = declared.pools or { };
 
-      poolCidrs = lib.concatMap (
-        pool:
-        lib.filter (x: x != null) [
-          (pool.ipv4 or null)
-          (pool.ipv6 or null)
-        ]
-      ) (builtins.attrValues pools);
+      poolCidrs = lib.concatMap
+        (
+          pool:
+          lib.filter (x: x != null) [
+            (pool.ipv4 or null)
+            (pool.ipv6 or null)
+          ]
+        )
+        (builtins.attrValues pools);
 
       poolRangesAll = map parseAny poolCidrs;
       poolRangesV4 = lib.filter (r: r.version == 4) poolRangesAll;

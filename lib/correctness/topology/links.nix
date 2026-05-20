@@ -27,16 +27,17 @@ let
             cur = builtins.head rest;
           in
           if prev == cur then
-            throwError {
-              code = "E_TOPO_DUPLICATE_LINK";
-              site = siteKey;
-              path = [
-                "topology"
-                "links"
-              ];
-              message = "duplicate logical link '${cur}'";
-              hints = [ "Remove duplicate or reversed-duplicate topology.links entries." ];
-            }
+            throwError
+              {
+                code = "E_TOPO_DUPLICATE_LINK";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "links"
+                ];
+                message = "duplicate logical link '${cur}'";
+                hints = [ "Remove duplicate or reversed-duplicate topology.links entries." ];
+              }
           else
             check cur (builtins.tail rest);
     in
@@ -85,14 +86,19 @@ let
   validateLinks =
     siteKey: nodeNames: links:
     let
-      _linksOk = builtins.foldl' (
-        acc: pair: acc && validateLink siteKey nodeNames pair
-      ) true links;
+      _linksOk = builtins.foldl'
+        (
+          acc: pair: acc && validateLink siteKey nodeNames pair
+        )
+        true
+        links;
       normalizedLinks = map normalizeLinkPair links;
       _uniqLinks = assertUniqueLogicalLinks siteKey normalizedLinks;
-      _forced = builtins.deepSeq {
-        inherit _linksOk _uniqLinks;
-      } true;
+      _forced = builtins.deepSeq
+        {
+          inherit _linksOk _uniqLinks;
+        }
+        true;
     in
     if _forced then normalizedLinks else normalizedLinks;
 in

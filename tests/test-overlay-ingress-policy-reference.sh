@@ -56,7 +56,7 @@ cat >"$input_file" <<'EOF'
         name = "east-west";
         peerSites = [ "esp.nixos" "esp.clab" ];
         terminateOn = "hetz-router-nebula-core";
-        underlayAccess = { kind = "tenant"; name = "iot"; };
+        underlayAccess = { kind = "tenant"; name = "client"; };
         underlayTrafficTypes = [ "nebula" ];
         mustTraverse = [ "policy" ];
       }

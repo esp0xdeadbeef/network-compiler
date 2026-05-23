@@ -45,6 +45,8 @@ cat >"$input_file" <<'EOF'
         name = "east-west";
         peerSites = [ "acme.remote-a" "acme.remote-b" ];
         terminateOn = "core-overlay";
+        underlayAccess = { kind = "tenant"; name = "lan"; };
+        underlayTrafficTypes = [ "wireguard" ];
         mustTraverse = [ "policy" ];
       }
     ];
@@ -82,7 +84,7 @@ cat >"$input_file" <<'EOF'
       { id = "allow-remote-a-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "service"; name = "overlay-lighthouse"; }; trafficType = "wireguard"; action = "allow"; }
     ];
     transport.overlays = [
-      { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; mustTraverse = [ "policy" ]; }
+      { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; underlayAccess = { kind = "tenant"; name = "remote-a"; }; underlayTrafficTypes = [ "wireguard" ]; mustTraverse = [ "policy" ]; }
     ];
     topology.nodes = {
       core-overlay.role = "core";
@@ -113,7 +115,7 @@ cat >"$input_file" <<'EOF'
       { id = "allow-remote-b-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "service"; name = "overlay-lighthouse"; }; trafficType = "wireguard"; action = "allow"; }
     ];
     transport.overlays = [
-      { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; mustTraverse = [ "policy" ]; }
+      { name = "east-west"; peerSite = "acme.ams"; terminateOn = "core-overlay"; underlayAccess = { kind = "tenant"; name = "remote-b"; }; underlayTrafficTypes = [ "wireguard" ]; mustTraverse = [ "policy" ]; }
     ];
     topology.nodes = {
       core-overlay.role = "core";

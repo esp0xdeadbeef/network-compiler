@@ -735,7 +735,7 @@ NixOS hostile payload leg
 
 NixOS Nebula underlay/control leg
   nixos-router-core-nebula
-  -> NixOS underlay/client-side access attachment
+  -> nixos-router-access-client (selected underlay/client access)
   -> nixos-router-downstream
   -> nixos-router-policy
   -> nixos-router-upstream
@@ -755,7 +755,7 @@ Hetzner public lighthouse ingress leg
 
 Hetzner local Nebula-client underlay/control leg
   hetz-router-nebula-core
-  -> Hetzner underlay/client-side access attachment
+  -> hetz-router-access-client (selected underlay/client access)
   -> hetz-router-downstream
   -> hetz-router-policy
   -> hetz-router-downstream
@@ -791,6 +791,16 @@ to either an explicit WAN uplink selector or a service. The service or traffic
 type owns the actual socket details: WireGuard could be UDP 80, Nebula could be
 UDP 4242, and another overlay can use a different protocol/port without changing
 the overlay model.
+
+Intent must also declare the overlay daemon's WAN-side underlay attachment with
+`transport.overlays[].underlayAccess`. This selector is not the payload tenant
+that is allowed to use the overlay. For a consumer/site network, it can be the
+normal client LAN when that LAN has modeled WAN/default egress. The compiler must
+fail if the selected underlay tenant has no allowed egress relation to the
+underlay target external; NFM owns the deeper route collision and self-loop proof
+after compiler path construction. If the compiler, NFM, CPM, renderer, or NixOS
+host config derives this from a payload relation like `hostile -> east-west`,
+the model is wrong.
 
 Overlay ingress at a remote site is not itself WAN authorization. After payload
 traffic crosses the overlay into `hetz-router-nebula-core`, it must enter

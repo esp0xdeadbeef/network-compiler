@@ -51,14 +51,13 @@ let
 
   _noLegacyExternalPolicy = validateNoLegacyExternalPolicy siteKey declared;
   _addrSafe = validateSite siteKey declared;
-  _topoValid = validateTopology siteKey topo;
-
   nodes = topo.nodes or { };
   nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
 
   coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
 
   overlays = normalizeTransportOverlays siteKey topo declared;
+  _topoValid = validateTopology siteKey topo overlays;
   overlayNames = lib.sort builtins.lessThan (lib.unique (map (o: o.name) overlays));
   overlayPool =
     if builtins.isAttrs ((declared.pools or { }).overlay or null) then
@@ -139,8 +138,8 @@ let
   _uniqRelationIds = assertUnique "relation id" normalizedRelationIds;
 
   normalizedRelations = sortRelations normalizedRelations0;
-  overlayAttachments = buildOverlayAttachments siteKey nodes serviceIndex semantic.hosts normalizedRelations overlays;
-  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts normalizedRelations;
+  overlayAttachments = buildOverlayAttachments siteKey nodes overlays;
+  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts overlays normalizedRelations;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;

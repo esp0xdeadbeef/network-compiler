@@ -94,6 +94,10 @@ let
           peerSites = peerSites;
           terminateOn = term;
           mustTraverse = ov.mustTraverse or [ ];
+          underlayTrafficTypes = ov.underlayTrafficTypes or [ ];
+        }
+        // lib.optionalAttrs (ov ? underlayAccess) {
+          underlayAccess = ov.underlayAccess;
         };
     in
     builtins.deepSeq { inherit _termExists _termIsCore; } normalized;

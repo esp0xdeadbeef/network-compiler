@@ -31,7 +31,7 @@ cat >"$input_file" <<'EOF'
       { id = "allow-east-west-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
     ];
     transport.overlays = [
-      { name = "east-west"; terminateOn = "core-nebula"; mustTraverse = [ "policy" ]; }
+      { name = "east-west"; terminateOn = "core-nebula"; underlayAccess = { kind = "tenant"; name = "lan"; }; underlayTrafficTypes = [ "nebula" ]; mustTraverse = [ "policy" ]; }
     ];
     topology.nodes = {
       core-wan = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };

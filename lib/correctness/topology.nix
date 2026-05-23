@@ -46,7 +46,7 @@ let
     if sorted == [ ] then true else check (builtins.head sorted) (builtins.tail sorted);
 
   validateTopology =
-    siteKey: topo:
+    siteKey: topo: overlays:
     let
       nodes = topo.nodes or { };
       nodeNames = builtins.attrNames nodes;
@@ -100,7 +100,7 @@ let
 
       links = topo.links or [ ];
       normalizedLinks = validateLinks siteKey nodeNames links;
-      _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes normalizedLinks;
+      _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes overlays normalizedLinks;
 
       touched = lib.unique (
         lib.concatMap

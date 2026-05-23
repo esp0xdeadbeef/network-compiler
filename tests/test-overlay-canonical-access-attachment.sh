@@ -30,6 +30,12 @@ cat > "$input_file" <<'EOF'
           ipv4 = "10.20.10.0/24";
           ipv6 = "fd42:dead:beef:10::/64";
         }
+        {
+          kind = "tenant";
+          name = "client";
+          ipv4 = "10.20.20.0/24";
+          ipv6 = "fd42:dead:beef:20::/64";
+        }
       ];
 
       communicationContract = {
@@ -52,6 +58,14 @@ cat > "$input_file" <<'EOF'
             action = "allow";
           }
           {
+            id = "allow-client-underlay-access-to-wan";
+            priority = 105;
+            from = { kind = "tenant"; name = "client"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "any";
+            action = "allow";
+          }
+          {
             id = "allow-east-west-underlay-to-wan";
             priority = 110;
             from = { kind = "external"; name = "east-west"; };
@@ -67,6 +81,8 @@ cat > "$input_file" <<'EOF'
           name = "east-west";
           peerSite = "acme.remote";
           terminateOn = "core-overlay";
+          underlayAccess = { kind = "tenant"; name = "client"; };
+          underlayTrafficTypes = [ "nebula" ];
           mustTraverse = [ "policy" ];
         }
       ];
@@ -96,14 +112,21 @@ cat > "$input_file" <<'EOF'
               { kind = "tenant"; name = "mgmt"; }
             ];
           };
+          access-client = {
+            role = "access";
+            attachments = [
+              { kind = "tenant"; name = "client"; }
+            ];
+          };
         };
 
         links = [
           [ "core-wan" "upstream" ]
-          [ "core-overlay" "upstream" ]
+          [ "core-overlay" "access-client" ]
           [ "upstream" "policy" ]
           [ "policy" "downstream" ]
           [ "downstream" "access" ]
+          [ "downstream" "access-client" ]
         ];
       };
     };
@@ -115,9 +138,15 @@ nix run "$ROOT#compile" -- "$input_file" > "$output_json"
 
 if jq -e '
   .sites.acme.ams.overlayAttachments."east-west".canonicalPath
-    == [ "core-wan", "upstream", "policy", "downstream", "access", "overlay:east-west" ]
+    == [ "core-wan", "upstream", "policy", "downstream", "access-client", "overlay:east-west" ]
   and .sites.acme.ams.overlayAttachments."east-west".attachAfterStage == "access"
+  and .sites.acme.ams.overlayAttachments."east-west".accessNodes == [ "access-client" ]
   and .sites.acme.ams.overlayAttachments."east-west".terminatesOn == [ "core-overlay" ]
+  and [
+    .sites.acme.ams.trafficPaths[]
+    | select(.relationId == "allow-east-west-underlay-to-wan")
+    | .nodePath
+  ] == [[ "core-overlay", "access-client", "downstream", "policy", "upstream", "core-wan" ]]
 ' "$output_json" >/dev/null; then
   echo "PASS overlay-canonical-access-attachment"
 else
@@ -134,11 +163,110 @@ Required compiler responsibilities:
   - reject overlay domains that bypass the canonical staged path
   - require an explicit owning access attachment for every overlay domain
   - require policy relations before overlay reachability exists
+  - require the selected underlay access tenant to have modeled egress to the
+    target WAN external before using it for daemon/bootstrap underlay
   - emit enough semantic data for network-forwarding-model to derive deterministic
     access-to-overlay p2p/lane structure without reading inventory or renderer names
 
 Do not remove this test by teaching the compiler about SOPS or realization
 inventory. The compiler input remains one semantic attrset/path.
 EOF
+  exit 1
+fi
+
+bad_input_file="${tmp_dir}/overlay-underlay-no-wan-egress.nix"
+cat > "$bad_input_file" <<'EOF'
+{
+  acme = {
+    ams = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+
+      ownership.prefixes = [
+        { kind = "tenant"; name = "hostile"; ipv4 = "10.20.70.0/24"; }
+        { kind = "tenant"; name = "client"; ipv4 = "10.20.20.0/24"; }
+      ];
+
+      communicationContract = {
+        trafficTypes = [
+          { name = "nebula"; match = [ { proto = "udp"; dports = [ 4242 ]; family = "any"; } ]; }
+        ];
+        services = [ ];
+        relations = [
+          {
+            id = "allow-hostile-to-overlay";
+            priority = 100;
+            from = { kind = "tenant"; name = "hostile"; };
+            to = { kind = "external"; name = "east-west"; };
+            trafficType = "any";
+            action = "allow";
+          }
+          {
+            id = "allow-client-to-wan";
+            priority = 101;
+            from = { kind = "tenant"; name = "client"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "any";
+            action = "allow";
+          }
+          {
+            id = "allow-east-west-underlay-to-wan";
+            priority = 110;
+            from = { kind = "external"; name = "east-west"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "nebula";
+            action = "allow";
+          }
+        ];
+      };
+
+      transport.overlays = [
+        {
+          name = "east-west";
+          terminateOn = "core-overlay";
+          underlayAccess = { kind = "tenant"; name = "hostile"; };
+          underlayTrafficTypes = [ "nebula" ];
+        }
+      ];
+
+      topology.nodes = {
+        core-wan = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        core-overlay = { role = "core"; uplinks.east-west.ipv4 = [ "100.96.20.0/24" ]; };
+        upstream = { role = "upstream-selector"; };
+        policy = { role = "policy"; };
+        downstream = { role = "downstream-selector"; };
+        access-hostile = { role = "access"; attachments = [ { kind = "tenant"; name = "hostile"; } ]; };
+        access-client = { role = "access"; attachments = [ { kind = "tenant"; name = "client"; } ]; };
+      };
+
+      topology.links = [
+        [ "core-wan" "upstream" ]
+        [ "core-overlay" "upstream" ]
+        [ "core-overlay" "access-hostile" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access-hostile" ]
+        [ "downstream" "access-client" ]
+      ];
+    };
+  };
+}
+EOF
+
+set +e
+bad_output="$(nix run "$ROOT#compile" -- "$bad_input_file" 2>&1)"
+bad_rc=$?
+set -e
+
+if [[ "$bad_rc" -eq 0 ]]; then
+  echo "FAIL overlay-canonical-access-attachment: underlayAccess without WAN egress compiled" >&2
+  exit 1
+fi
+
+if ! grep -q "E_OVERLAY_UNDERLAY_ACCESS_WAN_EGRESS_REQUIRED" <<<"$bad_output"; then
+  echo "FAIL overlay-canonical-access-attachment: missing underlay WAN egress error" >&2
+  printf '%s\n' "$bad_output" >&2
   exit 1
 fi

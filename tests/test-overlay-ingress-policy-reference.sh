@@ -15,6 +15,7 @@ cat >"$input_file" <<'EOF'
     pools.loopback.ipv4 = "10.89.0.0/24";
     ownership.prefixes = [
       { kind = "tenant"; name = "client"; ipv4 = "10.90.20.0/24"; }
+      { kind = "tenant"; name = "iot"; ipv4 = "10.90.80.0/24"; }
     ];
     communicationContract.trafficTypes = [
       {
@@ -55,6 +56,8 @@ cat >"$input_file" <<'EOF'
         name = "east-west";
         peerSites = [ "esp.nixos" "esp.clab" ];
         terminateOn = "hetz-router-nebula-core";
+        underlayAccess = { kind = "tenant"; name = "iot"; };
+        underlayTrafficTypes = [ "nebula" ];
         mustTraverse = [ "policy" ];
       }
     ];
@@ -68,6 +71,8 @@ cat >"$input_file" <<'EOF'
       hetz-router-downstream.role = "downstream-selector";
       hetz-router-access-client.role = "access";
       hetz-router-access-client.attachments = [ { kind = "tenant"; name = "client"; } ];
+      hetz-router-access-iot.role = "access";
+      hetz-router-access-iot.attachments = [ { kind = "tenant"; name = "iot"; } ];
     };
     topology.links = [
       [ "hetz-router-core" "hetz-router-upstream" ]
@@ -75,6 +80,7 @@ cat >"$input_file" <<'EOF'
       [ "hetz-router-upstream" "hetz-router-policy" ]
       [ "hetz-router-policy" "hetz-router-downstream" ]
       [ "hetz-router-downstream" "hetz-router-access-client" ]
+      [ "hetz-router-downstream" "hetz-router-access-iot" ]
     ];
   };
 }

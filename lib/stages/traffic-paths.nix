@@ -1,12 +1,12 @@
 { lib }:
-
-siteKey: nodes: coreUplinks: serviceIndex: hosts: normalizedRelations:
-
+siteKey: nodes: coreUplinks: serviceIndex: hosts: overlays: normalizedRelations:
 let
   util = import ../correctness/util.nix { inherit lib; };
   selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks serviceIndex hosts;
+  overlayUnderlay = import ./traffic-paths/overlay-underlay.nix { inherit lib; };
   inherit (util) throwError;
   inherit (selectors) firstRole coresForExternal accessForEndpoint;
+  overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
 
   accessToCoreStages = [
     "access"
@@ -32,8 +32,27 @@ let
     let
       fromStage = endpointStage relation.from;
       toStage = endpointStage relation.to;
+      fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
     in
-    if fromStage == "core" && toStage == "access" then
+    if fromOverlayUnderlayAccess != null && fromStage == "core" && toStage == "core" then
+      [
+        "core"
+        "access"
+        "downstream-selector"
+        "policy"
+        "upstream-selector"
+        "core"
+      ]
+    else if fromOverlayUnderlayAccess != null && fromStage == "core" && toStage == "access" then
+      [
+        "core"
+        "access"
+        "downstream-selector"
+        "policy"
+        "downstream-selector"
+        "access"
+      ]
+    else if fromStage == "core" && toStage == "access" then
       coreToAccessStages
     else if fromStage == "access" && toStage == "core" then
       accessToCoreStages
@@ -62,6 +81,7 @@ let
       toStage = endpointStage relation.to;
       fromCores = if fromStage == "core" then coresForExternal relation.from else [ ];
       toCores = if toStage == "core" then coresForExternal relation.to else [ ];
+      fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
       sameCoreExternalPairs =
         fromCores != [ ] && toCores != [ ] && builtins.any
           (
@@ -132,7 +152,9 @@ let
           else
             corePair.toCore
         else if stage == "access" then
-          if idx == 0 && fromAccess != null then
+          if fromOverlayUnderlayAccess != null && idx == 1 then
+            fromOverlayUnderlayAccess
+          else if idx == 0 && fromAccess != null then
             fromAccess
           else if idx == (builtins.length stages - 1) && toAccess != null then
             toAccess
@@ -156,7 +178,6 @@ let
             message = "unknown canonical traffic stage '${stage}'";
             hints = [ "Keep traffic paths on the compiler canonical staged fabric." ];
           };
-
       nodePathAlternatives = map (corePair: lib.imap0 (nodeForStage corePair) stages) corePairs;
     in
     {
@@ -173,6 +194,5 @@ let
       forbidsCoreToCoreP2P = true;
       p2pIsolationKey = relation.source.id;
     };
-
 in
 map buildOne normalizedRelations

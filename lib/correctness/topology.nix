@@ -4,11 +4,13 @@ let
   util = import ./util.nix { inherit lib; };
   graph = import ./topology/graph.nix { inherit lib; };
   links = import ./topology/links.nix { inherit lib; };
+  overlayUnderlayLinks = import ./topology/overlay-underlay-links.nix { inherit lib; };
   stageLinks = import ./topology/stage-links.nix { inherit lib; };
   uplinks = import ./topology/uplinks.nix { inherit lib; };
   inherit (util) ensure assertUnique throwError;
   inherit (graph) neighborsMap bfs;
   inherit (links) validateLinks;
+  inherit (overlayUnderlayLinks) overlayUnderlayVirtualLinks;
   inherit (stageLinks) validateCanonicalStageLinks;
   inherit (uplinks) normalizeUplinks;
 
@@ -44,45 +46,6 @@ let
             check cur (builtins.tail rest);
     in
     if sorted == [ ] then true else check (builtins.head sorted) (builtins.tail sorted);
-
-  tenantAttachments = node:
-    lib.filter (tenant: tenant != null) (
-      map
-        (attachment:
-          if (attachment.kind or null) == "tenant" then attachment.name or null else null)
-        (node.attachments or [ ])
-    );
-
-  overlayUnderlayVirtualLinks =
-    nodes: overlays:
-    let
-      nodeNames = builtins.attrNames nodes;
-      accessNodesForTenant = tenant:
-        lib.filter
-          (nodeName:
-            (nodes.${nodeName}.role or null) == "access"
-            && builtins.elem tenant (tenantAttachments nodes.${nodeName}))
-          nodeNames;
-      linkForOverlay = overlay:
-        let
-          core = overlay.terminateOn or null;
-          underlayAccess = overlay.underlayAccess or { };
-          tenant =
-            if builtins.isAttrs underlayAccess && (underlayAccess.kind or null) == "tenant" then
-              underlayAccess.name or null
-            else
-              null;
-          coreHasTenant =
-            core != null
-            && builtins.hasAttr core nodes
-            && builtins.elem tenant (tenantAttachments nodes.${core});
-        in
-        if tenant == null || !coreHasTenant then
-          [ ]
-        else
-          map (access: [ core access ]) (accessNodesForTenant tenant);
-    in
-    lib.unique (lib.concatMap linkForOverlay overlays);
 
   validateTopology =
     siteKey: topo: overlays:

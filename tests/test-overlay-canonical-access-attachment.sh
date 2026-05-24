@@ -98,6 +98,9 @@ cat > "$input_file" <<'EOF'
           };
           core-overlay = {
             role = "core";
+            attachments = [
+              { kind = "tenant"; name = "client"; }
+            ];
             uplinks.east-west = {
               ipv4 = [ "100.96.20.0/24" ];
               ipv6 = [ "fd42:dead:beef:20::/64" ];
@@ -122,7 +125,6 @@ cat > "$input_file" <<'EOF'
 
         links = [
           [ "core-wan" "upstream" ]
-          [ "core-overlay" "access-client" ]
           [ "upstream" "policy" ]
           [ "policy" "downstream" ]
           [ "downstream" "access" ]
@@ -142,6 +144,10 @@ if jq -e '
   and .sites.acme.ams.overlayAttachments."east-west".attachAfterStage == "access"
   and .sites.acme.ams.overlayAttachments."east-west".accessNodes == [ "access-client" ]
   and .sites.acme.ams.overlayAttachments."east-west".terminatesOn == [ "core-overlay" ]
+  and (
+    [(.sites.acme.ams.topology.links // [])[] | select((.a == "core-overlay" and .b == "access-client") or (.a == "access-client" and .b == "core-overlay"))]
+    == []
+  )
   and [
     .sites.acme.ams.trafficPaths[]
     | select(.relationId == "allow-east-west-underlay-to-wan")
@@ -233,7 +239,11 @@ cat > "$bad_input_file" <<'EOF'
 
       topology.nodes = {
         core-wan = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
-        core-overlay = { role = "core"; uplinks.east-west.ipv4 = [ "100.96.20.0/24" ]; };
+        core-overlay = {
+          role = "core";
+          attachments = [ { kind = "tenant"; name = "hostile"; } ];
+          uplinks.east-west.ipv4 = [ "100.96.20.0/24" ];
+        };
         upstream = { role = "upstream-selector"; };
         policy = { role = "policy"; };
         downstream = { role = "downstream-selector"; };
@@ -243,8 +253,6 @@ cat > "$bad_input_file" <<'EOF'
 
       topology.links = [
         [ "core-wan" "upstream" ]
-        [ "core-overlay" "upstream" ]
-        [ "core-overlay" "access-hostile" ]
         [ "upstream" "policy" ]
         [ "policy" "downstream" ]
         [ "downstream" "access-hostile" ]

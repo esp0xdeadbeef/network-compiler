@@ -45,6 +45,45 @@ let
     in
     if sorted == [ ] then true else check (builtins.head sorted) (builtins.tail sorted);
 
+  tenantAttachments = node:
+    lib.filter (tenant: tenant != null) (
+      map
+        (attachment:
+          if (attachment.kind or null) == "tenant" then attachment.name or null else null)
+        (node.attachments or [ ])
+    );
+
+  overlayUnderlayVirtualLinks =
+    nodes: overlays:
+    let
+      nodeNames = builtins.attrNames nodes;
+      accessNodesForTenant = tenant:
+        lib.filter
+          (nodeName:
+            (nodes.${nodeName}.role or null) == "access"
+            && builtins.elem tenant (tenantAttachments nodes.${nodeName}))
+          nodeNames;
+      linkForOverlay = overlay:
+        let
+          core = overlay.terminateOn or null;
+          underlayAccess = overlay.underlayAccess or { };
+          tenant =
+            if builtins.isAttrs underlayAccess && (underlayAccess.kind or null) == "tenant" then
+              underlayAccess.name or null
+            else
+              null;
+          coreHasTenant =
+            core != null
+            && builtins.hasAttr core nodes
+            && builtins.elem tenant (tenantAttachments nodes.${core});
+        in
+        if tenant == null || !coreHasTenant then
+          [ ]
+        else
+          map (access: [ core access ]) (accessNodesForTenant tenant);
+    in
+    lib.unique (lib.concatMap linkForOverlay overlays);
+
   validateTopology =
     siteKey: topo: overlays:
     let
@@ -100,6 +139,8 @@ let
 
       links = topo.links or [ ];
       normalizedLinks = validateLinks siteKey nodeNames links;
+      virtualLinks = overlayUnderlayVirtualLinks nodes overlays;
+      connectivityLinks = normalizedLinks ++ virtualLinks;
       _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes overlays normalizedLinks;
 
       touched = lib.unique (
@@ -108,7 +149,7 @@ let
             (builtins.elemAt pair 0)
             (builtins.elemAt pair 1)
           ])
-          normalizedLinks
+          connectivityLinks
       );
 
       _noIsolated = builtins.foldl'
@@ -123,7 +164,7 @@ let
         true
         nodeNames;
 
-      neigh = neighborsMap nodeNames normalizedLinks;
+      neigh = neighborsMap nodeNames connectivityLinks;
 
       start = if nodeNames == [ ] then null else builtins.elemAt (lib.sort builtins.lessThan nodeNames) 0;
 

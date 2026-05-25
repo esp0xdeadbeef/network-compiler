@@ -3,49 +3,20 @@
 let
   util = import ./util.nix { inherit lib; };
   graph = import ./topology/graph.nix { inherit lib; };
+  coreStageAdjacency = import ./topology/core-stage-adjacency.nix { inherit lib; };
   links = import ./topology/links.nix { inherit lib; };
   overlayUnderlayLinks = import ./topology/overlay-underlay-links.nix { inherit lib; };
   stageLinks = import ./topology/stage-links.nix { inherit lib; };
+  uplinkNames = import ./topology/uplink-names.nix { inherit lib; };
   uplinks = import ./topology/uplinks.nix { inherit lib; };
-  inherit (util) ensure assertUnique throwError;
+  inherit (util) ensure throwError;
+  inherit (coreStageAdjacency) validateCoreStageAdjacency;
   inherit (graph) neighborsMap bfs;
   inherit (links) validateLinks;
   inherit (overlayUnderlayLinks) overlayUnderlayVirtualLinks;
   inherit (stageLinks) validateCanonicalStageLinks;
+  inherit (uplinkNames) assertUnique assertUniqueSiteUplinkNames;
   inherit (uplinks) normalizeUplinks;
-
-  assertUniqueSiteUplinkNames =
-    siteKey: names:
-    let
-      sorted = lib.sort builtins.lessThan names;
-
-      check =
-        prev: rest:
-        if rest == [ ] then
-          true
-        else
-          let
-            cur = builtins.head rest;
-          in
-          if prev == cur then
-            throwError
-              {
-                code = "E_UPLINK_NAME_NOT_UNIQUE";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                ];
-                message = "uplink name '${cur}' must be unique across all core nodes in the site";
-                hints = [
-                  "Rename one of the duplicate uplinks so external names stay unambiguous."
-                  "Using 'wan' is fine when it appears only once in the site."
-                ];
-              }
-          else
-            check cur (builtins.tail rest);
-    in
-    if sorted == [ ] then true else check (builtins.head sorted) (builtins.tail sorted);
 
   validateTopology =
     siteKey: topo: overlays:
@@ -56,6 +27,9 @@ let
       _uniqNodes = assertUnique "node name" nodeNames;
 
       roles = map (n: nodes.${n}.role or null) nodeNames;
+      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
+        lib.sort builtins.lessThan nodeNames
+      );
 
       _hasCore = ensure (builtins.elem "core" roles) {
         code = "E_TOPO_MISSING_CORE";
@@ -105,6 +79,7 @@ let
       virtualLinks = overlayUnderlayVirtualLinks nodes overlays;
       connectivityLinks = normalizedLinks ++ virtualLinks;
       _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes overlays normalizedLinks;
+      _coreStageAdjacency = validateCoreStageAdjacency siteKey nodes normalizedLinks;
 
       touched = lib.unique (
         lib.concatMap
@@ -137,10 +112,6 @@ let
         code = "E_TOPO_DISCONNECTED";
         site = siteKey;
       };
-
-      coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
-        lib.sort builtins.lessThan nodeNames
-      );
 
       coreUplinks = builtins.listToAttrs (
         map
@@ -183,6 +154,7 @@ let
             _hasDownstreamSelector
             _hasUpstreamSelector
             _canonicalStageLinks
+            _coreStageAdjacency
             _noIsolated
             _connected
             coreUplinks

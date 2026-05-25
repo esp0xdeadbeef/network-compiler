@@ -125,6 +125,7 @@ cat > "$input_file" <<'EOF'
 
         links = [
           [ "core-wan" "upstream" ]
+          [ "core-overlay" "upstream" ]
           [ "upstream" "policy" ]
           [ "policy" "downstream" ]
           [ "downstream" "access" ]
@@ -253,6 +254,7 @@ cat > "$bad_input_file" <<'EOF'
 
       topology.links = [
         [ "core-wan" "upstream" ]
+        [ "core-overlay" "upstream" ]
         [ "upstream" "policy" ]
         [ "policy" "downstream" ]
         [ "downstream" "access-hostile" ]

@@ -37,6 +37,7 @@ negative_nix_cases=(
 "$ROOT/tests/negative/overlay-vague-underlay.nix"
 "$ROOT/tests/negative/overlay-underlay-relation-missing.nix"
 "$ROOT/tests/negative/overlay-access-attachment-missing.nix"
+"$ROOT/tests/negative/overlay-core-missing-upstream.nix"
 "$ROOT/tests/negative/duplicate-uplink-name.nix"
 "$ROOT/tests/negative/legacy-external-name-uplink.nix"
 "$ROOT/tests/negative/external-core-loop.nix"

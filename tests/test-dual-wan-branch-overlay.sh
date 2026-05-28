@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: SMT-COMP-OVERLAY-DUALWAN-001
+# GAMP-SCOPE: software-module-test
+# LAB-SMT-ID: LAB-SMT-001
+# LAB-SMT-SCOPE: examples-only; see network-labs/tests/SMT.md
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

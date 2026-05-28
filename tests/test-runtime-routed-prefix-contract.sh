@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: SMT-COMP-ROUTED-PREFIX-001
+# GAMP-SCOPE: software-module-test
 
 root="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 input_file="$(mktemp)"

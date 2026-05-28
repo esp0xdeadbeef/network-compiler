@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: RTM-GUARD-COMP-REGRESSION-001
+# GAMP-SCOPE: guard-only; not SMT acceptance evidence
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 regression="${repo_root}/regression.md"

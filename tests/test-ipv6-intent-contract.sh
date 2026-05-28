@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: SMT-COMP-IPV6-INTENT-001
+# GAMP-SCOPE: software-module-test
 
 root="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 tmp_input="$(mktemp)"

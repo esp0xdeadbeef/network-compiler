@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: RTM-RUNNER-COMP-001
+# GAMP-SCOPE: runner-only; not SMT acceptance evidence
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 

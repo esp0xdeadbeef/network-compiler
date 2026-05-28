@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GAMP-ID: SMT-COMP-UPLINK-NAME-001
+# GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 out="$(mktemp)"

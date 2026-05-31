@@ -32,6 +32,9 @@ Backward compatibility is **not guaranteed**.
 
 Pull requests are welcome, but changes that conflict with the architectural model are unlikely to be merged.
 
+Migration, deviation, exception, transition, or temporary compatibility behavior
+must be explicit in the README, tests, and owning layer before it is accepted.
+
 This repository is not trying to be a universal network compiler for every possible topology style.
 It is an **infrastructure-first, architecture-first compiler** for a specific staged fabric model.
 

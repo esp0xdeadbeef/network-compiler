@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # GAMP-ID: SMT-COMP-OVERLAY-ACCESS-001
+# GAMP-ID: USR-OVERLAY-001-FS-001-HDS-002-SDS-001-001-SMS-001-001
+# GAMP-ID: USR-OVERLAY-001-FS-001-HDS-002-SDS-001-001-SMS-001-CMC-001-001
+# GAMP-ID: USR-OVERLAY-001-FS-001-HDS-002-SDS-001-001-SMS-001-006
+# GAMP-ID: USR-OVERLAY-001-FS-001-HDS-002-SDS-001-001-SMS-001-CMC-001-006
 # GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -147,6 +151,13 @@ if jq -e '
   and .sites.acme.ams.overlayAttachments."east-west".attachAfterStage == "access"
   and .sites.acme.ams.overlayAttachments."east-west".accessNodes == [ "access-client" ]
   and .sites.acme.ams.overlayAttachments."east-west".terminatesOn == [ "core-overlay" ]
+  and ([
+    .sites.acme.ams.communicationContract.relations[]?
+    | select((.from.kind // null) == "tenant")
+    | select((.from.name // null) == "client")
+    | select((.to.kind // null) == "external")
+    | select((.to.name // null) == "east-west")
+  ] == [])
   and (
     [(.sites.acme.ams.topology.links // [])[] | select((.a == "core-overlay" and .b == "access-client") or (.a == "access-client" and .b == "core-overlay"))]
     == []

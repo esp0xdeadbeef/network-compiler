@@ -131,7 +131,6 @@ cat > "$input_file" <<'EOF'
 
         links = [
           [ "core-wan" "upstream" ]
-          [ "core-overlay" "upstream" ]
           [ "upstream" "policy" ]
           [ "policy" "downstream" ]
           [ "downstream" "access" ]
@@ -158,10 +157,7 @@ if jq -e '
     | select((.to.kind // null) == "external")
     | select((.to.name // null) == "east-west")
   ] == [])
-  and (
-    [(.sites.acme.ams.topology.links // [])[] | select((.a == "core-overlay" and .b == "access-client") or (.a == "access-client" and .b == "core-overlay"))]
-    == []
-  )
+  and ([.sites.acme.ams.topology.links[]? | select(.a == "core-overlay" or .b == "core-overlay")] == [])
   and [
     .sites.acme.ams.trafficPaths[]
     | select(.relationId == "allow-east-west-underlay-to-wan")
@@ -267,7 +263,6 @@ cat > "$bad_input_file" <<'EOF'
 
       topology.links = [
         [ "core-wan" "upstream" ]
-        [ "core-overlay" "upstream" ]
         [ "upstream" "policy" ]
         [ "policy" "downstream" ]
         [ "downstream" "access-hostile" ]

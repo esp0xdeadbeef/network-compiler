@@ -14,7 +14,7 @@ let
 in
 {
   validateCoreStageAdjacency =
-    siteKey: nodes: normalizedLinks:
+    siteKey: nodes: normalizedLinks: overlayUnderlayVirtualLinks:
     let
       nodeNames = builtins.attrNames nodes;
       coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
@@ -29,23 +29,36 @@ in
             builtins.any (linkConnects core upstream) normalizedLinks
           )
           upstreamSelectorNodes;
+      coreHasOverlayUnderlayAccess =
+        core:
+        builtins.any
+          (
+            pair:
+            let
+              a = builtins.elemAt pair 0;
+              b = builtins.elemAt pair 1;
+              other = if a == core then b else if b == core then a else null;
+            in
+            other != null && (nodes.${other}.role or null) == "access"
+          )
+          overlayUnderlayVirtualLinks;
     in
     builtins.foldl'
       (
         acc: core:
         acc
-        && ensure (coreHasActualUpstreamSelector core) {
+        && ensure (coreHasActualUpstreamSelector core || coreHasOverlayUnderlayAccess core) {
           code = "E_CORE_STAGE_ADJACENCY_REQUIRED";
           site = siteKey;
           path = [
             "topology"
             "links"
           ];
-          message = "core node '${core}' must have an explicit topology link to an upstream-selector";
+          message = "core node '${core}' must have canonical upstream reachability through an upstream-selector or explicit overlay underlay access";
           hints = [
-            "Keep every core, including overlay termination cores, attached to the canonical payload fabric with core <-> upstream-selector."
-            "Do not let an overlay underlay access attachment or virtual core <-> access edge satisfy payload-fabric connectivity."
-            "Model daemon underlay access with transport.overlays[].underlayAccess separately from payload ingress to the overlay core."
+            "WAN/ISP cores normally use an explicit core <-> upstream-selector topology link."
+            "Overlay termination cores may satisfy upstream reachability through transport.overlays[].underlayAccess when they are modeled as client-LAN members."
+            "Do not add a renderer/inventory P2P adapter for an overlay core that is intended to be a DHCP/SLAAC client on the selected underlay access tenant."
           ];
         }
       )

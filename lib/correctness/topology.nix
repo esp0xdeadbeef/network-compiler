@@ -79,7 +79,7 @@ let
       virtualLinks = overlayUnderlayVirtualLinks nodes overlays;
       connectivityLinks = normalizedLinks ++ virtualLinks;
       _canonicalStageLinks = validateCanonicalStageLinks siteKey nodes overlays normalizedLinks;
-      _coreStageAdjacency = validateCoreStageAdjacency siteKey nodes normalizedLinks;
+      _coreStageAdjacency = validateCoreStageAdjacency siteKey nodes normalizedLinks virtualLinks;
 
       touched = lib.unique (
         lib.concatMap

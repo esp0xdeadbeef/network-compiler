@@ -102,6 +102,13 @@
         let
           pkgs = mkPkgs system;
           labsPath = network-labs.outPath;
+          sourceNarHash = self.sourceInfo.narHash or "";
+          sourceRevision = self.sourceInfo.rev or "";
+          sourceLastModified =
+            if sourceRevision != "" then
+              toString (self.sourceInfo.lastModified or self.lastModified or 0)
+            else
+              "unknown";
         in
         pkgs.writeShellApplication {
           name = "app";
@@ -166,8 +173,8 @@
                 gitDirty=true
               fi
             fi
-            sourceNarHash="${self.sourceInfo.narHash or ""}"
-            sourceLastModified="${toString (self.sourceInfo.lastModified or self.lastModified or 0)}"
+            sourceNarHash="${sourceNarHash}"
+            sourceLastModified="${sourceLastModified}"
 
             echo "$json" | ${pkgs.jq}/bin/jq -S -c \
               --arg rev "$gitRev" \

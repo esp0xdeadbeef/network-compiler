@@ -8,6 +8,11 @@ let
 
   nodeNames = lib.sort builtins.lessThan (builtins.attrNames nodes);
   nodesByRole = role: lib.filter (name: (nodes.${name}.role or null) == role) nodeNames;
+  accessNodes =
+    let
+      names = nodesByRole "access";
+    in
+    if names == [ ] then [ (firstRole "access") ] else names;
 
   firstRole =
     role:
@@ -112,6 +117,7 @@ let
 in
 {
   inherit
+    accessNodes
     firstRole
     coresForExternal
     accessForEndpoint

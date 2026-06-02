@@ -15,6 +15,7 @@ fi
 "$ROOT/tests/test-uplink-name-ambiguity.sh"
 "$ROOT/tests/test-runtime-routed-prefix-contract.sh"
 "$ROOT/tests/test-ipv6-intent-contract.sh"
+"$ROOT/tests/test-wildcard-target-traffic-paths.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

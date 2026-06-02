@@ -249,6 +249,7 @@ jq -e '
 "$ROOT/tests/test-overlay-canonical-access-attachment.sh"
 "$ROOT/tests/test-overlay-peer-sites.sh"
 "$ROOT/tests/test-overlay-address-pools.sh"
+"$ROOT/tests/test-emitter-provenance-repo-boundary.sh"
 "$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

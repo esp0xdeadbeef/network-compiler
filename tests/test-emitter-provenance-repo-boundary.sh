@@ -36,6 +36,10 @@ jq -e --arg foreign "${foreign_rev}" '
   .meta.compiler.name == "network-compiler"
   and (.meta.compiler.sourceNarHash // "") != ""
   and (
+    (.meta.compiler.gitDirty == true and .meta.compiler.sourceLastModified == "unknown")
+    or (.meta.compiler.gitDirty == false and (.meta.compiler.sourceLastModified | test("^[0-9]+$|^unknown$")))
+  )
+  and (
     ($foreign == "")
     or (.meta.compiler.gitRev != $foreign)
   )
@@ -53,6 +57,10 @@ jq -e --arg own "${own_rev}" '
   .meta.compiler.name == "network-compiler"
   and .meta.compiler.gitRev == $own
   and (.meta.compiler.gitDirty | type == "boolean")
+  and (
+    (.meta.compiler.gitDirty == true and .meta.compiler.sourceLastModified == "unknown")
+    or (.meta.compiler.gitDirty == false and (.meta.compiler.sourceLastModified | test("^[0-9]+$|^unknown$")))
+  )
 ' "${tmp_dir}/own.json" >/dev/null \
   || fail "compiler provenance did not use the emitter repository"
 

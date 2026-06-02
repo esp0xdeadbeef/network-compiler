@@ -4,8 +4,9 @@ let
   util = import ../correctness/util.nix { inherit lib; };
   selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks serviceIndex hosts;
   overlayUnderlay = import ./traffic-paths/overlay-underlay.nix { inherit lib; };
+  buildCorePairs = import ./traffic-paths/core-pairs.nix { inherit lib; };
   inherit (util) throwError;
-  inherit (selectors) firstRole coresForExternal accessForEndpoint;
+  inherit (selectors) accessNodes firstRole coresForExternal accessForEndpoint;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
 
   accessToCoreStages = [
@@ -82,68 +83,35 @@ let
       fromCores = if fromStage == "core" then coresForExternal relation.from else [ ];
       toCores = if toStage == "core" then coresForExternal relation.to else [ ];
       fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
-      sameCoreExternalPairs =
-        fromCores != [ ] && toCores != [ ] && builtins.any
-          (
-            fromCore: builtins.elem fromCore toCores
-          )
-          fromCores;
-      _noExternalCoreLoop =
-        if sameCoreExternalPairs then
-          throwError
-            {
-              code = "E_TRAFFIC_PATH_EXTERNAL_CORE_LOOP";
-              site = siteKey;
-              path = [ "communicationContract" "relations" relation.source.id ];
-              message = "external-to-external relation '${relation.source.id}' resolves source and destination to the same core node";
-              hints = [
-                "Model overlay ingress and WAN egress as distinct external uplinks on distinct core nodes."
-                "For WAN egress, use external.uplinks = [ \"<uplink-name>\" ] so intent selects the desired ISP/core explicitly."
-                "Do not let overlay ingress return to the same core as WAN authorization."
-              ];
-            }
-        else
-          true;
-      corePairs =
-        if _noExternalCoreLoop && fromCores != [ ] && toCores != [ ] then
-          lib.concatMap
-            (
-              fromCore:
-              map
-                (toCore: {
-                  inherit fromCore toCore;
-                })
-                toCores
-            )
-            fromCores
-        else if fromCores != [ ] then
-          map
-            (core: {
-              fromCore = core;
-              toCore = core;
-            })
-            fromCores
-        else if toCores != [ ] then
-          map
-            (core: {
-              fromCore = core;
-              toCore = core;
-            })
-            toCores
-        else
-          [
-            {
-              fromCore = firstRole "core";
-              toCore = firstRole "core";
-            }
-          ];
+      corePairs = buildCorePairs {
+        inherit siteKey throwError firstRole relation fromCores toCores;
+      };
       pathCores = lib.unique (lib.concatMap (pair: [ pair.fromCore pair.toCore ]) corePairs);
       fromAccess = if fromStage == "access" then accessForEndpoint relation.from else null;
-      toAccess = if toStage == "access" then accessForEndpoint relation.to else null;
+      toAccessOptions =
+        if toStage != "access" then
+          [ null ]
+        else if relation.to == "any" then
+          accessNodes
+        else
+          [ (accessForEndpoint relation.to) ];
+      pathVariants = lib.concatMap
+        (
+          corePair:
+          map
+            (toAccess: {
+              inherit corePair toAccess;
+            })
+            toAccessOptions
+        )
+        corePairs;
 
       nodeForStage =
-        corePair: idx:
+        variant: idx:
         stage:
+        let
+          inherit (variant) corePair toAccess;
+        in
         if stage == "core" then
           if idx == 0 && fromStage == "core" then
             corePair.fromCore
@@ -178,7 +146,7 @@ let
             message = "unknown canonical traffic stage '${stage}'";
             hints = [ "Keep traffic paths on the compiler canonical staged fabric." ];
           };
-      nodePathAlternatives = map (corePair: lib.imap0 (nodeForStage corePair) stages) corePairs;
+      nodePathAlternatives = map (variant: lib.imap0 (nodeForStage variant) stages) pathVariants;
     in
     {
       relationId = relation.source.id;

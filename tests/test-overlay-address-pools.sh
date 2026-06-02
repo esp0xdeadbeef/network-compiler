@@ -16,9 +16,15 @@ cat >"$input_file" <<'EOF'
     pools = {
       p2p.ipv4 = "10.10.0.0/24";
       loopback.ipv4 = "10.19.0.0/24";
-      overlay = {
+    };
+    overlayAddressPools = {
+      east-west = {
         ipv4 = { prefix = "100.96.10.0/24"; perNodePrefixLength = 32; offsetStart = 10; };
         ipv6 = { prefix = "fd42:dead:beef:ee::/64"; perNodePrefixLength = 128; offsetStart = 10; };
+      };
+      provider-egress = {
+        ipv4 = { prefix = "10.66.64.0/24"; perNodePrefixLength = 32; offsetStart = 2; };
+        ipv6 = { prefix = "2001:db8:64::/64"; perNodePrefixLength = 128; offsetStart = 2; };
       };
     };
     ownership.prefixes = [
@@ -30,15 +36,19 @@ cat >"$input_file" <<'EOF'
     communicationContract.services = [ ];
     communicationContract.relations = [
       { id = "allow-lan-east-west"; priority = 100; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; name = "east-west"; }; trafficType = "any"; action = "allow"; }
+      { id = "allow-lan-provider-egress"; priority = 101; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; name = "provider-egress"; }; trafficType = "any"; action = "allow"; }
       { id = "allow-lan-nebula-underlay-to-wan"; priority = 105; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
       { id = "allow-east-west-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
+      { id = "allow-provider-egress-underlay"; priority = 111; from = { kind = "external"; name = "provider-egress"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
     ];
     transport.overlays = [
       { name = "east-west"; terminateOn = "core-nebula"; underlayAccess = { kind = "tenant"; name = "lan"; }; underlayTrafficTypes = [ "nebula" ]; mustTraverse = [ "policy" ]; }
+      { name = "provider-egress"; terminateOn = "core-provider"; underlayAccess = { kind = "tenant"; name = "lan"; }; underlayTrafficTypes = [ "nebula" ]; mustTraverse = [ "policy" ]; }
     ];
     topology.nodes = {
       core-wan = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
       core-nebula = { role = "core"; uplinks.east-west.ipv4 = [ "0.0.0.0/0" ]; };
+      core-provider = { role = "core"; uplinks.provider-egress.ipv4 = [ "10.66.64.2/32" ]; };
       upstream.role = "upstream-selector";
       policy.role = "policy";
       downstream.role = "downstream-selector";
@@ -47,6 +57,7 @@ cat >"$input_file" <<'EOF'
     topology.links = [
       [ "core-wan" "upstream" ]
       [ "core-nebula" "upstream" ]
+      [ "core-provider" "upstream" ]
       [ "upstream" "policy" ]
       [ "policy" "downstream" ]
       [ "downstream" "access" ]
@@ -64,6 +75,9 @@ jq -e '
   and .sites.acme.ams.overlayAddressPools."east-west".ipv6.prefix == "fd42:dead:beef:ee::/64"
   and .sites.acme.ams.overlayAddressPools."east-west".ipv6.perNodePrefixLength == 128
   and .sites.acme.ams.overlayAddressPools."east-west".ipv6.offsetStart == 10
+  and .sites.acme.ams.overlayAddressPools."provider-egress".ipv4.prefix == "10.66.64.0/24"
+  and .sites.acme.ams.overlayAddressPools."provider-egress".ipv4.offsetStart == 2
+  and .sites.acme.ams.overlayAddressPools."provider-egress".ipv6.prefix == "2001:db8:64::/64"
 ' "$output_json" >/dev/null
 
 echo "PASS overlay-address-pools"

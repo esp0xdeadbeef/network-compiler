@@ -65,7 +65,9 @@ let
     else
       { };
   overlayAddressPools =
-    if overlayPool == { } then
+    if builtins.isAttrs (declared.overlayAddressPools or null) then
+      declared.overlayAddressPools
+    else if overlayPool == { } then
       { }
     else
       builtins.listToAttrs (

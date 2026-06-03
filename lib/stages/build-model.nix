@@ -12,6 +12,7 @@ let
   validateOverlayModel = import ./validate-overlay-model.nix { inherit lib; };
   buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
+  validateIntentSourceBoundary = import ./validate-intent-source-boundary.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
 
@@ -50,6 +51,7 @@ let
   communicationContractDeclared = if _hasCommunicationContract then communicationContract0 else { };
 
   _noLegacyExternalPolicy = validateNoLegacyExternalPolicy siteKey declared;
+  _intentSourceBoundary = validateIntentSourceBoundary siteKey declared;
   _addrSafe = validateSite siteKey declared;
   nodes = topo.nodes or { };
   nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
@@ -166,6 +168,7 @@ let
       inherit
         _hasCommunicationContract
         _noLegacyExternalPolicy
+        _intentSourceBoundary
         _addrSafe
         _topoValid
         _uniqTrafficTypes

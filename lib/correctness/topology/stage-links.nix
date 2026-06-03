@@ -12,36 +12,29 @@ let
     core = 4;
   };
 
-  isOverlayUnderlayCoreAccess =
-    nodes: overlays: a: b:
+  tenantAttachments =
+    node:
+    lib.filter (tenant: tenant != null) (
+      map
+        (attachment:
+          if (attachment.kind or null) == "tenant" then attachment.name or null else null
+        )
+        (node.attachments or [ ])
+    );
+
+  isSharedAttachmentCoreAccess =
+    nodes: a: b:
     let
       roleA = nodes.${a}.role or null;
       roleB = nodes.${b}.role or null;
       core = if roleA == "core" && roleB == "access" then a else if roleB == "core" && roleA == "access" then b else null;
       access = if roleA == "access" && roleB == "core" then a else if roleB == "access" && roleA == "core" then b else null;
-      accessTenants =
-        if access == null then
-          [ ]
-        else
-          lib.filter (tenant: tenant != null) (
-            map
-              (attachment:
-                if (attachment.kind or null) == "tenant" then attachment.name or null else null
-              )
-              (nodes.${access}.attachments or [ ])
-          );
+      coreTenants = if core == null then [ ] else tenantAttachments nodes.${core};
+      accessTenants = if access == null then [ ] else tenantAttachments nodes.${access};
     in
     core != null
     && access != null
-    && builtins.any
-      (
-        overlay:
-        (overlay.terminateOn or null) == core
-        && builtins.isAttrs (overlay.underlayAccess or null)
-        && (overlay.underlayAccess.kind or null) == "tenant"
-        && builtins.elem (overlay.underlayAccess.name or null) accessTenants
-      )
-      overlays;
+    && builtins.any (tenant: builtins.elem tenant accessTenants) coreTenants;
 
   validateCanonicalStageLink =
     siteKey: nodes: overlays: pair:
@@ -54,9 +47,9 @@ let
       idxB = stageIndex.${roleB} or null;
       distance = if idxA == null || idxB == null then null else idxA - idxB;
       adjacent = distance == 1 || distance == (-1);
-      overlayUnderlay = isOverlayUnderlayCoreAccess nodes overlays a b;
+      sharedAttachmentCoreAccess = isSharedAttachmentCoreAccess nodes a b;
     in
-    ensure (idxA != null && idxB != null && (adjacent || overlayUnderlay)) {
+    ensure (idxA != null && idxB != null && (adjacent || sharedAttachmentCoreAccess)) {
       code = "E_TOPO_NON_CANONICAL_STAGE_LINK";
       site = siteKey;
       path = [
@@ -66,7 +59,7 @@ let
       message = "topology link '${a}' (${toString roleA}) <-> '${b}' (${toString roleB}) bypasses the canonical staged fabric";
       hints = [
         "Allowed adjacencies are access <-> downstream-selector <-> policy <-> upstream-selector <-> core."
-        "A core <-> access link is only valid when the core terminates an overlay and that access node is the explicit transport.overlays[].underlayAccess."
+        "A core <-> access link is only valid when the core and access node share an explicit attachment scope."
         "Do not model direct core-to-core, core-to-policy, access-to-policy, or selector-bypassing links."
         "If traffic needs to cross core functions, express it as policy-controlled traversal through the canonical stages."
       ];

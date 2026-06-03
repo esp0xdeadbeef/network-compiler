@@ -16,6 +16,8 @@ fi
 "$ROOT/tests/test-runtime-routed-prefix-contract.sh"
 "$ROOT/tests/test-ipv6-intent-contract.sh"
 "$ROOT/tests/test-wildcard-target-traffic-paths.sh"
+"$ROOT/tests/test-intent-source-boundary.sh"
+"$ROOT/tests/test-canonical-stage-link-matrix.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT
@@ -45,8 +47,11 @@ negative_nix_cases=(
 "$ROOT/tests/negative/external-core-loop.nix"
 "$ROOT/tests/negative/non-pair-link.nix"
 "$ROOT/tests/negative/core-to-core-link.nix"
+"$ROOT/tests/negative/downstream-to-core-link.nix"
 "$ROOT/tests/negative/policy-bypass-link.nix"
 "$ROOT/tests/negative/unknown-service-provider.nix"
+"$ROOT/tests/negative/intent-source-boundary-side-channel.nix"
+"$ROOT/tests/negative/intent-source-boundary-realization-technology.nix"
 )
 
 resolve_example() {

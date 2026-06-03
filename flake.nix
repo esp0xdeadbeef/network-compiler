@@ -175,6 +175,11 @@
             fi
             sourceNarHash="${sourceNarHash}"
             sourceLastModified="${sourceLastModified}"
+            signedOutput="''${OUTPUT_COMPILER_SIGNED_JSON:-}"
+            if [[ -z "$signedOutput" ]]; then
+              signedOutput="''${TMPDIR:-/tmp}/network-compiler/output-compiler-signed.json"
+            fi
+            mkdir -p "$(${pkgs.coreutils}/bin/dirname "$signedOutput")"
 
             echo "$json" | ${pkgs.jq}/bin/jq -S -c \
               --arg rev "$gitRev" \
@@ -188,7 +193,7 @@
                 sourceNarHash: $sourceNarHash,
                 sourceLastModified: $sourceLastModified
               }' \
-              | tee "''${OUTPUT_COMPILER_SIGNED_JSON:-./output-compiler-signed.json}" \
+              | tee "$signedOutput" \
               | ${pkgs.jq}/bin/jq -S
           '';
         };

@@ -15,6 +15,7 @@ let
   validateIntentSourceBoundary = import ./validate-intent-source-boundary.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
+  sourceAudit = import ./source-audit.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
   inherit (policyC)
@@ -152,7 +153,7 @@ let
 
   compiledServices = buildCompiledServices serviceIndex serviceNames;
 
-  model = {
+  model0 = {
     tenants = tenants;
     services = compiledServices;
     ipv6 = semantic.ipv6 or { };
@@ -162,6 +163,8 @@ let
     trafficPaths = trafficPaths;
     hostNatIngress = topo.hostNatIngress or { };
   };
+
+  model = sourceAudit.attach siteKey model0;
 
   _forced = builtins.deepSeq
     {
@@ -188,6 +191,7 @@ let
       overlayAddressPools = overlayAddressPools;
       trafficPaths = trafficPaths;
       hostNatIngress = topo.hostNatIngress or { };
+      sourceAudit = model.sourceAudit;
     }
     true;
 

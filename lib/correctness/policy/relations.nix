@@ -12,16 +12,29 @@ let
   inherit (keys) subjectKey targetKey;
   inherit (indexes) trafficTypeDef;
 
-  mkRelationSource = relation: from: to: trafficType: action: {
+  mkRelationSource = idx: relation: from: to: trafficType: action: {
     kind = "relation";
     id =
       if relation ? id then
         relation.id
       else
         "relation:${subjectKey from}->${targetKey to}:${trafficType}:${action}:${
-          toString (relation.priority or 0)
-        }";
+        toString (relation.priority or 0)
+      }";
     priority = relation.priority or 0;
+    sourceAudit = {
+      outputPath = [
+        "relations"
+        idx
+      ];
+      sourceClass = "user-intent";
+      sourcePath = [
+        "communicationContract"
+        "relations"
+        idx
+      ];
+      authority = "network-compiler";
+    };
   };
 
   normalizeRelationWithProvenance =
@@ -67,7 +80,7 @@ let
       trafficTypeName = relation.trafficType or "any";
       trafficType = trafficTypeDef siteKey idx trafficTypeIndex trafficTypeName;
 
-      source = mkRelationSource relation from to trafficType.name action;
+      source = mkRelationSource idx relation from to trafficType.name action;
     in
     {
       inherit

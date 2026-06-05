@@ -16,6 +16,7 @@ let
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
   buildIsolationDecisions = import ./isolation-decisions.nix { inherit lib; };
+  buildAccessSpaceDiscovery = import ./access-space-discovery { inherit lib; };
   sourceAudit = import ./source-audit.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
@@ -149,12 +150,14 @@ let
 
   compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
   isolationModel = buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices communicationContractDeclared;
+  accessSpaceDiscovery = buildAccessSpaceDiscovery siteKey serviceIndex (declared.profileManifest or null);
 
   model0 = {
     tenants = tenants;
     services = compiledServices;
     consumedInterfaces = isolationModel.consumedInterfaces;
     isolationDecisions = isolationModel.isolationDecisions;
+    accessSpaceDiscovery = accessSpaceDiscovery;
     ipv6 = semantic.ipv6 or { };
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;
@@ -164,7 +167,6 @@ let
   };
 
   model = sourceAudit.attach siteKey model0;
-
   _forced = builtins.deepSeq
     {
       inherit
@@ -184,6 +186,7 @@ let
         ;
       tenants = tenants;
       services = compiledServices;
+      accessSpaceDiscovery = accessSpaceDiscovery;
       ipv6 = semantic.ipv6 or { };
       relations = normalizedRelations;
       overlayAttachments = overlayAttachments;
@@ -193,6 +196,5 @@ let
       sourceAudit = model.sourceAudit;
     }
     true;
-
 in
 builtins.seq _forced model

@@ -15,6 +15,7 @@ in
       inherit scope;
       confinedByDefault = true;
       discoveryExports = map (export: (exports.normalizeExport export).service) (entry.discoveryExports or [ ]);
+      allowedServices = entry.allowedServices or [ ];
       deniedCrossScopeByDefault = lib.filter
         (service:
           builtins.elem scope (service.requesterScopes or [ ])

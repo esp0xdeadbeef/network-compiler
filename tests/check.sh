@@ -21,6 +21,7 @@ fi
 "$ROOT/tests/test-network-labs-site-fabric-traffic-paths.sh"
 "$ROOT/tests/test-fs260-default-site-fabric-chain.sh"
 "$ROOT/tests/test-fs290-access-space-discovery.sh"
+"$ROOT/tests/test-fs590-discovery-policy-contract.sh"
 "$ROOT/tests/test-fs200-shared-service-exposure-boundary.sh"
 "$ROOT/tests/test-fs620-client-isolation-classification.sh"
 "$ROOT/tests/test-fs620-fs680-shared-service-policy-contract.sh"

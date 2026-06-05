@@ -16,6 +16,10 @@ fi
 "$ROOT/tests/test-runtime-routed-prefix-contract.sh"
 "$ROOT/tests/test-ipv6-intent-contract.sh"
 "$ROOT/tests/test-wildcard-target-traffic-paths.sh"
+"$ROOT/tests/test-adjacent-traffic-denial.sh"
+"$ROOT/tests/test-network-labs-wildcard-traffic-paths.sh"
+"$ROOT/tests/test-network-labs-site-fabric-traffic-paths.sh"
+"$ROOT/tests/test-fs260-default-site-fabric-chain.sh"
 "$ROOT/tests/test-intent-source-boundary.sh"
 "$ROOT/tests/test-canonical-stage-link-matrix.sh"
 

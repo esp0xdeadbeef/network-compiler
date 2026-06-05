@@ -54,39 +54,45 @@ let
               hints = [ "Set kind to a supported target kind." ];
             };
       in
-      if
-        builtins.elem kind [
-          "tenant"
-          "tenant-set"
-        ]
-      then
-        normalizeSubject siteKey idx basePath tenantNames serviceIndex overlayNames uplinkNames target
-      else if kind == "service" then
-        let
-          name = target.name or null;
+      builtins.seq _shape (
+        builtins.seq _kind (
+          if
+            builtins.elem kind [
+              "tenant"
+              "tenant-set"
+            ]
+          then
+            normalizeSubject siteKey idx basePath tenantNames serviceIndex overlayNames uplinkNames target
+          else if kind == "service" then
+            let
+              name = target.name or null;
 
-          _name = ensure (name != null && builtins.isString name && name != "") {
-            code = "E_CONTRACT_TARGET_NAME";
-            site = siteKey;
-            path = basePath ++ [ "name" ];
-            message = "service target requires a non-empty name";
-            hints = [ "Set name = \"<service-name>\"." ];
-          };
+              _name = ensure (name != null && builtins.isString name && name != "") {
+                code = "E_CONTRACT_TARGET_NAME";
+                site = siteKey;
+                path = basePath ++ [ "name" ];
+                message = "service target requires a non-empty name";
+                hints = [ "Set name = \"<service-name>\"." ];
+              };
 
-          _exists = ensure (builtins.hasAttr name serviceIndex) {
-            code = "E_CONTRACT_UNKNOWN_SERVICE";
-            site = siteKey;
-            path = basePath ++ [ "name" ];
-            message = "relation references unknown service '${name}'";
-            hints = [ "Declare service '${name}' under communicationContract.services." ];
-          };
-        in
-        {
-          kind = "service";
-          inherit name;
-        }
-      else
-        normalizeExternalSelector siteKey basePath overlayNames uplinkNames target;
+              _exists = ensure (builtins.hasAttr name serviceIndex) {
+                code = "E_CONTRACT_UNKNOWN_SERVICE";
+                site = siteKey;
+                path = basePath ++ [ "name" ];
+                message = "relation references unknown service '${name}'";
+                hints = [ "Declare service '${name}' under communicationContract.services." ];
+              };
+            in
+            builtins.seq _name (
+              builtins.seq _exists {
+                kind = "service";
+                inherit name;
+              }
+            )
+          else
+            normalizeExternalSelector siteKey basePath overlayNames uplinkNames target
+        )
+      );
 in
 {
   inherit normalizeTarget;

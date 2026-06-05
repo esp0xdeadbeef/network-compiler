@@ -23,8 +23,37 @@ let
     let
       nodes = topo.nodes or { };
       nodeNames = builtins.attrNames nodes;
+      structureSelection = topo.structure or (topo.fabricStructure or null);
 
       _uniqNodes = assertUnique "node name" nodeNames;
+
+      _supportedStructure = ensure (
+        builtins.elem structureSelection [
+          null
+          "default"
+          "canonical"
+          "canonical-site-fabric"
+        ]
+      ) {
+        code = "E_TOPO_UNMODELED_ALTERNATE_STRUCTURE";
+        site = siteKey;
+        path = [
+          "topology"
+          "structure"
+        ];
+        message =
+          "unmodeled alternate topology structure requested: "
+          + (
+            if builtins.isString structureSelection then
+              structureSelection
+            else
+              builtins.typeOf structureSelection
+          );
+        hints = [
+          "Omit topology.structure for the default access -> downstream-selector -> policy -> upstream-selector -> core fabric."
+          "Add an explicit modeled structure selection before requesting an alternate fabric shape."
+        ];
+      };
 
       roles = map (n: nodes.${n}.role or null) nodeNames;
       coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
@@ -148,6 +177,7 @@ let
         {
           inherit
             _uniqNodes
+            _supportedStructure
             _hasCore
             _hasPolicy
             _hasAccess

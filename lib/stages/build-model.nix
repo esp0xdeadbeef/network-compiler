@@ -15,6 +15,7 @@ let
   validateIntentSourceBoundary = import ./validate-intent-source-boundary.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
+  buildIsolationDecisions = import ./isolation-decisions.nix { inherit lib; };
   sourceAudit = import ./source-audit.nix { inherit lib; };
 
   inherit (util) assertUnique ensure;
@@ -28,13 +29,10 @@ let
     ;
   inherit (topoC) validateTopology;
   inherit (addressSafety) validateSite;
-
 in
 siteKey: declared: semantic:
-
 let
   topo = declared.topology or { };
-
   communicationContract0 = declared.communicationContract or null;
 
   _hasCommunicationContract =
@@ -115,9 +113,7 @@ let
   );
 
   tenants0 = if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
-
   tenants = lib.sort (a: b: a.name < b.name) tenants0;
-
   tenantNames = map (t: t.name) tenants;
   _uniqTenants = assertUnique "tenant name" tenantNames;
 
@@ -152,10 +148,13 @@ let
   _overlayModelExplicit = validateOverlayModel siteKey trafficTypeIndex normalizedRelations overlays;
 
   compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
+  isolationModel = buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices communicationContractDeclared;
 
   model0 = {
     tenants = tenants;
     services = compiledServices;
+    consumedInterfaces = isolationModel.consumedInterfaces;
+    isolationDecisions = isolationModel.isolationDecisions;
     ipv6 = semantic.ipv6 or { };
     relations = normalizedRelations;
     overlayAttachments = overlayAttachments;

@@ -73,6 +73,7 @@ let
     let
       tenants = model.tenants or [ ];
       services = model.services or [ ];
+      isolationDecisions = model.isolationDecisions or [ ];
       relations = model.relations or [ ];
       trafficPaths = model.trafficPaths or [ ];
       overlayAttachments = model.overlayAttachments or { };
@@ -82,6 +83,15 @@ let
     in
     (indexedRefs [ "tenants" ] [ "segments" "tenants" ] tenants)
     ++ (indexedRefs [ "services" ] [ "communicationContract" "services" ] services)
+    ++ (lib.imap0
+      (
+        idx: decision:
+        if builtins.isAttrs (decision.source or null) then
+          mkBehaviorRef [ "isolationDecisions" idx ] decision.source.sourcePath
+        else
+          mkBehaviorRef [ "isolationDecisions" idx ] [ "communicationContract" "isolationDecisions" idx ]
+      )
+      isolationDecisions)
     ++ (lib.imap0
       (
         idx: relation:

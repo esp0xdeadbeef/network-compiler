@@ -151,7 +151,7 @@ let
 
   _overlayModelExplicit = validateOverlayModel siteKey trafficTypeIndex normalizedRelations overlays;
 
-  compiledServices = buildCompiledServices serviceIndex serviceNames;
+  compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
 
   model0 = {
     tenants = tenants;

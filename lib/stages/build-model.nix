@@ -150,7 +150,7 @@ let
 
   compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
   isolationModel = buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices communicationContractDeclared;
-  accessSpaceDiscovery = buildAccessSpaceDiscovery siteKey serviceIndex (declared.profileManifest or null);
+  accessSpaceDiscovery = buildAccessSpaceDiscovery siteKey serviceIndex communicationContractDeclared (declared.profileManifest or null);
 
   model0 = {
     tenants = tenants;

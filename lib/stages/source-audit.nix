@@ -38,15 +38,7 @@ let
     map
       (
         name:
-        mkBehaviorRef
-          [
-            "overlayAddressPools"
-            name
-          ]
-          [
-            "overlayAddressPools"
-            name
-          ]
+        mkBehaviorRef [ "overlayAddressPools" name ] [ "overlayAddressPools" name ]
       )
       (lib.sort builtins.lessThan (builtins.attrNames overlayAddressPools));
 
@@ -55,16 +47,7 @@ let
     map
       (
         name:
-        mkBehaviorRef
-          [
-            "overlayAttachments"
-            name
-          ]
-          [
-            "transport"
-            "overlays"
-            name
-          ]
+        mkBehaviorRef [ "overlayAttachments" name ] [ "transport" "overlays" name ]
       )
       (lib.sort builtins.lessThan (builtins.attrNames overlayAttachments));
 
@@ -76,6 +59,7 @@ let
       isolationDecisions = model.isolationDecisions or [ ];
       relations = model.relations or [ ];
       trafficPaths = model.trafficPaths or [ ];
+      sharedServicePolicyAtoms = (model.accessSpaceDiscovery or { }).sharedServicePolicyAtoms or [ ];
       overlayAttachments = model.overlayAttachments or { };
       overlayAddressPools = model.overlayAddressPools or { };
       hostNatIngress = model.hostNatIngress or { };
@@ -111,6 +95,18 @@ let
         ]
       )
       trafficPaths)
+    ++ (lib.imap0
+      (
+        idx: atom:
+        let
+          outputPath = [ "accessSpaceDiscovery" "sharedServicePolicyAtoms" idx ];
+        in
+        if builtins.isAttrs (atom.source or null) then
+          mkBehaviorRef outputPath atom.source.sourcePath
+        else
+          mkBehaviorRef outputPath [ "communicationContract" "sharedServicePolicyAtoms" (atom.id or idx) ]
+      )
+      sharedServicePolicyAtoms)
     ++ (overlayAttachmentRefs overlayAttachments)
     ++ (overlayPoolRefs overlayAddressPools)
     ++ (lib.optional (hostNatIngress != { })

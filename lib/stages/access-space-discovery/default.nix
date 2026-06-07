@@ -1,6 +1,6 @@
 { lib }:
 
-siteKey: serviceIndex: profileManifest:
+siteKey: serviceIndex: communicationContract: profileManifest:
 let
   util = import ../../correctness/util.nix { inherit lib; };
   inherit (util) ensure assertUnique;
@@ -55,11 +55,13 @@ let
       has
       isNonEmptyString
       isStringList
+      assertUnique
       matrix
       sharedServices
       accessSpaces
       accessSpaceNames
       serviceNames
+      communicationContract
       serviceByName
       matrixByScope
       indexedMatrix
@@ -69,6 +71,7 @@ let
   validators = import ./validators.nix { inherit lib; } ctx;
   exports = import ./exports.nix { inherit lib; } ctx;
   decisions = import ./decisions.nix { inherit lib; } ctx;
+  sharedServicePolicyAtoms = import ./shared-service-policy-atoms.nix { inherit lib; } ctx;
 
   _accessSpaces =
     require (builtins.isAttrs accessSpaces && accessSpaces != { })
@@ -147,8 +150,9 @@ if profileManifest == null then
   {
     confined = [ ];
     exported = [ ];
+    sharedServicePolicyAtoms = sharedServicePolicyAtoms;
   }
 else
   builtins.seq _forced {
-    inherit confined exported;
+    inherit confined exported sharedServicePolicyAtoms;
   }

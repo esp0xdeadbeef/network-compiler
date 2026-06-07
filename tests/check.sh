@@ -26,6 +26,7 @@ fi
 "$ROOT/tests/test-fs200-shared-service-exposure-boundary.sh"
 "$ROOT/tests/test-fs620-client-isolation-classification.sh"
 "$ROOT/tests/test-fs620-fs680-shared-service-policy-contract.sh"
+"$ROOT/tests/test-fs760-receiver-discovery-policy-contract.sh"
 "$ROOT/tests/test-intent-source-boundary.sh"
 "$ROOT/tests/test-canonical-stage-link-matrix.sh"
 

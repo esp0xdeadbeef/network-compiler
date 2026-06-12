@@ -29,6 +29,8 @@ fi
 "$ROOT/tests/test-fs760-receiver-discovery-policy-contract.sh"
 "$ROOT/tests/test-intent-source-boundary.sh"
 "$ROOT/tests/test-canonical-stage-link-matrix.sh"
+"$ROOT/tests/test-fs181-hds010-sds010-sms010-graph-path-mapping.sh"
+"$ROOT/tests/test-fs181-hds010-sds040-sms010-authority-set.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

@@ -4,7 +4,17 @@ set -euo pipefail
 # GAMP-SCOPE: software-module-test
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-foreign_cwd="${NETWORK_FOREIGN_CWD:-/home/deadbeef/github/network-codex-agent}"
+
+# NETWORK_FOREIGN_CWD must be set to the path of a foreign repository
+# (e.g., network-codex-agent) for the foreign-caller provenance check.
+# Replaces the old hardcoded default /home/deadbeef/github/network-codex-agent.
+if [[ -z "${NETWORK_FOREIGN_CWD:-}" ]]; then
+  echo "SKIP: NETWORK_FOREIGN_CWD not set; foreign-caller provenance check skipped" >&2
+  echo "  Set NETWORK_FOREIGN_CWD to a foreign repository path to run the full check." >&2
+  echo "PASS emitter-provenance-repo-boundary (foreign check skipped)"
+  exit 0
+fi
+foreign_cwd="${NETWORK_FOREIGN_CWD}"
 
 fail() {
   echo "$1" >&2

@@ -229,6 +229,38 @@ This repository implements the **compiler stage**.
 
 ---
 
+# Spec Chain
+
+The compiler is owned by the following GAMP trace chain. All behavior requirements
+originate from the URS, flow through FS, and are refined by HDS → SDS → SMS
+before reaching this repository.
+
+## Primary Chain: Model Compilation
+
+| Layer | ID | Description |
+|-------|----|-------------|
+| URS   | L11, L29, L79-86 | Model portability, intent/realization boundaries, platform-independent output |
+| FS    | FS-010 – FS-165 | Model inputs, provenance, determinism, scoped output, source-form minimality, portability |
+| FS    | FS-181 | Closed-World Policy Authority Set — derive network behavior from closed set of platform-neutral authority records |
+| FS    | FS-260 | Default Site Fabric Chain — logical chain of upstream surface, core boundary, policy point, downstream distribution, access space, clients |
+| HDS   | Derived per FS item | Hardware design constraints for compiler pipeline |
+| SDS   | Derived per HDS item | Software design, interface architecture, compiler stage boundaries |
+
+### Pipeline
+
+```
+network-labs (intent) → network-compiler → NFM → CPM → renderers
+```
+
+Required input: `intent.nix` — user-owned desired behavior (tenants, services, policy, overlays, etc.).
+Output: platform-independent normalized site payload for the forwarding model.
+
+### Owning Repository
+
+Construction tests: `network-compiler/tests/`
+
+---
+
 # Architectural stance
 
 The compiler is **platform-independent**, but it is **not topology-neutral**.

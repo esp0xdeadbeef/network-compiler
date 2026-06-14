@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# GAMP-ID: FS-030-HDS-010-SDS-010-SMS-050
-# GAMP-ID: FS-030-HDS-010-SDS-010-SMS-060
-# GAMP-ID: FS-030-HDS-010-SDS-010-SMS-070
+# GAMP-ID: FS-030-HDS-010-SDS-030-SMS-010
+# GAMP-ID: FS-030-HDS-010-SDS-040-SMS-010
+# GAMP-ID: FS-030-HDS-010-SDS-050-SMS-010
 # GAMP-SCOPE: software-module-test
 # Construction test: compiler overlay-underlay separation,
 # platform independence, and core role boundary.
@@ -21,7 +21,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 output_json="${tmp_dir}/compiled.json"
 all_passed=true
 
-echo "--- FS-030-HDS-010-SDS-010-SMS-050 + SMS-060 + SMS-070: Compiler boundary tests ---"
+echo "--- FS-030-HDS-010-SDS-030-SMS-010 + SDS-040-SMS-010 + SDS-050-SMS-010: Compiler boundary tests ---"
 echo ""
 
 # Compile the dual-wan-branch-overlay example (has Nebula overlay)
@@ -205,9 +205,9 @@ fi
 echo ""
 if [[ "${all_passed}" == "true" ]]; then
   echo "PASS: All FS-030 compiler boundary checks passed."
-  echo "  SMS-050: Overlay underlay/payload p2pIsolationKey separation confirmed"
-  echo "  SMS-060: Platform independence verified"
-  echo "  SMS-070: Core role boundary enforced"
+  echo "  FS-030-HDS-010-SDS-030-SMS-010: Overlay underlay/payload p2pIsolationKey separation confirmed"
+  echo "  FS-030-HDS-010-SDS-040-SMS-010: Platform independence verified"
+  echo "  FS-030-HDS-010-SDS-050-SMS-010: Core role boundary enforced"
   exit 0
 else
   echo "FAIL: One or more compiler boundary checks failed."

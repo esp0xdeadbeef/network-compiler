@@ -67,12 +67,16 @@ let
 
   validateCanonicalStageLinks =
     siteKey: nodes: overlays: links:
-    builtins.foldl'
-      (
-        acc: pair: acc && validateCanonicalStageLink siteKey nodes overlays pair
-      )
-      true
-      links;
+    let
+      _links = builtins.foldl'
+        (
+          acc: pair: acc && validateCanonicalStageLink siteKey nodes overlays pair
+        )
+        true
+        links;
+      _policyTraversal = (import ./policy-traversal.nix { inherit lib; }).validatePolicyTraversal siteKey nodes links;
+    in
+    _links && _policyTraversal;
 
 in
 {

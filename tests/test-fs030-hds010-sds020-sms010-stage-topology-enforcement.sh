@@ -14,13 +14,12 @@ set -euo pipefail
 #   - Downstream-to-core, access→upstream, core→policy, access→core
 #     (no shared attachment) → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK
 #   - Missing required stage → hard-fails with E_TOPO_MISSING_*
+#   - Policy bypass upstream→core→upstream → hard-fails with E_TOPO_POLICY_BYPASS
 #
-# KNOWN_GAPS (pairwise-adjacent multi-hop policy bypasses):
+# KNOWN_GAPS (pairwise-adjacent multi-hop policy bypasses, not yet enforced):
 #   - core→upstream→core: two cores reach each other through upstream, no policy
 #   - access→ds→access: two access nodes through downstream, no policy
-#   - us→core→us: two upstream-selectors through core, no policy
-#   Each individual link is between adjacent stages (distance ±1), so
-#   validateCanonicalStageLinks passes. Full-path policy traversal not enforced.
+#   Fixing requires network-labs fixture restructuring; see lane file.
 #
 # Two active seeded negatives required by SMS-010:
 #   Negative 1 — Direct core-to-core bypass
@@ -356,10 +355,7 @@ fi
 # also connects to policy→downstream→access. But this allows two
 # cores to reach each other without traversing policy — a multi-hop
 # policy bypass that the current adjacency-only check does not catch.
-#
-# Expected: should hard-fail (core-to-core communication without
-# policy is never allowed per URS).
-# Actual: compiles successfully (GAP).
+# Fixing requires network-labs fixture restructuring; see lane file.
 # ============================================================
 echo ""
 echo "--- KNOWN_GAP: Core-to-core bypass through upstream-selector ---"
@@ -421,10 +417,10 @@ COREUPCORE
 set +e
 nix run "$ROOT#compile" -- "${tmp_dir}/core-upstream-core-connected.nix" \
   >/dev/null 2>"${tmp_dir}/core-upstream-core-stderr.txt"
-gap_rc=$?
+gap1_rc=$?
 set -e
 
-if [[ $gap_rc -eq 0 ]]; then
+if [[ $gap1_rc -eq 0 ]]; then
   echo "KNOWN_GAP: core → upstream → core (policy bypass) incorrectly compiles"
   echo "  Each link is pairwise adjacent (core↔upstream distance=1), so"
   echo "  validateCanonicalStageLinks passes. The graph is connected via"
@@ -596,9 +592,9 @@ fi
 
 # ============================================================
 # KNOWN_GAP: Access-to-access bypass through downstream-selector
-# Two access nodes share a downstream-selector. tenants on both
-# can reach each other via access→ds→access without ever
-# traversing policy. Each link adjacent (distance=1), so
+# Two access nodes share a downstream-selector. Traffic between
+# access-a and access-b can reach each other via access→ds→access
+# without traversing policy. Each link adjacent (distance=1), so
 # validateCanonicalStageLinks passes.
 # ============================================================
 echo ""
@@ -653,13 +649,13 @@ else
 fi
 
 # ============================================================
-# KNOWN_GAP: Upstream-to-upstream bypass through core
+# Policy bypass: Upstream-to-upstream through core
 # Two upstream-selectors share a core node. Traffic between
 # upstream-a and upstream-b can reach each other via
 # upstream→core→upstream without traversing policy.
 # ============================================================
 echo ""
-echo "--- KNOWN_GAP: Upstream-to-upstream bypass through core ---"
+echo "--- Policy bypass: Upstream-to-upstream through core ---"
 
 cat > "${tmp_dir}/us-core-us.nix" <<'USCOREUS'
 {
@@ -698,14 +694,17 @@ nix run "$ROOT#compile" -- "${tmp_dir}/us-core-us.nix" >/dev/null 2>"${tmp_dir}/
 gap3_rc=$?
 set -e
 
-if [[ $gap3_rc -eq 0 ]]; then
-  echo "KNOWN_GAP: upstream→core→upstream (policy bypass) incorrectly compiles"
-  echo "  Two upstream-selectors share a core node. Traffic between"
-  echo "  upstream-a and upstream-b reaches the core node without"
-  echo "  traversing policy."
+if [[ $gap3_rc -ne 0 ]]; then
+  if grep -q 'E_TOPO_POLICY_BYPASS' "${tmp_dir}/us-core-us-stderr.txt"; then
+    echo "PASS: upstream→core→upstream policy bypass rejected with E_TOPO_POLICY_BYPASS"
+  else
+    echo "FAIL: upstream→core→upstream rejected but wrong error code (expected E_TOPO_POLICY_BYPASS)"
+    grep -o '"code":"[^"]*"' "${tmp_dir}/us-core-us-stderr.txt" || true
+    all_passed=false
+  fi
 else
-  echo "NOTE: upstream→core→upstream now correctly rejected (gap may be fixed)"
-  grep -o '"code":"[^"]*"' "${tmp_dir}/us-core-us-stderr.txt" || true
+  echo "FAIL: upstream→core→upstream policy bypass should have been rejected but compiled successfully"
+  all_passed=false
 fi
 
 # SMS-010 requires active seeded negatives (not dormant).
@@ -733,7 +732,8 @@ if [[ "${all_passed}" == "true" ]]; then
   echo "  access→core (no shared attachment): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"
   echo "  Missing downstream-selector: hard-fails E_TOPO_MISSING_DOWNSTREAM_SELECTOR"
   echo "  Missing upstream-selector: hard-fails E_TOPO_MISSING_UPSTREAM_SELECTOR"
-  echo "  KNOWN_GAPs: core→upstream→core, access→ds→access, us→core→us (pairwise-adjacent bypasses)"
+  echo "  Policy bypass upstream→core→upstream: hard-fails E_TOPO_POLICY_BYPASS"
+  echo "  KNOWN_GAPs: core→upstream→core, access→ds→access (require network-labs fixture restructure)"
   exit 0
 else
   echo "FAIL: One or more stage topology enforcement checks failed."

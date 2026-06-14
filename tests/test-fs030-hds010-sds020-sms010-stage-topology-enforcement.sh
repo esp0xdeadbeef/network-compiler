@@ -11,8 +11,16 @@ set -euo pipefail
 #     diagnostic names violating nodes and expected adjacency
 #   - Access-to-policy stage-skip → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK,
 #     diagnostic names skipped stage
-#   - Policy-bypass link (downstream→core) → hard-fails
+#   - Downstream-to-core, access→upstream, core→policy, access→core
+#     (no shared attachment) → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK
 #   - Missing required stage → hard-fails with E_TOPO_MISSING_*
+#
+# KNOWN_GAPS (pairwise-adjacent multi-hop policy bypasses):
+#   - core→upstream→core: two cores reach each other through upstream, no policy
+#   - access→ds→access: two access nodes through downstream, no policy
+#   - us→core→us: two upstream-selectors through core, no policy
+#   Each individual link is between adjacent stages (distance ±1), so
+#   validateCanonicalStageLinks passes. Full-path policy traversal not enforced.
 #
 # Two active seeded negatives required by SMS-010:
 #   Negative 1 — Direct core-to-core bypass
@@ -426,6 +434,280 @@ else
   echo "NOTE: core → upstream → core now correctly rejected (gap may be fixed)"
   grep -o '"code":"[^"]*"' "${tmp_dir}/core-upstream-core-stderr.txt" || true
 fi
+
+# ============================================================
+# Negative: access-to-upstream-selector (skips ds + policy)
+# ============================================================
+echo ""
+echo "--- Negative: access-to-upstream stage skip ---"
+
+cat > "${tmp_dir}/access-upstream.nix" <<'ACCUP'
+{
+  badsite = {
+    pools = { p2p.ipv4 = "10.10.0.0/24"; loopback.ipv4 = "10.19.0.0/24"; };
+    ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
+    communicationContract = {
+      trafficTypes = [ ]; services = [ ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+    };
+    topology = {
+      nodes = {
+        core = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        upstream.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = { role = "access"; attachments = [{ kind = "tenant"; name = "mgmt"; }]; };
+      };
+      links = [
+        [ "core" "upstream" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+        [ "access" "upstream" ]
+      ];
+    };
+  };
+}
+ACCUP
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/access-upstream.nix" >/dev/null 2>"${tmp_dir}/access-upstream-stderr.txt"
+neg6_rc=$?
+set -e
+
+if [[ $neg6_rc -ne 0 ]]; then
+  if grep -q 'E_TOPO_NON_CANONICAL_STAGE_LINK' "${tmp_dir}/access-upstream-stderr.txt"; then
+    echo "PASS: access→upstream (skips ds+policy) rejected with E_TOPO_NON_CANONICAL_STAGE_LINK"
+  else
+    echo "FAIL: access→upstream rejected but wrong error code"
+    grep -o '"code":"[^"]*"' "${tmp_dir}/access-upstream-stderr.txt" || true
+    all_passed=false
+  fi
+else
+  echo "FAIL: access→upstream (skipping 2 stages) should have been rejected"
+  all_passed=false
+fi
+
+# ============================================================
+# Negative: core-to-policy (skips upstream-selector)
+# ============================================================
+echo ""
+echo "--- Negative: core-to-policy stage skip ---"
+
+cat > "${tmp_dir}/core-policy.nix" <<'COREPOL'
+{
+  badsite = {
+    pools = { p2p.ipv4 = "10.10.0.0/24"; loopback.ipv4 = "10.19.0.0/24"; };
+    ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
+    communicationContract = {
+      trafficTypes = [ ]; services = [ ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+    };
+    topology = {
+      nodes = {
+        core = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        upstream.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = { role = "access"; attachments = [{ kind = "tenant"; name = "mgmt"; }]; };
+      };
+      links = [
+        [ "core" "policy" ]
+        [ "core" "upstream" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+      ];
+    };
+  };
+}
+COREPOL
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/core-policy.nix" >/dev/null 2>"${tmp_dir}/core-policy-stderr.txt"
+neg7_rc=$?
+set -e
+
+if [[ $neg7_rc -ne 0 ]]; then
+  if grep -q 'E_TOPO_NON_CANONICAL_STAGE_LINK' "${tmp_dir}/core-policy-stderr.txt"; then
+    echo "PASS: core→policy (skips upstream) rejected with E_TOPO_NON_CANONICAL_STAGE_LINK"
+  else
+    echo "FAIL: core→policy rejected but wrong error code"
+    grep -o '"code":"[^"]*"' "${tmp_dir}/core-policy-stderr.txt" || true
+    all_passed=false
+  fi
+else
+  echo "FAIL: core→policy (skipping upstream-selector) should have been rejected"
+  all_passed=false
+fi
+
+# ============================================================
+# Negative: access-to-core without shared attachment
+# ============================================================
+echo ""
+echo "--- Negative: access-to-core without shared attachment ---"
+
+cat > "${tmp_dir}/access-core-no-shared.nix" <<'ACCNOSHARE'
+{
+  badsite = {
+    pools = { p2p.ipv4 = "10.10.0.0/24"; loopback.ipv4 = "10.19.0.0/24"; };
+    ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
+    communicationContract = {
+      trafficTypes = [ ]; services = [ ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+    };
+    topology = {
+      nodes = {
+        core = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        upstream.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = { role = "access"; attachments = [{ kind = "tenant"; name = "mgmt"; }]; };
+      };
+      links = [
+        [ "core" "upstream" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+        [ "access" "core" ]
+      ];
+    };
+  };
+}
+ACCNOSHARE
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/access-core-no-shared.nix" >/dev/null 2>"${tmp_dir}/access-core-stderr.txt"
+neg8_rc=$?
+set -e
+
+if [[ $neg8_rc -ne 0 ]]; then
+  if grep -q 'E_TOPO_NON_CANONICAL_STAGE_LINK' "${tmp_dir}/access-core-stderr.txt"; then
+    echo "PASS: access→core (no shared attachment) rejected with E_TOPO_NON_CANONICAL_STAGE_LINK"
+  else
+    echo "FAIL: access→core rejected but wrong error code"
+    grep -o '"code":"[^"]*"' "${tmp_dir}/access-core-stderr.txt" || true
+    all_passed=false
+  fi
+else
+  echo "FAIL: access→core without shared attachment should have been rejected"
+  all_passed=false
+fi
+
+# ============================================================
+# KNOWN_GAP: Access-to-access bypass through downstream-selector
+# Two access nodes share a downstream-selector. tenants on both
+# can reach each other via access→ds→access without ever
+# traversing policy. Each link adjacent (distance=1), so
+# validateCanonicalStageLinks passes.
+# ============================================================
+echo ""
+echo "--- KNOWN_GAP: Access-to-access bypass through downstream-selector ---"
+
+cat > "${tmp_dir}/access-ds-access.nix" <<'ACCACC'
+{
+  badsite = {
+    pools = { p2p.ipv4 = "10.10.0.0/24"; loopback.ipv4 = "10.19.0.0/24"; };
+    ownership.prefixes = [
+      { kind = "tenant"; name = "t1"; ipv4 = "10.20.10.0/24"; }
+      { kind = "tenant"; name = "t2"; ipv4 = "10.20.20.0/24"; }
+    ];
+    communicationContract = {
+      trafficTypes = [ ]; services = [ ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+    };
+    topology = {
+      nodes = {
+        core = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        upstream.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access-a = { role = "access"; attachments = [{ kind = "tenant"; name = "t1"; }]; };
+        access-b = { role = "access"; attachments = [{ kind = "tenant"; name = "t2"; }]; };
+      };
+      links = [
+        [ "core" "upstream" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access-a" ]
+        [ "downstream" "access-b" ]
+      ];
+    };
+  };
+}
+ACCACC
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/access-ds-access.nix" >/dev/null 2>"${tmp_dir}/access-ds-access-stderr.txt"
+gap2_rc=$?
+set -e
+
+if [[ $gap2_rc -eq 0 ]]; then
+  echo "KNOWN_GAP: access→ds→access (policy bypass) incorrectly compiles"
+  echo "  Two access nodes share a downstream-selector. Tenant traffic"
+  echo "  between access-a and access-b can reach each other through"
+  echo "  downstream-selector without ever traversing policy."
+else
+  echo "NOTE: access→ds→access now correctly rejected (gap may be fixed)"
+  grep -o '"code":"[^"]*"' "${tmp_dir}/access-ds-access-stderr.txt" || true
+fi
+
+# ============================================================
+# KNOWN_GAP: Upstream-to-upstream bypass through core
+# Two upstream-selectors share a core node. Traffic between
+# upstream-a and upstream-b can reach each other via
+# upstream→core→upstream without traversing policy.
+# ============================================================
+echo ""
+echo "--- KNOWN_GAP: Upstream-to-upstream bypass through core ---"
+
+cat > "${tmp_dir}/us-core-us.nix" <<'USCOREUS'
+{
+  badsite = {
+    pools = { p2p.ipv4 = "10.10.0.0/24"; loopback.ipv4 = "10.19.0.0/24"; };
+    ownership.prefixes = [ { kind = "tenant"; name = "t1"; ipv4 = "10.20.10.0/24"; } ];
+    communicationContract = {
+      trafficTypes = [ ]; services = [ ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; uplinks = [ "wan" "ew" ]; }; trafficType = "any"; action = "allow"; } ];
+    };
+    topology = {
+      nodes = {
+        core-a = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        core-b = { role = "core"; uplinks.ew.ipv4 = [ "100.96.0.0/24" ]; };
+        upstream-a.role = "upstream-selector";
+        upstream-b.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = { role = "access"; attachments = [{ kind = "tenant"; name = "t1"; }]; };
+      };
+      links = [
+        [ "core-a" "upstream-a" ]
+        [ "upstream-a" "core-b" ]
+        [ "core-b" "upstream-b" ]
+        [ "upstream-b" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+      ];
+    };
+  };
+}
+USCOREUS
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/us-core-us.nix" >/dev/null 2>"${tmp_dir}/us-core-us-stderr.txt"
+gap3_rc=$?
+set -e
+
+if [[ $gap3_rc -eq 0 ]]; then
+  echo "KNOWN_GAP: upstream→core→upstream (policy bypass) incorrectly compiles"
+  echo "  Two upstream-selectors share a core node. Traffic between"
+  echo "  upstream-a and upstream-b reaches the core node without"
+  echo "  traversing policy."
+else
+  echo "NOTE: upstream→core→upstream now correctly rejected (gap may be fixed)"
+  grep -o '"code":"[^"]*"' "${tmp_dir}/us-core-us-stderr.txt" || true
+fi
+
 # SMS-010 requires active seeded negatives (not dormant).
 # This test actually invokes the compiler on bad input — it is not
 # a static fixture-only check.
@@ -446,8 +728,12 @@ if [[ "${all_passed}" == "true" ]]; then
   echo "  Core-to-core bypass (Negative 1): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK + node names + adjacency"
   echo "  Access-to-policy stage skip (Negative 2): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK + skipped stage + site"
   echo "  Downstream-to-core policy bypass: hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"
+  echo "  access→upstream (skip ds+policy): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"
+  echo "  core→policy (skip upstream): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"
+  echo "  access→core (no shared attachment): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"
   echo "  Missing downstream-selector: hard-fails E_TOPO_MISSING_DOWNSTREAM_SELECTOR"
   echo "  Missing upstream-selector: hard-fails E_TOPO_MISSING_UPSTREAM_SELECTOR"
+  echo "  KNOWN_GAPs: core→upstream→core, access→ds→access, us→core→us (pairwise-adjacent bypasses)"
   exit 0
 else
   echo "FAIL: One or more stage topology enforcement checks failed."

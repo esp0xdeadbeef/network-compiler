@@ -6,6 +6,7 @@ set -euo pipefail
 #
 # SMS predicates proven:
 #   - Valid canonical topology (all stages, correct order) → passes
+#   - Multi-core canonical topology (core → upstream → policy → upstream → core) → passes
 #   - Core-to-core link → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK,
 #     diagnostic names violating nodes and expected adjacency
 #   - Access-to-policy stage-skip → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK,
@@ -38,6 +39,80 @@ if [[ $? -eq 0 ]]; then
 else
   echo "FAIL: Valid canonical topology (single-uplink, all 5 stages in order) failed to compile"
   cat "${tmp_dir}/positive-stderr.txt"
+  all_passed=false
+fi
+
+# ============================================================
+# Positive: Multi-core canonical topology
+# Two cores communicate through: core → upstream → policy → upstream → core
+# This proves the system does NOT over-reject valid multi-core traversal.
+# ============================================================
+echo ""
+echo "--- Positive: Multi-core canonical topology (core → upstream → policy → upstream → core) ---"
+
+cat > "${tmp_dir}/multi-core-canonical.nix" <<'MULTICORE'
+{
+  goodsite = {
+    pools = {
+      p2p.ipv4 = "10.10.0.0/24";
+      loopback.ipv4 = "10.19.0.0/24";
+    };
+    ownership.prefixes = [
+      { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; }
+    ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
+      relations = [
+        {
+          id = "allow-mgmt-to-wan";
+          priority = 100;
+          from = { kind = "tenant"; name = "mgmt"; };
+          to = { kind = "external"; uplinks = [ "wan" "east-west" ]; };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
+    };
+    topology = {
+      nodes = {
+        core-wan = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+        core-east-west = {
+          role = "core";
+          uplinks.east-west.ipv4 = [ "100.96.0.0/24" ];
+        };
+        upstream-a.role = "upstream-selector";
+        upstream-b.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = {
+          role = "access";
+          attachments = [{ kind = "tenant"; name = "mgmt"; }];
+        };
+      };
+      links = [
+        [ "core-wan" "upstream-a" ]
+        [ "upstream-a" "policy" ]
+        [ "policy" "upstream-b" ]
+        [ "upstream-b" "core-east-west" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+      ];
+    };
+  };
+}
+MULTICORE
+
+nix run "$ROOT#compile" -- "${tmp_dir}/multi-core-canonical.nix" \
+  >/dev/null 2>"${tmp_dir}/multi-core-stderr.txt"
+if [[ $? -eq 0 ]]; then
+  echo "PASS: Multi-core canonical topology (core → upstream → policy → upstream → core) compiles"
+else
+  echo "FAIL: Multi-core canonical topology incorrectly rejected"
+  cat "${tmp_dir}/multi-core-stderr.txt"
   all_passed=false
 fi
 
@@ -266,7 +341,91 @@ else
 fi
 
 # ============================================================
-# Active seeded negative verification
+# KNOWN_GAP: Core-to-core bypass through upstream-selector
+# Topology: core-wan → upstream → core-east-west (no policy traversal)
+# Each individual link is adjacent (core↔upstream), so the pairwise
+# stage-link check passes. The graph stays connected because upstream
+# also connects to policy→downstream→access. But this allows two
+# cores to reach each other without traversing policy — a multi-hop
+# policy bypass that the current adjacency-only check does not catch.
+#
+# Expected: should hard-fail (core-to-core communication without
+# policy is never allowed per URS).
+# Actual: compiles successfully (GAP).
+# ============================================================
+echo ""
+echo "--- KNOWN_GAP: Core-to-core bypass through upstream-selector ---"
+
+cat > "${tmp_dir}/core-upstream-core-connected.nix" <<'COREUPCORE'
+{
+  badsite = {
+    pools = {
+      p2p.ipv4 = "10.10.0.0/24";
+      loopback.ipv4 = "10.19.0.0/24";
+    };
+    ownership.prefixes = [
+      { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; }
+    ];
+    communicationContract = {
+      trafficTypes = [ ];
+      services = [ ];
+      relations = [
+        {
+          id = "allow-mgmt-to-wan";
+          priority = 100;
+          from = { kind = "tenant"; name = "mgmt"; };
+          to = { kind = "external"; uplinks = [ "wan" "east-west" ]; };
+          trafficType = "any";
+          action = "allow";
+        }
+      ];
+    };
+    topology = {
+      nodes = {
+        core-wan = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+        core-east-west = {
+          role = "core";
+          uplinks.east-west.ipv4 = [ "100.96.0.0/24" ];
+        };
+        upstream.role = "upstream-selector";
+        policy.role = "policy";
+        downstream.role = "downstream-selector";
+        access = {
+          role = "access";
+          attachments = [{ kind = "tenant"; name = "mgmt"; }];
+        };
+      };
+      links = [
+        [ "core-wan" "upstream" ]
+        [ "upstream" "core-east-west" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access" ]
+      ];
+    };
+  };
+}
+COREUPCORE
+
+set +e
+nix run "$ROOT#compile" -- "${tmp_dir}/core-upstream-core-connected.nix" \
+  >/dev/null 2>"${tmp_dir}/core-upstream-core-stderr.txt"
+gap_rc=$?
+set -e
+
+if [[ $gap_rc -eq 0 ]]; then
+  echo "KNOWN_GAP: core → upstream → core (policy bypass) incorrectly compiles"
+  echo "  Each link is pairwise adjacent (core↔upstream distance=1), so"
+  echo "  validateCanonicalStageLinks passes. The graph is connected via"
+  echo "  upstream→policy→downstream→access. Two cores reach each other"
+  echo "  without traversing policy — should be rejected per URS/SMS."
+else
+  echo "NOTE: core → upstream → core now correctly rejected (gap may be fixed)"
+  grep -o '"code":"[^"]*"' "${tmp_dir}/core-upstream-core-stderr.txt" || true
+fi
 # SMS-010 requires active seeded negatives (not dormant).
 # This test actually invokes the compiler on bad input — it is not
 # a static fixture-only check.
@@ -282,7 +441,8 @@ echo "      (not dormant fixture-only checks or static jq scans)"
 echo ""
 if [[ "${all_passed}" == "true" ]]; then
   echo "PASS: FS-030-HDS-010-SDS-020-SMS-010 stage topology enforcement"
-  echo "  Valid canonical topology: compiles successfully"
+  echo "  Single-core canonical topology: compiles successfully"
+  echo "  Multi-core canonical topology (core → upstream → policy → upstream → core): compiles"
   echo "  Core-to-core bypass (Negative 1): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK + node names + adjacency"
   echo "  Access-to-policy stage skip (Negative 2): hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK + skipped stage + site"
   echo "  Downstream-to-core policy bypass: hard-fails E_TOPO_NON_CANONICAL_STAGE_LINK"

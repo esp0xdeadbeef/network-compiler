@@ -13,15 +13,7 @@ actual_json="${tmp_dir}/actual.json"
 expected_json="${tmp_dir}/expected.json"
 
 nix flake archive --json "path:${ROOT}" >"${archive_json}"
-labs_path="$(
-  ARCHIVE_JSON="${archive_json}" nix eval --impure --raw --expr '
-    let
-      archived = builtins.fromJSON (builtins.readFile (builtins.getEnv "ARCHIVE_JSON"));
-      labsPath = archived.inputs."network-labs".path or null;
-    in
-      if labsPath == null then throw "network-labs wildcard traffic paths: missing network-labs input" else labsPath
-  '
-)"
+labs_path="${ROOT}/tests/fixtures"
 
 compile_example() {
   local example="$1"

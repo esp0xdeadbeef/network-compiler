@@ -26,7 +26,7 @@ echo ""
 
 # Compile the dual-wan-branch-overlay example (has Nebula overlay)
 echo "Compiling dual-wan-branch-overlay example..."
-nix run "$ROOT#compile" -- labs:examples/dual-wan-branch-overlay/intent.nix >"$output_json" 2>"${tmp_dir}/stderr.txt" || {
+nix run "$ROOT#compile" -- "${ROOT}/tests/fixtures/examples/dual-wan-branch-overlay/intent.nix" >"$output_json" 2>"${tmp_dir}/stderr.txt" || {
   echo "FAIL: compilation failed"
   cat "${tmp_dir}/stderr.txt"
   exit 1

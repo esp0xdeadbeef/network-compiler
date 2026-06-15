@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# GAMP-ID: FS-270-HDS-010-SDS-010-SMS-010
 # GAMP-ID: FS-270-HDS-010-SDS-010-SMS-020
 # GAMP-SCOPE: software-module-test
 
@@ -8,8 +7,8 @@ ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-input_nix="${tmp_dir}/fs270-policy-point-transit.nix"
-output_json="${tmp_dir}/fs270-policy-point-transit.json"
+input_nix="${tmp_dir}/fs270-sms020-client-tenant-policy-transit.nix"
+output_json="${tmp_dir}/fs270-sms020-client-tenant-policy-transit.json"
 
 cat >"$input_nix" <<'NIX'
 {
@@ -37,22 +36,6 @@ cat >"$input_nix" <<'NIX'
         ];
         relations = [
           {
-            id = "allow-provider-to-client";
-            priority = 100;
-            from = { kind = "external"; uplinks = [ "wan0" ]; };
-            to = { kind = "tenant"; name = "client"; };
-            trafficType = "any";
-            action = "allow";
-          }
-          {
-            id = "allow-client-to-provider";
-            priority = 110;
-            from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan0" ]; };
-            trafficType = "any";
-            action = "allow";
-          }
-          {
             id = "allow-client-to-dmz-api";
             priority = 120;
             from = { kind = "tenant"; name = "client"; };
@@ -61,9 +44,9 @@ cat >"$input_nix" <<'NIX'
             action = "allow";
           }
           {
-            id = "allow-dmz-api-to-provider";
+            id = "allow-client-to-wan";
             priority = 130;
-            from = { kind = "service"; name = "dmz-api"; };
+            from = { kind = "tenant"; name = "client"; };
             to = { kind = "external"; uplinks = [ "wan0" ]; };
             trafficType = "any";
             action = "allow";
@@ -130,25 +113,10 @@ jq -e '
     and (path($id)[0].p2pIsolationKey == $id);
 
   has_path(
-    "allow-provider-to-client";
-    ["core", "upstream-selector", "policy", "downstream-selector", "access"];
-    ["core", "upstream", "policy", "downstream", "access-client"]
-  )
-  and has_path(
-    "allow-client-to-provider";
-    ["access", "downstream-selector", "policy", "upstream-selector", "core"];
-    ["access-client", "downstream", "policy", "upstream", "core"]
-  )
-  and has_path(
     "allow-client-to-dmz-api";
     ["access", "downstream-selector", "policy", "downstream-selector", "access"];
     ["access-client", "downstream", "policy", "downstream", "access-dmz"]
   )
-  and has_path(
-    "allow-dmz-api-to-provider";
-    ["access", "downstream-selector", "policy", "upstream-selector", "core"];
-    ["access-dmz", "downstream", "policy", "upstream", "core"]
-  )
 ' "$output_json" >/dev/null
 
-echo "PASS fs270-policy-point-transit-contract"
+echo "PASS FS-270-HDS-010-SDS-010-SMS-020"

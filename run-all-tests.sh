@@ -4,6 +4,7 @@
 # configurable parallelism via TEST_ASYNC_JOBS env var.
 # GAMP-SCOPE: runner-only; not SMT acceptance evidence.
 set -uo pipefail
+exec > >(tee "/tmp/network-compiler-tests.out")
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 default_jobs="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
@@ -74,6 +75,8 @@ done
 while ((running > 0)); do
   wait_for_one
 done
+
+printf 'PASS: %s, FAIL: %s, TOTAL: %s\n' "$(( ${#tests[@]} - failures ))" "${failures}" "${#tests[@]}" >&2
 
 if ((failures > 0)); then
   printf 'error: %s/%s tests failed\n' "${failures}" "${#tests[@]}" >&2

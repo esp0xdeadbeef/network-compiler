@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# GAMP-ID: FS-260-HDS-010-SDS-010-SMS-020
 # GAMP-ID: FS-260-HDS-010-SDS-010-SMS-030
-# GAMP-ID: SMT-COMP-FS260-SITE-FABRIC-LABS-001
 # GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -206,4 +204,4 @@ expect_compile_failure \
   "${missing_role_chain_input}" \
   "E_TOPO_MISSING_UPSTREAM_SELECTOR"
 
-echo "PASS network-labs-site-fabric-traffic-paths"
+echo "PASS FS-260-HDS-010-SDS-010-SMS-030"

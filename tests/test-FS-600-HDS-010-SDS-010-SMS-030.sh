@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# GAMP-ID: FS-600-HDS-010-SDS-010-SMS-010
-# GAMP-ID: FS-600-HDS-010-SDS-010-SMS-020
 # GAMP-ID: FS-600-HDS-010-SDS-010-SMS-030
-# GAMP-ID: FS-600-HDS-010-SDS-010-SMS-040
 # GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -362,4 +359,4 @@ expect_failure \
   "E_ACCESS_SPACE_DISCOVERY_PAYLOAD_INFERENCE" \
   "must not grant payload reachability from discovery visibility"
 
-echo "PASS fs600-discovery-payload-construction"
+echo "PASS FS-600-HDS-010-SDS-010-SMS-030"

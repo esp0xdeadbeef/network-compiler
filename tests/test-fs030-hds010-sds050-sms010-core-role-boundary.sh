@@ -181,12 +181,12 @@ fi
 
 # ============================================================
 # Seeded Negative 1b: Core-to-access link WITH shared attachment
-# SMS-050 requires UNCONDITIONAL rejection, but stage-links.nix
-# currently allows this. Document as KNOWN_GAP.
+# SMS-050 requires UNCONDITIONAL rejection of any core-to-access link.
+# Previously a KNOWN_GAP (stage-links.nix allowed shared-attachment
+# core<->access); now fixed — core-to-access is always non-canonical.
 # ============================================================
 echo ""
 echo "--- Seeded Negative 1b: Core-to-access link (WITH shared attachment) ---"
-echo "  (SMS-050 requires unconditional rejection; stage-links.nix allows)"
 
 cat > "${tmp_dir}/core-access-shared.nix" <<'COREACC2'
 {
@@ -237,12 +237,16 @@ neg1b_rc=$?
 set -e
 
 if [[ $neg1b_rc -ne 0 ]]; then
-  echo "PASS SN1b: Core-to-access with shared attachment correctly rejected (exit $neg1b_rc)"
-  grep -o '"code":"[^"]*"' "${tmp_dir}/core-access-shared-stderr.txt" || true
+  if grep -q 'E_TOPO_NON_CANONICAL_STAGE_LINK' "${tmp_dir}/core-access-shared-stderr.txt"; then
+    echo "PASS SN1b: Core-to-access with shared attachment rejected with E_TOPO_NON_CANONICAL_STAGE_LINK"
+  else
+    actual_code=$(grep -o '"code":"[^"]*"' "${tmp_dir}/core-access-shared-stderr.txt" | head -1 || echo "unknown")
+    echo "FAIL SN1b: Core-to-access shared rejected but wrong error: ${actual_code} (expected E_TOPO_NON_CANONICAL_STAGE_LINK)"
+    all_passed=false
+  fi
 else
-  echo "KNOWN_GAP SN1b: Core-to-access with shared attachment ACCEPTED (compiles OK)"
-  echo "  stage-links.nix:50 sharedAttachmentCoreAccess allows this"
-  echo "  SMS-050 requires unconditional rejection — spec/code conflict"
+  echo "FAIL SN1b: Core-to-access with shared attachment should have been rejected"
+  all_passed=false
 fi
 
 # ============================================================
@@ -490,13 +494,13 @@ if [[ "${all_passed}" == "true" ]]; then
   echo ""
   echo "  Verified:"
   echo "    SN1a (core→access no share): hard-fails ✓"
-  echo "    Core→downstream-selector:       hard-fails ✓"
-  echo "    Core without policy:            hard-fails ✓"
-  echo "    Core exit-anchoring position:   verified ✓"
+  echo "    SN1b (core→access shared):   hard-fails ✓"
+  echo "    Core→downstream-selector:     hard-fails ✓"
+  echo "    Core without policy:          hard-fails ✓"
+  echo "    Core exit-anchoring position: verified ✓"
   echo ""
   echo "  Known gaps (not test-blocking):"
-  echo "    SN1b (core→access shared):      KNOWN_GAP — stage-links allows"
-  echo "    SN2  (excess permission):       KNOWN_GAP — no compiler module"
+  echo "    SN2  (excess permission):     KNOWN_GAP — no compiler module"
   exit 0
 else
   echo "FAIL: One or more core role boundary checks failed."

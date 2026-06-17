@@ -31,6 +31,7 @@ fi
 "$ROOT/tests/test-canonical-stage-link-matrix.sh"
 "$ROOT/tests/test-fs181-hds010-sds010-sms010-graph-path-mapping.sh"
 "$ROOT/tests/test-fs181-hds010-sds040-sms010-authority-set.sh"
+"$ROOT/tests/test-fs030-hds010-sds050-sms010-core-role-boundary.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

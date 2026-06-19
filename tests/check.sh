@@ -19,7 +19,7 @@ fi
 "$ROOT/tests/test-adjacent-traffic-denial.sh"
 "$ROOT/tests/test-network-labs-wildcard-traffic-paths.sh"
 "$ROOT/tests/test-network-labs-site-fabric-traffic-paths.sh"
-"$ROOT/tests/test-fs260-default-site-fabric-chain.sh"
+"$ROOT/tests/test-FS-260-HDS-010-SDS-010-SMS-010.sh"
 "$ROOT/tests/test-fs290-access-space-discovery.sh"
 "$ROOT/tests/test-fs590-discovery-policy-contract.sh"
 "$ROOT/tests/test-fs600-discovery-payload-construction.sh"

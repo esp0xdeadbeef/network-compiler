@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # GAMP-ID: FS-030-HDS-010-SDS-030-SMS-010
-# GAMP-ID: FS-030-HDS-010-SDS-040-SMS-010
-# GAMP-ID: FS-030-HDS-010-SDS-050-SMS-010
 # GAMP-SCOPE: software-module-test
-# Construction test: compiler overlay-underlay separation,
-# platform independence, and core role boundary.
+# Construction test: compiler overlay-underlay separation.
 #
-# SMS-050: Overlay underlay/control and payload must have separate p2pIsolationKeys
-# SMS-060: Compiler output must be platform-independent
-# SMS-070: Core nodes must not bypass policy stage
+# SMS-010: Overlay underlay/control and payload must have separate
+# p2pIsolationKeys, transportKind classification, overlayIdentity,
+# and peerSiteIdentity emission.
 #
 # Uses dual-wan-branch-overlay example which has Nebula overlay with
 # separate underlay and payload traffic paths.
@@ -21,7 +18,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 output_json="${tmp_dir}/compiled.json"
 all_passed=true
 
-echo "--- FS-030-HDS-010-SDS-030-SMS-010 + SDS-040-SMS-010 + SDS-050-SMS-010: Compiler boundary tests ---"
+echo "--- FS-030-HDS-010-SDS-030-SMS-010: Overlay-underlay separation ---"
 echo ""
 
 # Compile the dual-wan-branch-overlay example (has Nebula overlay)
@@ -33,169 +30,195 @@ nix run "$ROOT#compile" -- "${ROOT}/tests/fixtures/examples/dual-wan-branch-over
 }
 
 # ============================================================
-# SMS-050: Overlay-underlay separation (p2pIsolationKey uniqueness)
+# P1: Overlay identity and transportKind are emitted
 # ============================================================
 echo ""
-echo "--- SMS-050: Overlay-underlay separation ---"
+echo "--- P1: Overlay identity fields on overlay traffic paths ---"
 
-# Check that traffic paths involving overlay have distinct p2pIsolationKeys
-# for underlay (wireguard/nebula control) vs payload traffic
-underlay_keys=$(jq -r '
-  [.sites[].trafficPaths[]?
-   | select(.overlayIdentity != null and .overlayIdentity != "")
-   | select(.transportKind == "overlay-underlay")
-   | .p2pIsolationKey // empty] | unique | length
-' "$output_json" 2>/dev/null || echo "0")
-
-payload_keys=$(jq -r '
-  [.sites[].trafficPaths[]?
-   | select(.overlayIdentity != null and .overlayIdentity != "")
-   | select(.transportKind != "overlay-underlay")
-   | .p2pIsolationKey // empty] | unique | length
-' "$output_json" 2>/dev/null || echo "0")
-
-echo "  Overlay-underlay p2pIsolationKey count: ${underlay_keys}"
-echo "  Overlay-payload p2pIsolationKey count: ${payload_keys}"
-
-# Verify forbidsCoreToCoreP2P is set on overlay paths
-forbids_count=$(jq -r '
-  [.sites[].trafficPaths[]?
-   | select(.overlayIdentity != null)
-   | select(.forbidsCoreToCoreP2P == true)] | length
-' "$output_json" 2>/dev/null || echo "0")
-
-total_overlay_paths=$(jq -r '
-  [.sites[].trafficPaths[]?
+overlay_path_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
    | select(.overlayIdentity != null)] | length
 ' "$output_json" 2>/dev/null || echo "0")
 
-echo "  Overlay paths with forbidsCoreToCoreP2P=true: ${forbids_count}/${total_overlay_paths}"
+underlay_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.transportKind == "overlay-underlay")] | length
+' "$output_json" 2>/dev/null || echo "0")
 
-# Seeded negative: verify that underlay and payload paths don't share the same key
-overlay_identities=$(jq -r '
-  [.sites[].overlays[]?.identity // empty] | unique | .[]
+payload_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.transportKind == "overlay-payload")] | length
+' "$output_json" 2>/dev/null || echo "0")
+
+peer_site_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.peerSiteIdentity != null)] | length
+' "$output_json" 2>/dev/null || echo "0")
+
+echo "  Overlay traffic paths: ${overlay_path_count}"
+echo "  Underlay paths (overlay-underlay): ${underlay_count}"
+echo "  Payload paths (overlay-payload): ${payload_count}"
+echo "  Paths with peerSiteIdentity: ${peer_site_count}"
+
+if [[ "${overlay_path_count}" -gt 0 && "${underlay_count}" -gt 0 && "${payload_count}" -gt 0 && "${peer_site_count}" -gt 0 ]]; then
+  echo "PASS P1: overlayIdentity, transportKind, and peerSiteIdentity emitted on overlay paths"
+else
+  echo "FAIL P1: overlay metadata missing — need overlayIdentity, transportKind, peerSiteIdentity"
+  all_passed=false
+fi
+
+# ============================================================
+# P2: Underlay and payload have distinct p2pIsolationKeys
+# (SMS: must not collapse into single relation with shared key)
+# ============================================================
+echo ""
+echo "--- P2: Distinct p2pIsolationKeys for underlay vs payload ---"
+
+# Collect overlay identities
+overlay_ids=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.overlayIdentity != null)
+   | .overlayIdentity] | unique | .[]
 ' "$output_json" 2>/dev/null || echo "")
 
 key_violation=false
-for ident in $overlay_identities; do
-  underlay_key=$(jq -r "
-    [.sites[].trafficPaths[]?
-     | select(.overlayIdentity == \"${ident}\")
-     | select(.transportKind == \"overlay-underlay\")
-     | .p2pIsolationKey // empty][0] // \"\"
-  " "$output_json" 2>/dev/null || echo "")
+for ident in $overlay_ids; do
+  underlay_keys=$(jq -r "
+    [.sites[][].trafficPaths[]?
+     | select(.overlayIdentity == \"${ident}\" and .transportKind == \"overlay-underlay\")
+     | .p2pIsolationKey // empty] | unique
+  " "$output_json" 2>/dev/null || echo "[]")
   
-  sharing_payload=$(jq -r "
-    [.sites[].trafficPaths[]?
-     | select(.overlayIdentity == \"${ident}\")
-     | select(.transportKind != \"overlay-underlay\")
-     | select(.p2pIsolationKey == \"${underlay_key}\")]
-     | length
-  " "$output_json" 2>/dev/null || echo "0")
+  payload_keys=$(jq -r "
+    [.sites[][].trafficPaths[]?
+     | select(.overlayIdentity == \"${ident}\" and .transportKind == \"overlay-payload\")
+     | .p2pIsolationKey // empty] | unique
+  " "$output_json" 2>/dev/null || echo "[]")
   
-  if [[ -n "${underlay_key}" && "${sharing_payload}" -gt 0 ]]; then
-    echo "  VIOLATION: overlay '${ident}' underlay and payload share p2pIsolationKey '${underlay_key}'"
+  # Check if any underlay key appears in payload keys
+  shared=$(jq -rn "
+    ([${underlay_keys}] + [${payload_keys}]) as \$all
+    | ([${underlay_keys}] - ([${underlay_keys}] - [${payload_keys}])) | length
+  " 2>/dev/null || echo "0")
+  
+  underlay_count_single=$(jq -rn "[${underlay_keys}] | length" 2>/dev/null || echo "0")
+  payload_count_single=$(jq -rn "[${payload_keys}] | length" 2>/dev/null || echo "0")
+  
+  echo "  Overlay '${ident}': underlay=${underlay_count_single} payload=${payload_count_single} shared=${shared}"
+  
+  if [[ "${shared}" -gt 0 ]]; then
+    echo "  VIOLATION: overlay '${ident}' underlay and payload share p2pIsolationKey(s)"
     key_violation=true
   fi
 done
 
 if [[ "${key_violation}" == "true" ]]; then
-  echo "FAIL SMS-050: Overlay underlay and payload share p2pIsolationKeys"
+  echo "FAIL P2: Overlay underlay and payload share p2pIsolationKeys"
   all_passed=false
 else
-  echo "PASS SMS-050: No p2pIsolationKey sharing between underlay and payload"
+  echo "PASS P2: No p2pIsolationKey sharing between underlay and payload"
 fi
 
 # ============================================================
-# SMS-060: Platform independence (no renderer-specific tokens)
+# P3: forbidsCoreToCoreP2P on all overlay paths
 # ============================================================
 echo ""
-echo "--- SMS-060: Platform independence ---"
+echo "--- P3: forbidsCoreToCoreP2P on overlay paths ---"
 
-# Scan compiled JSON for renderer-specific tokens
-renderer_tokens='nftables|iptables|containerlab|nixos|cisco|juniper|systemd|docker'
-violation_count=$(jq -r '
-  [.. | strings | select(test("'"${renderer_tokens}"'"; "i"))] | length
+forbids_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.overlayIdentity != null)
+   | select(.forbidsCoreToCoreP2P == true)] | length
 ' "$output_json" 2>/dev/null || echo "0")
 
-echo "  Renderer-specific token hits in compiler output: ${violation_count}"
+forbids_false_count=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.overlayIdentity != null)
+   | select(.forbidsCoreToCoreP2P == false)] | length
+' "$output_json" 2>/dev/null || echo "0")
 
-if [[ "${violation_count}" -gt 0 ]]; then
-  echo "  Tokens found:"
-  jq -r '.. | strings | select(test("'"${renderer_tokens}"'"; "i"))' "$output_json" 2>/dev/null | sort -u | head -20 | while read -r tok; do echo "    - ${tok}"; done
-  # Check if hits are in overlay identity fields (permitted - these are technology names, not implementation)
-  tech_identity_hits=$(jq -r '
-    [.sites[].overlays[]?.technology // empty] | .[]
-  ' "$output_json" 2>/dev/null | grep -ciE "${renderer_tokens}" || echo "0")
-  if [[ "${violation_count}" == "${tech_identity_hits}" ]]; then
-    echo "  All hits are in overlay technology identity fields — permitted (not platform implementation)"
-    echo "PASS SMS-060: No renderer-specific platform implementation in compiler output"
-  else
-    echo "FAIL SMS-060: Renderer-specific tokens found in compiler output outside overlay identity fields"
-    all_passed=false
+echo "  Overlay paths with forbidsCoreToCoreP2P=true: ${forbids_count}"
+echo "  Overlay paths with forbidsCoreToCoreP2P=false: ${forbids_false_count}"
+
+if [[ "${forbids_count}" -gt 0 && "${forbids_false_count}" -eq 0 ]]; then
+  echo "PASS P3: All overlay paths have forbidsCoreToCoreP2P=true"
+else
+  echo "FAIL P3: Some overlay paths missing forbidsCoreToCoreP2P=true"
+  all_passed=false
+fi
+
+# ============================================================
+# N1: Seeded negative — verify scanner detects violation
+# ============================================================
+echo ""
+echo "--- N1: Seeded negative — collapsed underlay/payload detection ---"
+
+fake_file="${tmp_dir}/fake-collapsed.json"
+cat > "$fake_file" << 'EOF'
+{
+  "sites": {
+    "test": {
+      "site-x": {
+        "trafficPaths": [
+          {
+            "relationId": "underlay-rel",
+            "overlayIdentity": "test-overlay",
+            "transportKind": "overlay-underlay",
+            "p2pIsolationKey": "SHARED-KEY-001",
+            "forbidsCoreToCoreP2P": true,
+            "peerSiteIdentity": "peer.site"
+          },
+          {
+            "relationId": "payload-rel",
+            "overlayIdentity": "test-overlay",
+            "transportKind": "overlay-payload",
+            "p2pIsolationKey": "SHARED-KEY-001",
+            "forbidsCoreToCoreP2P": true,
+            "peerSiteIdentity": "peer.site"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+# Run the same check against the seeded negative
+seeded_overlay_ids=$(jq -r '
+  [.sites[][].trafficPaths[]?
+   | select(.overlayIdentity != null)
+   | .overlayIdentity] | unique | .[]
+' "$fake_file" 2>/dev/null || echo "")
+
+seeded_violation_detected=false
+for ident in $seeded_overlay_ids; do
+  seeded_underlay_keys=$(jq -r "
+    [.sites[][].trafficPaths[]?
+     | select(.overlayIdentity == \"${ident}\" and .transportKind == \"overlay-underlay\")
+     | .p2pIsolationKey // empty] | unique
+  " "$fake_file" 2>/dev/null || echo "[]")
+  
+  seeded_payload_keys=$(jq -r "
+    [.sites[][].trafficPaths[]?
+     | select(.overlayIdentity == \"${ident}\" and .transportKind == \"overlay-payload\")
+     | .p2pIsolationKey // empty] | unique
+  " "$fake_file" 2>/dev/null || echo "[]")
+  
+  seeded_shared=$(jq -rn "
+    ([${seeded_underlay_keys}] + [${seeded_payload_keys}]) as \$all
+    | ([${seeded_underlay_keys}] - ([${seeded_underlay_keys}] - [${seeded_payload_keys}])) | length
+  " 2>/dev/null || echo "0")
+  
+  if [[ "${seeded_shared}" -gt 0 ]]; then
+    seeded_violation_detected=true
+    echo "  Seeded negative DETECTED: overlay '${ident}' shares p2pIsolationKey 'SHARED-KEY-001'"
   fi
+done
+
+if [[ "${seeded_violation_detected}" == "true" ]]; then
+  echo "PASS N1: Seeded negative — scanner detects collapsed p2pIsolationKeys"
 else
-  echo "PASS SMS-060: No renderer-specific tokens in compiler output"
-fi
-
-# ============================================================
-# SMS-070: Core role boundary (cores don't bypass policy stage)
-# ============================================================
-echo ""
-echo "--- SMS-070: Core role boundary ---"
-
-# Verify core nodes only serve as exit anchoring
-core_node_count=$(jq -r '
-  [.sites[].nodes[]? | select(.role == "core")] | length
-' "$output_json" 2>/dev/null || echo "0")
-
-echo "  Core nodes: ${core_node_count}"
-
-# Check that core nodes don't appear on the access side of policy
-core_access_violations=$(jq -r '
-  [.sites[].trafficPaths[]?
-   | select(.sourceRole == "core")
-   | select(.policyTraversal == false or .policyTraversal == null)] | length
-' "$output_json" 2>/dev/null || echo "0")
-
-echo "  Core-sourced paths without policyTraversal: ${core_access_violations}"
-
-# Cores should appear as egress destinations, not access sources
-core_egress_paths=$(jq -r '
-  [.sites[].trafficPaths[]?
-   | select(.destinationRole == "core")] | length
-' "$output_json" 2>/dev/null || echo "0")
-
-echo "  Core-destined egress paths: ${core_egress_paths}"
-
-# Core nodes should not create forwarding authority independent of policy
-# (verified by checking core role exists only in the canonical stage chain,
-# not as an independent forwarding authority)
-core_forwarding_auth=$(jq -r '
-  [.sites[].forwardingAuthority[]?
-   | select(.role == "core" and .independent == true)] | length
-' "$output_json" 2>/dev/null || echo "0")
-
-if [[ "${core_forwarding_auth}" -gt 0 ]]; then
-  echo "FAIL SMS-070: Core nodes found with independent forwarding authority"
-  all_passed=false
-elif [[ "${core_access_violations}" -gt 0 ]]; then
-  echo "FAIL SMS-070: Core-sourced paths without policyTraversal detected"
-  all_passed=false
-else
-  echo "PASS SMS-070: Core nodes properly scoped to exit anchoring and transport termination"
-fi
-
-# Seeded negative: verify scanner detects injected renderer-specific token
-echo ""
-echo "--- SMS-060: Seeded negative ---"
-fake_file="${tmp_dir}/fake-platform-leak.json"
-echo '{"badField": "use nftables for firewall"}' > "$fake_file"
-injected_count=$(jq -r '[.. | strings | select(test("nftables|iptables|containerlab"; "i"))] | length' "$fake_file" 2>/dev/null || echo "0")
-if [[ "${injected_count}" -gt 0 ]]; then
-  echo "PASS SMS-060 seeded negative: scanner detects injected 'nftables' token"
-else
-  echo "FAIL SMS-060 seeded negative: scanner missed injected token"
+  echo "FAIL N1: Seeded negative — scanner did not detect shared p2pIsolationKeys"
   all_passed=false
 fi
 
@@ -204,12 +227,13 @@ fi
 # ============================================================
 echo ""
 if [[ "${all_passed}" == "true" ]]; then
-  echo "PASS: All FS-030 compiler boundary checks passed."
-  echo "  FS-030-HDS-010-SDS-030-SMS-010: Overlay underlay/payload p2pIsolationKey separation confirmed"
-  echo "  FS-030-HDS-010-SDS-040-SMS-010: Platform independence verified"
-  echo "  FS-030-HDS-010-SDS-050-SMS-010: Core role boundary enforced"
+  echo "PASS: FS-030-HDS-010-SDS-030-SMS-010 overlay-underlay separation verified."
+  echo "  P1: overlayIdentity, transportKind, peerSiteIdentity emitted on overlay paths"
+  echo "  P2: Distinct p2pIsolationKeys for underlay vs payload (no collapse)"
+  echo "  P3: forbidsCoreToCoreP2P=true on all overlay paths"
+  echo "  N1: Seeded negative detects shared p2pIsolationKey"
   exit 0
 else
-  echo "FAIL: One or more compiler boundary checks failed."
+  echo "FAIL: One or more overlay-underlay separation checks failed."
   exit 1
 fi

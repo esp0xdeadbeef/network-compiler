@@ -9,6 +9,35 @@ let
   inherit (selectors) accessNodes firstRole coresForExternal accessForEndpoint;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
 
+  # Returns overlay metadata for a relation that involves an overlay, or null.
+  overlaysByName = builtins.listToAttrs (
+    map (overlay: { name = overlay.name; value = overlay; }) overlays
+  );
+  endpointOverlayName =
+    endpoint:
+    if !(builtins.isAttrs endpoint) || (endpoint.kind or null) != "external" then
+      null
+    else
+      let name = endpoint.name or ""; in
+      if builtins.hasAttr name overlaysByName then name else null;
+  overlayInfoForRelation =
+    relation:
+    let
+      fromOverlayName = endpointOverlayName relation.from;
+      toOverlayName = endpointOverlayName relation.to;
+      overlayName = if fromOverlayName != null then fromOverlayName else toOverlayName;
+      overlay = if overlayName != null then overlaysByName.${overlayName} else null;
+      isUnderlayRel =
+        overlayName != null
+        && fromOverlayName != null  # underlay traffic originates FROM the overlay external
+        && (relation.trafficType or "any") != "any";
+    in
+    if overlay == null then null else {
+      overlayIdentity = overlayName;
+      peerSiteIdentity = overlay.peerSite or null;
+      transportKind = if isUnderlayRel then "overlay-underlay" else "overlay-payload";
+    };
+
   accessToCoreStages = [
     "access"
     "downstream-selector"
@@ -147,6 +176,7 @@ let
             hints = [ "Keep traffic paths on the compiler canonical staged fabric." ];
           };
       nodePathAlternatives = map (variant: lib.imap0 (nodeForStage variant) stages) pathVariants;
+      overlayInfo = overlayInfoForRelation relation;
     in
     {
       relationId = relation.source.id;
@@ -161,6 +191,7 @@ let
       requiresPolicy = builtins.elem "policy" stages;
       forbidsCoreToCoreP2P = true;
       p2pIsolationKey = relation.source.id;
-    };
+    }
+    // lib.optionalAttrs (overlayInfo != null) overlayInfo;
 in
 map buildOne normalizedRelations

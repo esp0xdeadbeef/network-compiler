@@ -75,6 +75,44 @@
 
           readInput = readValue;
 
+          layerEntryWarnings =
+            { entryBoundary ? "intent-source" }:
+            let
+              skippedForBoundary = {
+                intent-source = [ ];
+                compiler-output = [ "intent-source" ];
+                forwarding-model-input = [ "intent-source" "network-compiler" ];
+                control-plane-input = [ "intent-source" "network-compiler" "network-forwarding-model" ];
+                renderer-input = [ "intent-source" "network-compiler" "network-forwarding-model" "network-control-plane-model" ];
+                runtime-artifact = [ "intent-source" "network-compiler" "network-forwarding-model" "network-control-plane-model" "renderer" ];
+              };
+              warningBySkippedLayer = {
+                intent-source = "WARN_LAYER_ENTRY_SKIPS_NETWORK_LABS_INTENT_SOURCE";
+                network-compiler = "WARN_LAYER_ENTRY_SKIPS_NETWORK_COMPILER";
+                network-forwarding-model = "WARN_LAYER_ENTRY_SKIPS_NFM";
+                network-control-plane-model = "WARN_LAYER_ENTRY_SKIPS_CPM";
+                renderer = "WARN_LAYER_ENTRY_SKIPS_RENDERER";
+              };
+              skippedUpstreamLayers =
+                skippedForBoundary.${entryBoundary} or
+                (throw "network-compiler layer-entry warning: unknown entryBoundary '${entryBoundary}'");
+            in
+            {
+              inherit entryBoundary skippedUpstreamLayers;
+              warnings = map
+                (layer: {
+                  code = warningBySkippedLayer.${layer};
+                  severity = "warning";
+                  skippedLayer = layer;
+                  message =
+                    if layer == "network-compiler" then
+                      "layer-entry starts below network-compiler; compiler execution and validation are not covered by this scenario"
+                    else
+                      "layer-entry skips ${layer}; that layer is not covered by this scenario";
+                })
+                skippedUpstreamLayers;
+            };
+
           compileValue = value: compile value;
 
           compilePath = valueOrPath: compile (readValue valueOrPath);
@@ -236,6 +274,33 @@
             + builtins.readFile ./tests/check.sh;
           };
 
+          layerEntryWarningsDrv = pkgs.writeShellApplication {
+            name = "layer-entry-warnings";
+            runtimeInputs = [
+              pkgs.nix
+              pkgs.jq
+            ];
+            text = ''
+              set -euo pipefail
+
+              entry_boundary="''${1:-intent-source}"
+
+              expr='
+                let
+                  flake = builtins.getFlake "path:${self.outPath}";
+                in
+                  flake.libBySystem.${system}.layerEntryWarnings {
+                    entryBoundary = builtins.getEnv "ENTRY_BOUNDARY";
+                  }
+              '
+
+              json="$(ENTRY_BOUNDARY="$entry_boundary" ${pkgs.nix}/bin/nix eval --impure --json --expr "$expr")"
+              printf '%s\n' "$json" \
+                | ${pkgs.jq}/bin/jq -r '.warnings[]? | "WARNING: " + .code + ": " + .message' >&2
+              printf '%s\n' "$json" | ${pkgs.jq}/bin/jq -S
+            '';
+          };
+
         in
         {
           compile = {
@@ -251,6 +316,11 @@
           check = {
             type = "app";
             program = "${checkDrv}/bin/check";
+          };
+
+          layer-entry-warnings = {
+            type = "app";
+            program = "${layerEntryWarningsDrv}/bin/layer-entry-warnings";
           };
 
           default = {

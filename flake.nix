@@ -78,6 +78,7 @@
           layerEntryWarnings =
             { entryBoundary ? "intent-source" }:
             let
+              currentRepo = "network-compiler";
               skippedForBoundary = {
                 intent-source = [ ];
                 compiler-output = [ "intent-source" ];
@@ -96,9 +97,11 @@
               skippedUpstreamLayers =
                 skippedForBoundary.${entryBoundary} or
                 (throw "network-compiler layer-entry warning: unknown entryBoundary '${entryBoundary}'");
+              repoSkipped = builtins.elem currentRepo skippedUpstreamLayers;
             in
             {
-              inherit entryBoundary skippedUpstreamLayers;
+              repo = currentRepo;
+              inherit entryBoundary skippedUpstreamLayers repoSkipped;
               warnings = map
                 (layer: {
                   code = warningBySkippedLayer.${layer};
@@ -111,6 +114,26 @@
                       "layer-entry skips ${layer}; that layer is not covered by this scenario";
                 })
                 skippedUpstreamLayers;
+              inputTreatment =
+                if repoSkipped then
+                  "pass-through"
+                else
+                  "consume-or-normalize";
+            };
+
+          layerEntryEnvelope =
+            { input
+            , entryBoundary ? "intent-source"
+            ,
+            }:
+            let
+              payload = readValue input;
+              warningPayload = layerEntryWarnings { inherit entryBoundary; };
+            in
+            warningPayload // {
+              normalizedTo = "nix-attrset";
+              input = payload;
+              output = payload;
             };
 
           compileValue = value: compile value;

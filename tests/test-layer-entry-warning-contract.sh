@@ -17,6 +17,9 @@ nix run --no-warn-dirty --no-write-lock-file "path:${ROOT}#layer-entry-warnings"
 
 jq -e '
   .entryBoundary == "forwarding-model-input"
+  and .repo == "network-compiler"
+  and .repoSkipped == true
+  and .inputTreatment == "pass-through"
   and .skippedUpstreamLayers == [ "intent-source", "network-compiler" ]
   and ([.warnings[].code] == [
     "WARN_LAYER_ENTRY_SKIPS_NETWORK_LABS_INTENT_SOURCE",
@@ -28,11 +31,42 @@ jq -e '
 grep -Fq "WARNING: WARN_LAYER_ENTRY_SKIPS_NETWORK_COMPILER" "${tmp_dir}/nfm-entry.err" \
   || fail "NFM-entry stderr did not surface the compiler skip warning"
 
+nix eval --impure --json --expr "
+  let
+    flake = builtins.getFlake \"path:${ROOT}\";
+  in
+    flake.libBySystem.\${builtins.currentSystem}.layerEntryEnvelope {
+      entryBoundary = \"forwarding-model-input\";
+      input = {
+        pocKind = \"synthetic-forwarding-model-input\";
+        sites = { lab = { }; };
+      };
+    }
+" >"${tmp_dir}/nfm-entry-envelope.json"
+
+jq -e '
+  .entryBoundary == "forwarding-model-input"
+  and .repo == "network-compiler"
+  and .repoSkipped == true
+  and .inputTreatment == "pass-through"
+  and .normalizedTo == "nix-attrset"
+  and .input == .output
+  and .input.pocKind == "synthetic-forwarding-model-input"
+  and ([.warnings[].code] == [
+    "WARN_LAYER_ENTRY_SKIPS_NETWORK_LABS_INTENT_SOURCE",
+    "WARN_LAYER_ENTRY_SKIPS_NETWORK_COMPILER"
+  ])
+' "${tmp_dir}/nfm-entry-envelope.json" >/dev/null \
+  || fail "NFM-entry envelope did not pass through compiler input with warnings"
+
 nix run --no-warn-dirty --no-write-lock-file "path:${ROOT}#layer-entry-warnings" -- \
   intent-source >"${tmp_dir}/intent-source.json" 2>"${tmp_dir}/intent-source.err"
 
 jq -e '
   .entryBoundary == "intent-source"
+  and .repo == "network-compiler"
+  and .repoSkipped == false
+  and .inputTreatment == "consume-or-normalize"
   and .skippedUpstreamLayers == []
   and .warnings == []
 ' "${tmp_dir}/intent-source.json" >/dev/null \

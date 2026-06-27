@@ -151,7 +151,6 @@ let
   compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
   isolationModel = buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices communicationContractDeclared;
   accessSpaceDiscovery = buildAccessSpaceDiscovery siteKey serviceIndex communicationContractDeclared (declared.profileManifest or null);
-
   model0 = {
     tenants = tenants;
     services = compiledServices;
@@ -164,6 +163,7 @@ let
     overlayAddressPools = overlayAddressPools;
     trafficPaths = trafficPaths;
     hostNatIngress = topo.hostNatIngress or { };
+    prefixAuthority = declared.prefixAuthority or { };
   };
 
   model = sourceAudit.attach siteKey model0;

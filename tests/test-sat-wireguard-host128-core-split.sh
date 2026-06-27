@@ -24,7 +24,7 @@ all_passed=true
 archive_json="${tmp_dir}/archive.json"
 nix flake archive --json "path:${ROOT}" > "${archive_json}"
 labs_root="$(jq -er '.inputs["network-labs"].path' "${archive_json}")"
-sat_intent="${labs_root}/sat/intent.nix"
+sat_intent="${labs_root}/GAMP/SAT/intent.nix"
 
 if [[ ! -f "${sat_intent}" ]]; then
   echo "FAIL: sat/intent.nix not found at ${sat_intent}" >&2

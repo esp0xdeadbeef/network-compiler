@@ -22,7 +22,7 @@ if [[ -z "$labs_root" ]]; then
   labs_root="$("${jq_cmd[@]}" -er '.inputs["network-labs"].path' "$archive_json")"
 fi
 
-intent="${labs_root}/HAT/emulated-isp-residential-testnet/intent.nix"
+intent="${labs_root}/GAMP/HAT/emulated-isp-residential-testnet/intent.nix"
 if [[ ! -f "$intent" ]]; then
   echo "missing HAT intent fixture: $intent" >&2
   exit 1

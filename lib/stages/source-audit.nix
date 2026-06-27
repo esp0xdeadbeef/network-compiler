@@ -64,6 +64,7 @@ let
       overlayAddressPools = model.overlayAddressPools or { };
       hostNatIngress = model.hostNatIngress or { };
       ipv6 = model.ipv6 or { };
+      prefixAuthority = model.prefixAuthority or { };
     in
     (indexedRefs [ "tenants" ] [ "segments" "tenants" ] tenants)
     ++ (indexedRefs [ "services" ] [ "communicationContract" "services" ] services)
@@ -111,6 +112,7 @@ let
     ++ (overlayPoolRefs overlayAddressPools)
     ++ (lib.optional (hostNatIngress != { })
       (mkBehaviorRef [ "hostNatIngress" ] [ "topology" "hostNatIngress" ]))
+    ++ (lib.optional (prefixAuthority != { }) (mkBehaviorRef [ "prefixAuthority" ] [ "prefixAuthority" ]))
     ++ (lib.optional (ipv6 != { }) (mkBehaviorRef [ "ipv6" ] [ "ipv6" ]));
 
   auditRecords =

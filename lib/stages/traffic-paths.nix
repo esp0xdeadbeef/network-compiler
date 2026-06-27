@@ -5,8 +5,11 @@ let
   selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks serviceIndex hosts;
   overlayUnderlay = import ./traffic-paths/overlay-underlay.nix { inherit lib; };
   buildCorePairs = import ./traffic-paths/core-pairs.nix { inherit lib; };
+  wildcardDestinations = import ./traffic-paths/wildcard-destinations.nix { inherit lib; } {
+    inherit siteKey nodes throwError;
+  };
   inherit (util) throwError;
-  inherit (selectors) accessNodes firstRole coresForExternal accessForEndpoint;
+  inherit (selectors) firstRole coresForExternal accessForEndpoint;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
 
   # Returns overlay metadata for a relation that involves an overlay, or null.
@@ -121,7 +124,7 @@ let
         if toStage != "access" then
           [ null ]
         else if relation.to == "any" then
-          accessNodes
+          wildcardDestinations.accessNodesFor relation
         else
           [ (accessForEndpoint relation.to) ];
       pathVariants = lib.concatMap

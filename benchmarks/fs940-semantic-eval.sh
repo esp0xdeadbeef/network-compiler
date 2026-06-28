@@ -24,15 +24,15 @@ nix flake archive --json "path:${repo_root}" >"${archive_json}"
 labs_root="$(jq -er '.inputs["network-labs"].path' "${archive_json}")"
 
 examples=(
-  s-router-overlay-dns-lane-policy
-  tri-site-dual-wan-overlay-integration-static
-  tri-site-s-router-overlay-egress
+  "hat-emulated-isp-residential-testnet:${labs_root}/GAMP/HAT/emulated-isp-residential-testnet/intent.nix"
+  "sat-controlled-baseline:${labs_root}/GAMP/SAT/intent.nix"
 )
 
 failed=0
 
-for example in "${examples[@]}"; do
-  intent="${labs_root}/examples/${example}/intent.nix"
+for example_spec in "${examples[@]}"; do
+  example="${example_spec%%:*}"
+  intent="${example_spec#*:}"
   if [[ ! -f "${intent}" ]]; then
     echo "FAIL fs940-semantic-eval ${example}: missing ${intent}" >&2
     failed=1

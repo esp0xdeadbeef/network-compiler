@@ -3,11 +3,11 @@
     "network-labs": {
       "flake": false,
       "locked": {
-        "lastModified": 1782841049,
-        "narHash": "sha256-J1Y0kIezI5BKnA40mCaTkkSKCUz7kXzZ0iAaN783wug=",
+        "lastModified": 1782849217,
+        "narHash": "sha256-6B20S1kVhw/JtT7ctoBIgpss+ofdhYfGjg05w+rJT7g=",
         "owner": "esp0xdeadbeef",
         "repo": "network-labs",
-        "rev": "7f25765dadbbcbdb1183b80429ac5fe17ae56a1b",
+        "rev": "3d3724cbdc00e349edefa29bba8d734d0489bbd8",
         "type": "github"
       },
       "original": {

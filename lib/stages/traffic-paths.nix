@@ -11,7 +11,6 @@ let
   inherit (util) throwError;
   inherit (selectors) firstRole coresForExternal accessForEndpoint;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
-
   # Returns overlay metadata for a relation that involves an overlay, or null.
   overlaysByName = builtins.listToAttrs (
     map (overlay: { name = overlay.name; value = overlay; }) overlays
@@ -48,9 +47,7 @@ let
     "upstream-selector"
     "core"
   ];
-
   coreToAccessStages = lib.reverseList accessToCoreStages;
-
   endpointStage =
     endpoint:
     if !builtins.isAttrs endpoint then

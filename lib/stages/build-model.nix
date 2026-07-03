@@ -5,7 +5,6 @@ let
   policyC = import ../correctness/policy.nix { inherit lib; };
   topoC = import ../correctness/topology.nix { inherit lib; };
   addressSafety = import ../address-safety { inherit lib; };
-
   normalizeUplinksForNode = import ./normalize-uplinks.nix { inherit lib; };
   normalizeTransportOverlays = import ./normalize-overlays.nix { inherit lib; };
   buildOverlayAttachments = import ./overlay-attachments.nix { inherit lib; };
@@ -13,12 +12,12 @@ let
   buildTrafficPaths = import ./traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ./validate-no-legacy-external.nix { inherit lib; };
   validateIntentSourceBoundary = import ./validate-intent-source-boundary.nix { inherit lib; };
+  platformIndependence = import ./validate-platform-independence.nix { inherit lib; };
   validateServiceProviders = import ./validate-service-providers.nix { inherit lib; };
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
   buildIsolationDecisions = import ./isolation-decisions.nix { inherit lib; };
   buildAccessSpaceDiscovery = import ./access-space-discovery { inherit lib; };
   sourceAudit = import ./source-audit.nix { inherit lib; };
-
   inherit (util) assertUnique ensure;
   inherit (policyC)
     buildTrafficTypeIndex
@@ -35,7 +34,6 @@ siteKey: declared: semantic:
 let
   topo = declared.topology or { };
   communicationContract0 = declared.communicationContract or null;
-
   _hasCommunicationContract =
     ensure (communicationContract0 != null && builtins.isAttrs communicationContract0)
       {
@@ -49,15 +47,13 @@ let
       };
 
   communicationContractDeclared = if _hasCommunicationContract then communicationContract0 else { };
-
   _noLegacyExternalPolicy = validateNoLegacyExternalPolicy siteKey declared;
   _intentSourceBoundary = validateIntentSourceBoundary siteKey declared;
+  _platformIndependentIntent = platformIndependence.validateIntent siteKey declared;
   _addrSafe = validateSite siteKey declared;
   nodes = topo.nodes or { };
   nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
-
   coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
-
   overlays = normalizeTransportOverlays siteKey topo declared;
   _topoValid = validateTopology siteKey topo overlays;
   overlayNames = lib.sort builtins.lessThan (lib.unique (map (o: o.name) overlays));
@@ -108,7 +104,6 @@ let
       })
       coreNodes
   );
-
   uplinkNames = lib.sort builtins.lessThan (
     lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
   );
@@ -117,10 +112,8 @@ let
   tenants = lib.sort (a: b: a.name < b.name) tenants0;
   tenantNames = map (t: t.name) tenants;
   _uniqTenants = assertUnique "tenant name" tenantNames;
-
   trafficTypeIndex = buildTrafficTypeIndex communicationContractDeclared;
   serviceIndex = buildServiceIndex communicationContractDeclared;
-
   trafficTypeNames = builtins.attrNames trafficTypeIndex;
   serviceNames = builtins.attrNames serviceIndex;
 
@@ -167,12 +160,15 @@ let
   };
 
   model = sourceAudit.attach siteKey model0;
+  _platformIndependentOutput = platformIndependence.validateOutput siteKey model;
   _forced = builtins.deepSeq
     {
       inherit
         _hasCommunicationContract
         _noLegacyExternalPolicy
         _intentSourceBoundary
+        _platformIndependentIntent
+        _platformIndependentOutput
         _addrSafe
         _topoValid
         _uniqTrafficTypes

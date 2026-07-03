@@ -41,6 +41,7 @@ bash "$ROOT/tests/test-intent-source-boundary.sh"
 bash "$ROOT/tests/test-canonical-stage-link-matrix.sh"
 bash "$ROOT/tests/test-FS-181-HDS-010-SDS-010-SMS-010.sh"
 bash "$ROOT/tests/test-FS-181-HDS-010-SDS-040-SMS-010.sh"
+bash "$ROOT/tests/test-FS-030-HDS-010-SDS-040-SMS-010.sh"
 bash "$ROOT/tests/test-fs030-hds010-sds050-sms010-core-role-boundary.sh"
 
 signed_json_out="$(mktemp)"

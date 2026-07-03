@@ -15,11 +15,8 @@ set -euo pipefail
 #     (no shared attachment) → hard-fails with E_TOPO_NON_CANONICAL_STAGE_LINK
 #   - Missing required stage → hard-fails with E_TOPO_MISSING_*
 #   - Policy bypass upstream→core→upstream → hard-fails with E_TOPO_POLICY_BYPASS
-#
-# KNOWN_GAPS (pairwise-adjacent multi-hop policy bypasses, not yet enforced):
-#   - core→upstream→core: two cores reach each other through upstream, no policy
-#   - access→ds→access: two access nodes through downstream, no policy
-#   Fixing requires network-labs fixture restructuring; see lane file.
+#   - Shared-selector fanout for multiple cores/access nodes remains valid topology
+#     and does not create extra traffic-path authority by itself.
 #
 # Two active seeded negatives required by SMS-010:
 #   Negative 1 — Direct core-to-core bypass
@@ -348,17 +345,13 @@ else
 fi
 
 # ============================================================
-# KNOWN_GAP: Core-to-core bypass through upstream-selector
-# Topology: core-wan → upstream → core-east-west (no policy traversal)
-# Each individual link is adjacent (core↔upstream), so the pairwise
-# stage-link check passes. The graph stays connected because upstream
-# also connects to policy→downstream→access. But this allows two
-# cores to reach each other without traversing policy — a multi-hop
-# policy bypass that the current adjacency-only check does not catch.
-# Fixing requires network-labs fixture restructuring; see lane file.
+# Positive: Multi-core shared upstream-selector fanout
+# Multiple cores attached to one upstream-selector are valid fabric fanout.
+# This is not a core-to-core communication grant; payload authority still
+# comes only from modeled traffic relations and downstream policy paths.
 # ============================================================
 echo ""
-echo "--- KNOWN_GAP: Core-to-core bypass through upstream-selector ---"
+echo "--- Positive: Multi-core shared upstream-selector fanout ---"
 
 cat > "${tmp_dir}/core-upstream-core-connected.nix" <<'COREUPCORE'
 {
@@ -416,19 +409,28 @@ COREUPCORE
 
 set +e
 nix run "$ROOT#compile" -- "${tmp_dir}/core-upstream-core-connected.nix" \
-  >/dev/null 2>"${tmp_dir}/core-upstream-core-stderr.txt"
+  >"${tmp_dir}/core-upstream-core.json" 2>"${tmp_dir}/core-upstream-core-stderr.txt"
 gap1_rc=$?
 set -e
 
 if [[ $gap1_rc -eq 0 ]]; then
-  echo "KNOWN_GAP: core → upstream → core (policy bypass) incorrectly compiles"
-  echo "  Each link is pairwise adjacent (core↔upstream distance=1), so"
-  echo "  validateCanonicalStageLinks passes. The graph is connected via"
-  echo "  upstream→policy→downstream→access. Two cores reach each other"
-  echo "  without traversing policy — should be rejected per URS/SMS."
+  if jq -e '
+    [.. | objects | select(has("trafficPaths")) | .trafficPaths][0]
+    | length == 1
+    and .[0].relationId == "allow-mgmt-to-wan"
+    and .[0].requiresPolicy == true
+    and (.[0].stagePath == ["access","downstream-selector","policy","upstream-selector","core"])
+  ' "${tmp_dir}/core-upstream-core.json" >/dev/null; then
+    echo "PASS: Multi-core shared upstream-selector fanout compiles without adding unmodeled core-to-core traffic authority"
+  else
+    echo "FAIL: Multi-core fanout compiled but emitted unexpected traffic-path authority"
+    jq '[.. | objects | select(has("trafficPaths")) | .trafficPaths][0]' "${tmp_dir}/core-upstream-core.json" || true
+    all_passed=false
+  fi
 else
-  echo "NOTE: core → upstream → core now correctly rejected (gap may be fixed)"
+  echo "FAIL: Multi-core shared upstream-selector fanout should compile"
   grep -o '"code":"[^"]*"' "${tmp_dir}/core-upstream-core-stderr.txt" || true
+  all_passed=false
 fi
 
 # ============================================================
@@ -591,14 +593,12 @@ else
 fi
 
 # ============================================================
-# KNOWN_GAP: Access-to-access bypass through downstream-selector
-# Two access nodes share a downstream-selector. Traffic between
-# access-a and access-b can reach each other via access→ds→access
-# without traversing policy. Each link adjacent (distance=1), so
-# validateCanonicalStageLinks passes.
+# Positive: Multi-access shared downstream-selector fanout
+# Multiple access nodes attached to one downstream-selector are valid fabric
+# fanout. This topology does not itself grant tenant-to-tenant reachability.
 # ============================================================
 echo ""
-echo "--- KNOWN_GAP: Access-to-access bypass through downstream-selector ---"
+echo "--- Positive: Multi-access shared downstream-selector fanout ---"
 
 cat > "${tmp_dir}/access-ds-access.nix" <<'ACCACC'
 {
@@ -634,18 +634,30 @@ cat > "${tmp_dir}/access-ds-access.nix" <<'ACCACC'
 ACCACC
 
 set +e
-nix run "$ROOT#compile" -- "${tmp_dir}/access-ds-access.nix" >/dev/null 2>"${tmp_dir}/access-ds-access-stderr.txt"
+nix run "$ROOT#compile" -- "${tmp_dir}/access-ds-access.nix" >"${tmp_dir}/access-ds-access.json" 2>"${tmp_dir}/access-ds-access-stderr.txt"
 gap2_rc=$?
 set -e
 
 if [[ $gap2_rc -eq 0 ]]; then
-  echo "KNOWN_GAP: access→ds→access (policy bypass) incorrectly compiles"
-  echo "  Two access nodes share a downstream-selector. Tenant traffic"
-  echo "  between access-a and access-b can reach each other through"
-  echo "  downstream-selector without ever traversing policy."
+  if jq -e '
+    [.. | objects | select(has("trafficPaths")) | .trafficPaths][0]
+    | length == 1
+    and .[0].relationId == "r1"
+    and .[0].requiresPolicy == true
+    and .[0].source.name == "t1"
+    and .[0].destination.kind == "external"
+    and ([.[] | select((.destination.kind // "") == "tenant" and (.destination.name // "") == "t2")] | length) == 0
+  ' "${tmp_dir}/access-ds-access.json" >/dev/null; then
+    echo "PASS: Multi-access shared downstream-selector fanout compiles without adding unmodeled tenant-to-tenant traffic authority"
+  else
+    echo "FAIL: Multi-access fanout compiled but emitted unexpected tenant-to-tenant authority"
+    jq '[.. | objects | select(has("trafficPaths")) | .trafficPaths][0]' "${tmp_dir}/access-ds-access.json" || true
+    all_passed=false
+  fi
 else
-  echo "NOTE: access→ds→access now correctly rejected (gap may be fixed)"
+  echo "FAIL: Multi-access shared downstream-selector fanout should compile"
   grep -o '"code":"[^"]*"' "${tmp_dir}/access-ds-access-stderr.txt" || true
+  all_passed=false
 fi
 
 # ============================================================
@@ -733,7 +745,8 @@ if [[ "${all_passed}" == "true" ]]; then
   echo "  Missing downstream-selector: hard-fails E_TOPO_MISSING_DOWNSTREAM_SELECTOR"
   echo "  Missing upstream-selector: hard-fails E_TOPO_MISSING_UPSTREAM_SELECTOR"
   echo "  Policy bypass upstream→core→upstream: hard-fails E_TOPO_POLICY_BYPASS"
-  echo "  KNOWN_GAPs: core→upstream→core, access→ds→access (require network-labs fixture restructure)"
+  echo "  Multi-core shared upstream-selector fanout: compiles without unmodeled core-to-core traffic authority"
+  echo "  Multi-access shared downstream-selector fanout: compiles without unmodeled tenant-to-tenant traffic authority"
   exit 0
 else
   echo "FAIL: One or more stage topology enforcement checks failed."

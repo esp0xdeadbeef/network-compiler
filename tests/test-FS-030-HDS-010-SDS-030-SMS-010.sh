@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # SMS-010: Overlay underlay/control and payload must have separate
 # p2pIsolationKeys, transportKind classification, overlayIdentity,
-# and peerSiteIdentity emission.
+# peerSiteIdentity emission, and explicit underlayAccess validation.
 #
 # Uses dual-wan-branch-overlay example which has Nebula overlay with
 # separate underlay and payload traffic paths.
@@ -17,6 +17,34 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 output_json="${tmp_dir}/compiled.json"
 all_passed=true
+
+expect_compile_failure() {
+  local label="$1"
+  local input_file="$2"
+  local expected_code="$3"
+  local stdout_file="${tmp_dir}/${label}.stdout"
+  local stderr_file="${tmp_dir}/${label}.stderr"
+  local rc
+
+  set +e
+  nix run "$ROOT#compile" -- "$input_file" >"$stdout_file" 2>"$stderr_file"
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL ${label}: expected ${expected_code}, but compilation succeeded"
+    all_passed=false
+    return
+  fi
+
+  if grep -q "$expected_code" "$stderr_file"; then
+    echo "PASS ${label}: compiler failed closed with ${expected_code}"
+  else
+    echo "FAIL ${label}: compiler failed, but did not emit ${expected_code}"
+    cat "$stderr_file"
+    all_passed=false
+  fi
+}
 
 echo "--- FS-030-HDS-010-SDS-030-SMS-010: Overlay-underlay separation ---"
 echo ""
@@ -223,6 +251,118 @@ else
 fi
 
 # ============================================================
+# N2: Seeded negative — missing explicit underlayAccess
+# ============================================================
+echo ""
+echo "--- N2: Seeded negative — missing explicit underlayAccess ---"
+
+expect_compile_failure \
+  "N2 missing underlayAccess" \
+  "${ROOT}/tests/negative/overlay-access-attachment-missing.nix" \
+  "E_OVERLAY_UNDERLAY_ACCESS_REQUIRED"
+
+# ============================================================
+# N3: Seeded negative — underlayAccess tenant lacks WAN egress
+# ============================================================
+echo ""
+echo "--- N3: Seeded negative — underlayAccess tenant lacks WAN egress ---"
+
+bad_underlay_egress="${tmp_dir}/overlay-underlay-no-wan-egress.nix"
+cat > "$bad_underlay_egress" <<'EOF'
+{
+  acme = {
+    ams = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+
+      ownership.prefixes = [
+        { kind = "tenant"; name = "hostile"; ipv4 = "10.20.70.0/24"; }
+        { kind = "tenant"; name = "client"; ipv4 = "10.20.20.0/24"; }
+      ];
+
+      communicationContract = {
+        trafficTypes = [
+          { name = "nebula"; match = [ { proto = "udp"; dports = [ 4242 ]; family = "any"; } ]; }
+        ];
+        services = [ ];
+        relations = [
+          {
+            id = "allow-hostile-to-overlay";
+            priority = 100;
+            from = { kind = "tenant"; name = "hostile"; };
+            to = { kind = "external"; name = "east-west"; };
+            trafficType = "any";
+            action = "allow";
+          }
+          {
+            id = "allow-client-to-wan";
+            priority = 101;
+            from = { kind = "tenant"; name = "client"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "any";
+            action = "allow";
+          }
+          {
+            id = "allow-east-west-underlay-to-wan";
+            priority = 110;
+            from = { kind = "external"; name = "east-west"; };
+            to = { kind = "external"; name = "wan"; };
+            trafficType = "nebula";
+            action = "allow";
+          }
+        ];
+      };
+
+      transport.overlays = [
+        {
+          name = "east-west";
+          terminateOn = "core-overlay";
+          underlayAccess = { kind = "tenant"; name = "hostile"; };
+          underlayTrafficTypes = [ "nebula" ];
+          mustTraverse = [ "policy" ];
+        }
+      ];
+
+      topology.nodes = {
+        core-wan = { role = "core"; uplinks.wan.ipv4 = [ "0.0.0.0/0" ]; };
+        core-overlay = {
+          role = "core";
+          attachments = [ { kind = "tenant"; name = "hostile"; } ];
+          uplinks.east-west.ipv4 = [ "100.96.20.0/24" ];
+        };
+        upstream = { role = "upstream-selector"; };
+        policy = { role = "policy"; };
+        downstream = { role = "downstream-selector"; };
+        access-hostile = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "hostile"; } ];
+        };
+        access-client = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "client"; } ];
+        };
+      };
+
+      topology.links = [
+        [ "core-wan" "upstream" ]
+        [ "upstream" "policy" ]
+        [ "policy" "downstream" ]
+        [ "downstream" "access-hostile" ]
+        [ "downstream" "access-client" ]
+      ];
+    };
+  };
+}
+EOF
+
+expect_compile_failure \
+  "N3 underlayAccess without WAN egress" \
+  "$bad_underlay_egress" \
+  "E_OVERLAY_UNDERLAY_ACCESS_WAN_EGRESS_REQUIRED"
+
+# ============================================================
 # Report
 # ============================================================
 echo ""
@@ -232,6 +372,8 @@ if [[ "${all_passed}" == "true" ]]; then
   echo "  P2: Distinct p2pIsolationKeys for underlay vs payload (no collapse)"
   echo "  P3: forbidsCoreToCoreP2P=true on all overlay paths"
   echo "  N1: Seeded negative detects shared p2pIsolationKey"
+  echo "  N2: Missing explicit underlayAccess fails closed"
+  echo "  N3: Underlay access without WAN egress fails closed"
   exit 0
 else
   echo "FAIL: One or more overlay-underlay separation checks failed."

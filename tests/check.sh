@@ -42,7 +42,7 @@ bash "$ROOT/tests/test-canonical-stage-link-matrix.sh"
 bash "$ROOT/tests/test-FS-181-HDS-010-SDS-010-SMS-010.sh"
 bash "$ROOT/tests/test-FS-181-HDS-010-SDS-040-SMS-010.sh"
 bash "$ROOT/tests/test-FS-030-HDS-010-SDS-040-SMS-010.sh"
-bash "$ROOT/tests/test-fs030-hds010-sds050-sms010-core-role-boundary.sh"
+bash "$ROOT/tests/test-FS-030-HDS-010-SDS-050-SMS-010.sh"
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT

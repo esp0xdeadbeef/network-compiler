@@ -57,6 +57,8 @@ let
       "access"
     else if (endpoint.kind or null) == "external" then
       "core"
+    else if (endpoint.kind or null) == "public-ipv4" then
+      "core"
     else
       "access";
 

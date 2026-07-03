@@ -31,6 +31,7 @@ let
             "Use \"any\"."
             "Or use { kind = \"external\"; name = \"wan\"; }."
             "Or use { kind = \"external\"; uplinks = [ \"isp-a\" \"isp-b\" ]; }."
+            "Or use { kind = \"public-ipv4\"; ipv4 = \"198.51.100.10\"; }."
             "Or use { kind = \"service\"; name = \"dns\"; }."
             "Or use { kind = \"tenant\"; name = \"mgmt\"; }."
           ];
@@ -45,12 +46,13 @@ let
               "tenant-set"
               "service"
               "external"
+              "public-ipv4"
             ])
             {
               code = "E_CONTRACT_TARGET_KIND";
               site = siteKey;
               path = basePath ++ [ "kind" ];
-              message = "relation.to.kind must be tenant, tenant-set, service, or external";
+              message = "relation.to.kind must be tenant, tenant-set, service, external, or public-ipv4";
               hints = [ "Set kind to a supported target kind." ];
             };
       in
@@ -89,6 +91,22 @@ let
                 inherit name;
               }
             )
+          else if kind == "public-ipv4" then
+            let
+              ipv4 = target.ipv4 or target.address or null;
+
+              _ipv4 = ensure (ipv4 != null && builtins.isString ipv4 && ipv4 != "") {
+                code = "E_CONTRACT_TARGET_PUBLIC_IPV4";
+                site = siteKey;
+                path = basePath ++ [ "ipv4" ];
+                message = "public-ipv4 target requires a non-empty ipv4 address";
+                hints = [ "Set ipv4 = \"<public-ipv4-address>\"." ];
+              };
+            in
+            builtins.seq _ipv4 {
+              kind = "public-ipv4";
+              inherit ipv4;
+            }
           else
             normalizeExternalSelector siteKey basePath overlayNames uplinkNames target
         )

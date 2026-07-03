@@ -10,6 +10,8 @@ siteKey: serviceIndex: semantic: relations:
 let
   serviceNames = builtins.attrNames serviceIndex;
   hostNames = lib.sort builtins.lessThan (map (host: host.name) (semantic.hosts or [ ]));
+  serviceProviderNames = lib.sort builtins.lessThan (map (provider: provider.name) (semantic.serviceProviderEndpoints or [ ]));
+  localProviderNames = lib.unique (hostNames ++ serviceProviderNames);
 
   relationTargetsService =
     serviceName:
@@ -43,7 +45,7 @@ builtins.all
     let
       service = serviceIndex.${serviceName};
       providers = if builtins.isList (service.providers or null) then service.providers else [ ];
-      missing = lib.filter (provider: !(builtins.elem provider hostNames)) providers;
+      missing = lib.filter (provider: !(builtins.elem provider localProviderNames)) providers;
     in
     ensure (missing == [ ] || serviceIsExternalIngressOnly serviceName) {
       code = "E_CONTRACT_UNKNOWN_SERVICE_PROVIDER";

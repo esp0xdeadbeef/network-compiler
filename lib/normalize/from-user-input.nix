@@ -64,6 +64,7 @@ let
     (lib.filter isTenantPrefix prefixes);
 
   isHostEndpoint = e: builtins.isAttrs e && (e.kind or null) == "host" && (e.name or null) != null;
+  isServiceProviderEndpoint = e: builtins.isAttrs e && (e.kind or null) == "service" && (e.name or null) != null;
 
   hosts = map
     (e: {
@@ -71,6 +72,13 @@ let
       tenant = e.tenant or null;
     })
     (lib.filter isHostEndpoint endpoints);
+
+  serviceProviderEndpoints = map
+    (e: {
+      name = e.name;
+      tenant = e.tenant or null;
+    })
+    (lib.filter isServiceProviderEndpoint endpoints);
 
   segments = {
     tenants = tenants;
@@ -109,6 +117,7 @@ in
     segments
     attachments
     hosts
+    serviceProviderEndpoints
     ipv6
     ;
 

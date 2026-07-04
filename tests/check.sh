@@ -281,6 +281,7 @@ jq -e '
 "$ROOT/tests/test-overlay-address-pools.sh"
 "$ROOT/tests/test-emitter-provenance-repo-boundary.sh"
 "$ROOT/tests/FS-100-HDS-010-SDS-010-SMS-020-deterministic-source-identity.sh"
+"$ROOT/tests/FS-100-HDS-010-SDS-010-SMS-030-signed-output-source-containment.sh"
 "$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

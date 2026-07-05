@@ -239,4 +239,26 @@ expect_failure \
   "protocol = \"mdns-ssdp\"; grantsPayloadReachability = true;" \
   "E_ACCESS_SPACE_DISCOVERY_PAYLOAD_INFERENCE"
 
+# SMS-020 SN1: missing service identity (service type absent)
+expect_failure \
+  "missing-service-identity" \
+  "serviceClass = \"media-receiver\";" \
+  "serviceClass = null;" \
+  "E_ACCESS_SPACE_DISCOVERY_SERVICE_CLASS"
+
+# SMS-020 SN2: export scope exceeds requester scope (guest is not a requester for cast-discovery)
+sn2_label="export-scope-exceeded"
+sn2_input="${tmp_dir}/${sn2_label}.nix"
+sn2_err="${tmp_dir}/${sn2_label}.err"
+perl -pe 'if (/scope = "guest";/) { $flag=1; } if ($flag && /discoveryExports = \[ \];/) { s/discoveryExports = \[ \];/discoveryExports = [ "cast-discovery" ]; /; $flag=0; }' "$good_input" > "$sn2_input"
+set +e
+nix run "$ROOT#compile" -- "$sn2_input" 2>"$sn2_err" >/dev/null
+rc=$?
+set -e
+if [ "$rc" -eq 0 ]; then
+  echo "FAIL fs290 access-space discovery: ${sn2_label} compiled" >&2
+  exit 1
+fi
+grep -q "E_ACCESS_SPACE_DISCOVERY_EXPORT_REQUESTER_SCOPE" "$sn2_err"
+
 echo "PASS FS-290-HDS-010-SDS-010-SMS-020"

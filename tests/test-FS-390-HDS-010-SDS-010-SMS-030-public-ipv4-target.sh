@@ -70,7 +70,7 @@ cat >"${input_nix}" <<'NIX'
         downstream-selector.role = "downstream-selector";
         policy.role = "policy";
         upstream-selector.role = "upstream-selector";
-        testnet-edge = {
+        vlan4-client-dhcp-slaac = {
           role = "core";
           uplinks.testnet.ipv4 = [ "0.0.0.0/0" ];
         };
@@ -80,7 +80,7 @@ cat >"${input_nix}" <<'NIX'
         [ "client-edge" "downstream-selector" ]
         [ "downstream-selector" "policy" ]
         [ "policy" "upstream-selector" ]
-        [ "upstream-selector" "testnet-edge" ]
+        [ "upstream-selector" "vlan4-client-dhcp-slaac" ]
       ];
     };
   };
@@ -112,7 +112,7 @@ jq -e --arg trace "FS-390-HDS-010-SDS-010-SMS-030" '
           "downstream-selector",
           "policy",
           "upstream-selector",
-          "testnet-edge"
+          "vlan4-client-dhcp-slaac"
         ])
     ] | length == 1)
 ' "${output_json}" >/dev/null

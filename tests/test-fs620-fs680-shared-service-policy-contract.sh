@@ -250,3 +250,341 @@ if [[ "$client_path_rc" -eq 0 ]]; then
   exit 1
 fi
 grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/client-path.err"
+
+# --- FS-640-HDS-010-SDS-010-SMS-040: media management boundary seeded negatives ---
+media_mgmt_good_input="${tmp_dir}/media-mgmt-good.nix"
+media_mgmt_inferred_input="${tmp_dir}/media-mgmt-inferred.nix"
+media_mgmt_denied_path_input="${tmp_dir}/media-mgmt-denied-path.nix"
+
+cat >"$media_mgmt_good_input" <<'NIX'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "living-room-cast"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "cast"; match = [ { proto = "tcp"; family = "any"; dports = [ 8000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "living-room-cast";
+            providers = [ "living-room-cast" ];
+            trafficType = "cast";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "living-room-cast"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_cast._tcp" ];
+              };
+              payload = {
+                protocol = "cast";
+                ports = [ 8000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = true;
+                boundary = "admin-scope-only";
+              };
+              managementAccessPolicy = {
+                sourceScope = { kind = "tenant"; name = "admin"; };
+                protocol = "https";
+                port = 443;
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "receiver-pairing";
+              cloudDependency = "optional";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-receiver";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "living-room-cast"; };
+            trafficType = "cast";
+            action = "allow";
+          }
+          {
+            id = "allow-media-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "cast";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+NIX
+
+# Positive: management.allowed=true WITH managementAccessPolicy compiles correctly
+nix run "$ROOT#compile" -- "$media_mgmt_good_input" >"${tmp_dir}/mgmt-good-out.json" 2>/dev/null
+jq -e '
+  .sites.esp0xdeadbeef."site-a".services[0].management == { allowed: true, boundary: "admin-scope-only" }
+  and .sites.esp0xdeadbeef."site-a".services[0].managementAccessPolicy.sourceScope.name == "admin"
+' "${tmp_dir}/mgmt-good-out.json" >/dev/null
+
+# Negative 1: management.allowed=true but no managementAccessPolicy (MANAGEMENT_INFERRED_FROM_PAYLOAD)
+cat >"$media_mgmt_inferred_input" <<'NIN'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "living-room-cast"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "cast"; match = [ { proto = "tcp"; family = "any"; dports = [ 8000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "living-room-cast";
+            providers = [ "living-room-cast" ];
+            trafficType = "cast";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "living-room-cast"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_cast._tcp" ];
+              };
+              payload = {
+                protocol = "cast";
+                ports = [ 8000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = true;
+                boundary = "inferred-no-backing-policy";
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "receiver-pairing";
+              cloudDependency = "optional";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-receiver";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "living-room-cast"; };
+            trafficType = "cast";
+            action = "allow";
+          }
+          {
+            id = "allow-media-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "cast";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+NIN
+
+set +e
+nix run "$ROOT#compile" -- "$media_mgmt_inferred_input" 2>"${tmp_dir}/mgmt-inferred.err" >/dev/null
+mgmt_inferred_rc=$?
+set -e
+if [[ "$mgmt_inferred_rc" -eq 0 ]]; then
+  echo "FAIL FS-640-HDS-010-SDS-010-SMS-040: management.allowed=true compiled without managementAccessPolicy" >&2
+  exit 1
+fi
+grep -q "MANAGEMENT_INFERRED_FROM_PAYLOAD" "${tmp_dir}/mgmt-inferred.err"
+
+# Negative 2: management.allowed=false but deniedPaths is empty (MISSING_DENIED_PATH_DATA)
+cat >"$media_mgmt_denied_path_input" <<'FIX'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "office-speaker"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "audio"; match = [ { proto = "tcp"; family = "any"; dports = [ 5000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "office-speaker";
+            providers = [ "office-speaker" ];
+            trafficType = "audio";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "office-speaker"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_audio._tcp" ];
+              };
+              payload = {
+                protocol = "audio";
+                ports = [ 5000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = false;
+                boundary = "speaker-management-denied";
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "speaker-pairing";
+              cloudDependency = "none";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-speaker";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "office-speaker"; };
+            trafficType = "audio";
+            action = "allow";
+          }
+          {
+            id = "allow-media-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "audio";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+FIX
+
+set +e
+nix run "$ROOT#compile" -- "$media_mgmt_denied_path_input" 2>"${tmp_dir}/mgmt-denied-path.err" >/dev/null
+mgmt_denied_path_rc=$?
+set -e
+if [[ "$mgmt_denied_path_rc" -eq 0 ]]; then
+  echo "FAIL FS-640-HDS-010-SDS-010-SMS-040: management denied compiled with empty deniedPaths" >&2
+  exit 1
+fi
+grep -q "MISSING_DENIED_PATH_DATA" "${tmp_dir}/mgmt-denied-path.err"

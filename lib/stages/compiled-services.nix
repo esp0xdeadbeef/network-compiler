@@ -88,22 +88,69 @@ let
         builtins.deepSeq
           (map (field: forbidTrue siteKey serviceName field policy) forbiddenInferenceFields)
           true;
+
+      requireManagementAccessPolicy =
+        siteKey: serviceName: policy:
+        ensure (!(has "management" policy && policy.management.allowed or false == true && !(has "managementAccessPolicy" policy))) {
+          code = "MANAGEMENT_INFERRED_FROM_PAYLOAD";
+          site = siteKey;
+          path = [
+            "communicationContract"
+            "services"
+            serviceName
+            "servicePolicy"
+            "management"
+          ];
+          message = "service '${serviceName}' management.allowed is true but no explicit managementAccessPolicy record; management reachability must be explicitly modeled, not inferred from discovery, payload, or reverse initiation";
+          hints = [
+            "Add a managementAccessPolicy field to the service policy to explicitly authorize management access."
+          ];
+        };
+
+      requireManagementDeniedPath =
+        siteKey: serviceName: policy:
+        ensure (!(has "management" policy && policy.management.allowed or true == false && (!(has "deniedPaths" policy) || builtins.length (policy.deniedPaths or [ ]) == 0))) {
+          code = "MISSING_DENIED_PATH_DATA";
+          site = siteKey;
+          path = [
+            "communicationContract"
+            "services"
+            serviceName
+            "servicePolicy"
+          ];
+          message = "service '${serviceName}' management reachability is denied but denied-path data for the media-to-management path is absent";
+          hints = [
+            "Add a deniedPath record for the media service capturing the media-to-management denial evidence."
+          ];
+        };
+
+      _managementBoundary =
+        builtins.deepSeq
+          [
+            (requireManagementAccessPolicy siteKey serviceName policy)
+            (requireManagementDeniedPath siteKey serviceName policy)
+          ]
+          true;
     in
     builtins.seq _required (
-      builtins.seq _noInference {
+      builtins.seq _noInference (
+        builtins.seq _managementBoundary {
         requesterScopes = policy.requesterScopes;
         responderScope = policy.responderScope;
         serviceClass = policy.serviceClass;
         discovery = policy.discovery;
         payload = policy.payload;
         management = policy.management;
+        managementAccessPolicy = policy.managementAccessPolicy or null;
         reverseInitiation = policy.reverseInitiation;
         deniedPaths = policy.deniedPaths;
         exposureClass = policy.exposureClass;
         authenticationBoundary = policy.authenticationBoundary;
         cloudDependency = policy.cloudDependency;
       }
-    );
+    )
+  );
+
 
 in
 siteKey: serviceIndex: serviceNames:

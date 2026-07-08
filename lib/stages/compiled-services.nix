@@ -50,6 +50,7 @@ let
         "inferAuthorityFromUnderlay"
         "inferClientPathAuthority"
         "inferClientPaths"
+        "inferDiscoveryFromPayload"
         "inferDiscoveryFromServiceExistence"
         "inferPayloadFromDiscovery"
         "inferManagementFromDiscovery"

@@ -251,6 +251,128 @@ if [[ "$client_path_rc" -eq 0 ]]; then
 fi
 grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/client-path.err"
 
+# --- FS-630-HDS-010-SDS-010-SMS-010: printer discovery service identity seeded negatives ---
+printer_no_requester_input="${tmp_dir}/printer-no-requester.nix"
+printer_infer_discovery_input="${tmp_dir}/printer-infer-discovery.nix"
+
+# SN1: Missing requester scope — expect E_SERVICE_POLICY_REQUIRED_FIELD
+cat >"$printer_no_requester_input" <<'NIX'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "trusted"; ipv4 = "10.20.10.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "printer01"; tenant = "trusted"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "ipp"; match = [ { proto = "tcp"; family = "any"; dports = [ 631 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "shared-printer";
+            providers = [ "printer01" ];
+            trafficType = "ipp";
+            servicePolicy = {
+              responderScope = { kind = "host"; name = "printer01"; tenant = "trusted"; };
+              serviceClass = "printer";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-requester";
+                advertisedServices = [ "_ipp._tcp" "_printer._tcp" ];
+              };
+              payload = {
+                protocol = "ipp";
+                ports = [ 631 ];
+                direction = "requester-to-responder";
+                returnBehavior = "established-only";
+              };
+              management = { allowed = false; boundary = "admin-scope-only"; };
+              reverseInitiation = { allowed = false; boundary = "no-printer-initiated-client-paths"; };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "shared-printer"; }; reason = "guest-print-denied"; negativeProbe = "guest-to-printer-ipp"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "printer-local-or-print-server";
+              cloudDependency = "none";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-trusted-to-shared-printer";
+            priority = 100;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "service"; name = "shared-printer"; };
+            trafficType = "ipp";
+            action = "allow";
+          }
+          {
+            id = "allow-trusted-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "ipp";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-trusted = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "trusted"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-trusted" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+NIX
+
+set +e
+nix run "$ROOT#compile" -- "$printer_no_requester_input" 2>"${tmp_dir}/printer-no-requester.err" >/dev/null
+printer_no_requester_rc=$?
+set -e
+if [[ "$printer_no_requester_rc" -eq 0 ]]; then
+  echo "FAIL FS-630-HDS-010-SDS-010-SMS-010 SN1: printer compiled with missing requesterScopes" >&2
+  exit 1
+fi
+grep -q "E_SERVICE_POLICY_REQUIRED_FIELD" "${tmp_dir}/printer-no-requester.err"
+
+# SN2: inferDiscoveryFromPayload flag — expect E_SERVICE_POLICY_INFERRED_AUTHORITY
+sed 's/cloudDependency = \"none\";/cloudDependency = \"none\"; inferDiscoveryFromPayload = true;/' \
+  "$good_input" >"$printer_infer_discovery_input"
+
+set +e
+nix run "$ROOT#compile" -- "$printer_infer_discovery_input" 2>"${tmp_dir}/printer-infer-discovery.err" >/dev/null
+printer_infer_discovery_rc=$?
+set -e
+if [[ "$printer_infer_discovery_rc" -eq 0 ]]; then
+  echo "FAIL FS-630-HDS-010-SDS-010-SMS-010 SN2: printer compiled with inferDiscoveryFromPayload" >&2
+  exit 1
+fi
+grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/printer-infer-discovery.err"
+
 # --- FS-640-HDS-010-SDS-010-SMS-040: media management boundary seeded negatives ---
 media_mgmt_good_input="${tmp_dir}/media-mgmt-good.nix"
 media_mgmt_inferred_input="${tmp_dir}/media-mgmt-inferred.nix"

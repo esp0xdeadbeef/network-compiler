@@ -3,7 +3,6 @@
 let
   util = import ../correctness/util.nix { inherit lib; };
   inherit (util) ensure;
-
   has = attr: attrs: builtins.isAttrs attrs && builtins.hasAttr attr attrs;
 
   requireAttr =
@@ -58,6 +57,7 @@ let
         "inferReverseInitiationFromDiscovery"
         "inferReverseInitiationFromPayload"
         "inferExposureFromHostPlacement"
+        "inferDeniedPathsFromPayload"
       ];
 
       _required =
@@ -142,11 +142,23 @@ let
             (requireManagementDeniedPath siteKey serviceName policy)
           ]
           true;
+
+      # FS-630-HDS-010-SDS-010-SMS-040: denied-path preservation boundary
+      requireNonEmptyDeniedPaths =
+        import ./denied-path-boundary.nix { inherit lib; };
+
+      _deniedPathBoundary =
+        builtins.deepSeq
+          [
+            (requireNonEmptyDeniedPaths siteKey serviceName policy)
+          ]
+          true;
     in
     builtins.seq _required (
       builtins.seq _noInference (
         builtins.seq _underlayAuthorityBoundary (
-        builtins.seq _managementBoundary {
+        builtins.seq _managementBoundary (
+        builtins.seq _deniedPathBoundary {
         requesterScopes = policy.requesterScopes;
         responderScope = policy.responderScope;
         serviceClass = policy.serviceClass;
@@ -162,9 +174,8 @@ let
       }
     )
     )
+    )
   );
-
-
 in
 siteKey: serviceIndex: serviceNames:
 map

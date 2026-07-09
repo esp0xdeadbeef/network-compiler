@@ -47,7 +47,6 @@ let
     let
       forbiddenInferenceFields = [
         "underlayAuthority"
-        "inferAuthorityFromUnderlay"
         "inferClientPathAuthority"
         "inferClientPaths"
         "inferDiscoveryFromPayload"
@@ -88,6 +87,17 @@ let
       _noInference =
         builtins.deepSeq
           (map (field: forbidTrue siteKey serviceName field policy) forbiddenInferenceFields)
+          true;
+
+      # FS-620-HDS-010-SDS-010-SMS-030: underlay authority rejection with specific diagnostics
+      requireNoUnderlayAuthority =
+        import ./underlay-authority.nix { inherit lib; };
+
+      _underlayAuthorityBoundary =
+        builtins.deepSeq
+          [
+            (requireNoUnderlayAuthority siteKey serviceName policy)
+          ]
           true;
 
       requireManagementAccessPolicy =
@@ -135,6 +145,7 @@ let
     in
     builtins.seq _required (
       builtins.seq _noInference (
+        builtins.seq _underlayAuthorityBoundary (
         builtins.seq _managementBoundary {
         requesterScopes = policy.requesterScopes;
         responderScope = policy.responderScope;
@@ -149,6 +160,7 @@ let
         authenticationBoundary = policy.authenticationBoundary;
         cloudDependency = policy.cloudDependency;
       }
+    )
     )
   );
 

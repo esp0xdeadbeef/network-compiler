@@ -481,6 +481,134 @@ if [[ "$printer_infer_discovery_rc" -eq 0 ]]; then
 fi
 grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/printer-infer-discovery.err"
 
+# --- FS-630-HDS-010-SDS-010-SMS-040: printer denied-path preservation seeded negatives ---
+printer_empty_denied_input="${tmp_dir}/printer-empty-denied.nix"
+printer_infer_denied_input="${tmp_dir}/printer-infer-denied.nix"
+
+# SN1: Printer service with empty deniedPaths → expect MISSING_DENIED_PATH_DATA
+cat >"$printer_empty_denied_input" <<'NIX'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "trusted"; ipv4 = "10.20.10.0/24"; }
+          { kind = "tenant"; name = "guest"; ipv4 = "10.20.20.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "printer02"; tenant = "trusted"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "ipp"; match = [ { proto = "tcp"; family = "any"; dports = [ 631 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "office-printer";
+            providers = [ "printer02" ];
+            trafficType = "ipp";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "trusted"; } ];
+              responderScope = { kind = "host"; name = "printer02"; tenant = "trusted"; };
+              serviceClass = "printer";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-requester";
+                advertisedServices = [ "_ipp._tcp" "_printer._tcp" ];
+              };
+              payload = {
+                protocol = "ipp";
+                ports = [ 631 ];
+                direction = "requester-to-responder";
+                returnBehavior = "established-only";
+              };
+              management = { allowed = false; boundary = "admin-scope-only"; };
+              reverseInitiation = { allowed = false; boundary = "no-printer-initiated-client-paths"; };
+              deniedPaths = [
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "printer-local-or-print-server";
+              cloudDependency = "none";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-trusted-to-office-printer";
+            priority = 100;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "service"; name = "office-printer"; };
+            trafficType = "ipp";
+            action = "allow";
+          }
+          {
+            id = "allow-trusted-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "ipp";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-trusted = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "trusted"; } ];
+        };
+        access-guest = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "guest"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-trusted" "downstream" ]
+        [ "access-guest" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+NIX
+
+set +e
+nix run "$ROOT#compile" -- "$printer_empty_denied_input" 2>"${tmp_dir}/printer-empty-denied.err" >/dev/null
+printer_empty_denied_rc=$?
+set -e
+if [[ "$printer_empty_denied_rc" -eq 0 ]]; then
+  echo "FAIL FS-630-HDS-010-SDS-010-SMS-040 SN1: printer compiled with empty deniedPaths" >&2
+  exit 1
+fi
+grep -q "MISSING_DENIED_PATH_DATA" "${tmp_dir}/printer-empty-denied.err"
+
+# SN2: inferDeniedPathsFromPayload flag → expect E_SERVICE_POLICY_INFERRED_AUTHORITY
+sed 's/cloudDependency = "none";/cloudDependency = "none"; inferDeniedPathsFromPayload = true;/' \
+  "$good_input" >"$printer_infer_denied_input"
+
+set +e
+nix run "$ROOT#compile" -- "$printer_infer_denied_input" 2>"${tmp_dir}/printer-infer-denied.err" >/dev/null
+printer_infer_denied_rc=$?
+set -e
+if [[ "$printer_infer_denied_rc" -eq 0 ]]; then
+  echo "FAIL FS-630-HDS-010-SDS-010-SMS-040 SN2: printer compiled with inferDeniedPathsFromPayload" >&2
+  exit 1
+fi
+grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/printer-infer-denied.err"
+
 # --- FS-640-HDS-010-SDS-010-SMS-040: media management boundary seeded negatives ---
 media_mgmt_good_input="${tmp_dir}/media-mgmt-good.nix"
 media_mgmt_inferred_input="${tmp_dir}/media-mgmt-inferred.nix"

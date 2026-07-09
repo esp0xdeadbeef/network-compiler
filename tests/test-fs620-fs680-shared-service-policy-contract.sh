@@ -236,7 +236,115 @@ if [[ "$underlay_rc" -eq 0 ]]; then
   echo "FAIL shared-service-policy: underlay authority inference compiled" >&2
   exit 1
 fi
-grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "${tmp_dir}/underlay.err"
+grep -q "UNDERLAY_USED_AS_TENANT_PAYLOAD_AUTHORITY" "${tmp_dir}/underlay.err"
+
+# --- FS-620-HDS-010-SDS-010-SMS-030 N2: overlay underlay → resolver authority rejection ---
+resolver_underlay_input="${tmp_dir}/resolver-underlay.nix"
+
+cat >"$resolver_underlay_input" <<'NIX'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "trusted"; ipv4 = "10.20.10.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "resolver01"; tenant = "trusted"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "dns"; match = [ { proto = "udp"; family = "any"; dports = [ 53 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "shared-resolver";
+            providers = [ "resolver01" ];
+            trafficType = "dns";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "trusted"; } ];
+              responderScope = { kind = "host"; name = "resolver01"; tenant = "trusted"; };
+              serviceClass = "dns";
+              inferAuthorityFromUnderlay = true;
+              discovery = {
+                protocol = "dns";
+                direction = "responder-to-requester";
+                advertisedServices = [ "_dns._udp" ];
+              };
+              payload = {
+                protocol = "dns";
+                ports = [ 53 ];
+                direction = "bidirectional";
+                returnBehavior = "established-only";
+              };
+              management = { allowed = false; boundary = "admin-scope-only"; };
+              reverseInitiation = { allowed = false; boundary = "no-resolver-initiated-paths"; };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "shared-resolver"; }; reason = "guest-resolver-denied"; negativeProbe = "guest-to-resolver-dns"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "resolver-local";
+              cloudDependency = "none";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-trusted-to-resolver";
+            priority = 100;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "service"; name = "shared-resolver"; };
+            trafficType = "dns";
+            action = "allow";
+          }
+          {
+            id = "allow-trusted-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "trusted"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "dns";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-trusted = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "trusted"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-trusted" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+NIX
+
+set +e
+nix run "$ROOT#compile" -- "$resolver_underlay_input" 2>"${tmp_dir}/resolver-underlay.err" >/dev/null
+resolver_underlay_rc=$?
+set -e
+if [[ "$resolver_underlay_rc" -eq 0 ]]; then
+  echo "FAIL shared-service-policy: resolver underlay inference compiled" >&2
+  exit 1
+fi
+grep -q "UNDERLAY_USED_AS_RESOLVER_OR_DISCOVERY_AUTHORITY" "${tmp_dir}/resolver-underlay.err"
 
 sed 's/cloudDependency = "none";/cloudDependency = "none"; inferClientPaths = true;/' \
   "$good_input" >"$bad_client_path_input"

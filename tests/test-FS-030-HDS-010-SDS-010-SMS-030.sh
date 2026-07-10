@@ -27,6 +27,7 @@ jq -e '
 run_eval_negative() {
   local name="$1"
   local expr="$2"
+  local detailCheck="$3"
   local out="${work_dir}/${name}.txt"
 
   set +e
@@ -44,6 +45,14 @@ run_eval_negative() {
     echo "FAIL compiler behavior source audit: ${name} missing diagnostic" >&2
     cat "$out" >&2
     exit 1
+  fi
+
+  if [[ -n "$detailCheck" ]]; then
+    if ! grep -q "$detailCheck" "$out"; then
+      echo "FAIL compiler behavior source audit: ${name} missing expected detail \"$detailCheck\"" >&2
+      cat "$out" >&2
+      exit 1
+    fi
   fi
 }
 
@@ -65,8 +74,13 @@ let
 in
 '
 
-run_eval_negative "missing-audit" "${base_expr} audit.validate \"audit-test\" model"
-run_eval_negative "non-intent-audit" "${base_expr} audit.validate \"audit-test\" (model // { sourceAudit.behavior = [ { outputPath = [ \"tenants\" 0 ]; sourceClass = \"inventory\"; sourcePath = [ \"inventory\" ]; authority = \"network-compiler\"; } ]; })"
-run_eval_negative "non-compiler-authority" "${base_expr} audit.validate \"audit-test\" (model // { sourceAudit.behavior = [ { outputPath = [ \"tenants\" 0 ]; sourceClass = \"user-intent\"; sourcePath = [ \"segments\" \"tenants\" \"mgmt\" ]; authority = \"network-control-plane-model\"; } ]; })"
+# SN1: missing behavior audit entirely
+run_eval_negative "missing-audit" "${base_expr} audit.validate \"audit-test\" model" "lacks a user-intent"
+# SN2: non-intent sourceClass = "inventory"
+run_eval_negative "non-intent-inventory" "${base_expr} audit.validate \"audit-test\" (model // { sourceAudit.behavior = [ { outputPath = [ \"tenants\" 0 ]; sourceClass = \"inventory\"; sourcePath = [ \"inventory\" ]; authority = \"network-compiler\"; } ]; })" 'inventory'
+# SN3: non-intent sourceClass = "realization" (seeded negative requirement)
+run_eval_negative "non-intent-realization" "${base_expr} audit.validate \"audit-test\" (model // { sourceAudit.behavior = [ { outputPath = [ \"tenants\" 0 ]; sourceClass = \"realization\"; sourcePath = [ \"inventory\" ]; authority = \"network-compiler\"; } ]; })" 'realization'
+# SN4: non-compiler authority
+run_eval_negative "non-compiler-authority" "${base_expr} audit.validate \"audit-test\" (model // { sourceAudit.behavior = [ { outputPath = [ \"tenants\" 0 ]; sourceClass = \"user-intent\"; sourcePath = [ \"segments\" \"tenants\" \"mgmt\" ]; authority = \"network-control-plane-model\"; } ]; })" 'network-control-plane-model'
 
 echo "PASS compiler-behavior-source-audit"

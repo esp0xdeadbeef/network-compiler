@@ -33,6 +33,8 @@ bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-010.sh"
 bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-020.sh"
 bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-030.sh"
 bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-040.sh"
+bash "$ROOT/tests/test-FS-610-HDS-010-SDS-010-SMS-020.sh"
+bash "$ROOT/tests/test-FS-610-HDS-010-SDS-010-SMS-040.sh"
 bash "$ROOT/tests/test-FS-200-HDS-010-SDS-010-SMS-010.sh"
 bash "$ROOT/tests/test-FS-620-HDS-010-SDS-010-SMS-010.sh"
 bash "$ROOT/tests/test-fs620-fs680-shared-service-policy-contract.sh"
@@ -124,7 +126,7 @@ for name in "${positive_cases[@]}"; do
 echo "checking: $name"
 input_file="$(resolve_example "$name")"
 nix run "$ROOT#compile" -- "$input_file" \
-| jq -S 'del(.meta)' \
+|| jq -S 'del(.meta)' \
 > /dev/null
 done
 

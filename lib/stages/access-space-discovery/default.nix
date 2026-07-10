@@ -73,6 +73,9 @@ let
   decisions = import ./decisions.nix { inherit lib; } ctx;
   sharedServicePolicyAtoms = import ./shared-service-policy-atoms.nix { inherit lib; } ctx;
 
+  # FS-610-HDS-010-SDS-010-SMS-040: broad flooding denial
+  requireBroadFloodingDenial = import ../../broad-flooding-denial.nix { inherit lib; };
+
   _accessSpaces =
     require (builtins.isAttrs accessSpaces && accessSpaces != { })
       "E_ACCESS_SPACE_DISCOVERY_ACCESS_SPACES_REQUIRED"
@@ -114,6 +117,9 @@ let
                     || responderScope == requesterScope
                     || (service.discovery.protocol or null) == "none"
                     || builtins.elem service.service (requester.discoveryExports or [ ])
+                    || lib.any
+                      (e: builtins.isAttrs e && (e.service or e.name or null) == service.service)
+                      (requester.discoveryExports or [ ])
                   )
                   "E_ACCESS_SPACE_DISCOVERY_CROSS_SCOPE_DENIED"
                   [
@@ -140,8 +146,14 @@ let
       _shared
       _exports
       _crossScopePolicy
+      _broadFloodingDenial
     ]
     true;
+
+  # Validate exported contracts for broad flooding and reverse discovery (SMS-040)
+  _broadFloodingDenial = builtins.deepSeq
+    (map (contract: requireBroadFloodingDenial siteKey contract) exported)
+    true; 
 
   confined = map decisions.confinementDecision indexedMatrix;
   exported = lib.concatMap (entry: map (exports.validateDiscoveryExport entry) (entry.discoveryExports or [ ])) indexedMatrix;

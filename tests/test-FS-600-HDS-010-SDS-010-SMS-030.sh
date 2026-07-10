@@ -349,8 +349,8 @@ expect_failure \
   "infer-payload-from-discovery" \
   "cloudDependency = \"optional\";" \
   "cloudDependency = \"optional\"; inferPayloadFromDiscovery = true;" \
-  "E_SERVICE_POLICY_INFERRED_AUTHORITY" \
-  "must not infer authority from 'inferPayloadFromDiscovery'"
+  "DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK" \
+  "unauthorized payload authorization"
 
 expect_failure \
   "grant-payload-from-discovery-export" \

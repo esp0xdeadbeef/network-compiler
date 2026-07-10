@@ -99,7 +99,30 @@ let
     )
     accessUnits;
 
-  transitLinks = topo.links or [ ];
+  # Detect provider handoff links: access<->core with shared tenant attachment.
+  # These are virtual adapter links (PPPoE, WireGuard, Nebula) that bypass
+  # the canonical fabric chain and must not appear in transit ordering.
+  tenantAttachmentNames = node:
+    lib.filter (t: t != null) (
+      map (attachment:
+        if (attachment.kind or null) == "tenant" then attachment.name or null else null
+      ) (node.attachments or [ ])
+    );
+
+  isProviderHandoffLink = pair:
+    let
+      a = builtins.elemAt pair 0;
+      b = builtins.elemAt pair 1;
+      nodeA = units.${a} or { };
+      nodeB = units.${b} or { };
+      roleA = nodeA.role or null;
+      roleB = nodeB.role or null;
+      shared = lib.intersectLists (tenantAttachmentNames nodeA) (tenantAttachmentNames nodeB);
+    in
+    (roleA == "access" && roleB == "core" || roleA == "core" && roleB == "access")
+    && builtins.length shared > 0;
+
+  transitLinks = lib.filter (pair: !isProviderHandoffLink pair) (topo.links or [ ]);
 
   pools = site.pools or { };
 

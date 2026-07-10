@@ -157,6 +157,7 @@ let
     trafficPaths = trafficPaths;
     hostNatIngress = topo.hostNatIngress or { };
     prefixAuthority = declared.prefixAuthority or { };
+    transit = semantic.transit or { };
   };
 
   model = sourceAudit.attach siteKey model0;

@@ -946,3 +946,325 @@ if [[ "$mgmt_denied_path_rc" -eq 0 ]]; then
   exit 1
 fi
 grep -q "MISSING_DENIED_PATH_DATA" "${tmp_dir}/mgmt-denied-path.err"
+
+# --- FS-640-HDS-010-SDS-010-SMS-050: media denied-path preservation seeded negatives ---
+media_dp_missing_input="${tmp_dir}/media-dp-missing.nix"
+media_dp_overwrite_input="${tmp_dir}/media-dp-overwrite.nix"
+media_dp_good_input="${tmp_dir}/media-dp-good.nix"
+
+# SN2: clearDeniedPaths flag set to true — expect MEDIA_DENIED_PATH_OVERWRITTEN
+cat >"$media_dp_overwrite_input" <<'MO1'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "living-room-cast"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "cast"; match = [ { proto = "tcp"; family = "any"; dports = [ 8000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "living-room-cast";
+            providers = [ "living-room-cast" ];
+            trafficType = "cast";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "living-room-cast"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_cast._tcp" ];
+              };
+              payload = {
+                protocol = "cast";
+                ports = [ 8000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = false;
+                boundary = "no-management";
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+              ];
+              clearDeniedPaths = true;
+              exposureClass = "internal-shared";
+              authenticationBoundary = "receiver-pairing";
+              cloudDependency = "optional";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-receiver";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "living-room-cast"; };
+            trafficType = "cast";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+MO1
+
+set +e
+nix run "$ROOT#compile" -- "$media_dp_overwrite_input" 2>"${tmp_dir}/media-dp-overwrite.err" >/dev/null
+media_dp_overwrite_rc=$?
+set -e
+if [[ "$media_dp_overwrite_rc" -eq 0 ]]; then
+  echo "FAIL FS-640-HDS-010-SDS-010-SMS-050 SN2: media-receiver compiled with clearDeniedPaths=true" >&2
+  exit 1
+fi
+grep -q "MEDIA_DENIED_PATH_OVERWRITTEN" "${tmp_dir}/media-dp-overwrite.err"
+
+# SN1: guest-to-trusted denied path omitted — expect MEDIA_DENIED_PATH_MISSING
+cat >"$media_dp_missing_input" <<'MO2'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+          { kind = "tenant"; name = "guest"; ipv4 = "10.20.40.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "living-room-cast"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "cast"; match = [ { proto = "tcp"; family = "any"; dports = [ 8000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "living-room-cast";
+            providers = [ "living-room-cast" ];
+            trafficType = "cast";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "living-room-cast"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_cast._tcp" ];
+              };
+              payload = {
+                protocol = "cast";
+                ports = [ 8000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = false;
+                boundary = "no-management";
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "media"; }; to = { kind = "tenant"; name = "unrelated"; }; reason = "media-to-unrelated-denied"; negativeProbe = "media-to-unrelated"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "receiver-pairing";
+              cloudDependency = "optional";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-receiver";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "living-room-cast"; };
+            trafficType = "cast";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+MO2
+
+set +e
+nix run "$ROOT#compile" -- "$media_dp_missing_input" 2>"${tmp_dir}/media-dp-missing.err" >/dev/null
+media_dp_missing_rc=$?
+set -e
+if [[ "$media_dp_missing_rc" -eq 0 ]]; then
+  echo "FAIL FS-640-HDS-010-SDS-010-SMS-050 SN1: media-receiver compiled without guest denied path" >&2
+  exit 1
+fi
+grep -q "MEDIA_DENIED_PATH_MISSING" "${tmp_dir}/media-dp-missing.err"
+
+# Positive: media-receiver with guest-to-trusted denied path present — compiles successfully
+cat >"$media_dp_good_input" <<'MO3'
+{
+  esp0xdeadbeef = {
+    "site-a" = {
+      pools = {
+        p2p.ipv4 = "10.10.0.0/24";
+        loopback.ipv4 = "10.19.0.0/24";
+      };
+      ownership = {
+        prefixes = [
+          { kind = "tenant"; name = "media"; ipv4 = "10.20.30.0/24"; }
+          { kind = "tenant"; name = "guest"; ipv4 = "10.20.40.0/24"; }
+        ];
+        endpoints = [
+          { kind = "host"; name = "living-room-cast"; tenant = "media"; }
+        ];
+      };
+      communicationContract = {
+        trafficTypes = [
+          { name = "cast"; match = [ { proto = "tcp"; family = "any"; dports = [ 8000 ]; } ]; }
+        ];
+        services = [
+          {
+            name = "living-room-cast";
+            providers = [ "living-room-cast" ];
+            trafficType = "cast";
+            servicePolicy = {
+              requesterScopes = [ { kind = "tenant"; name = "media"; } ];
+              responderScope = { kind = "host"; name = "living-room-cast"; tenant = "media"; };
+              serviceClass = "media-receiver";
+              discovery = {
+                protocol = "mdns";
+                direction = "responder-to-controller";
+                advertisedServices = [ "_cast._tcp" ];
+              };
+              payload = {
+                protocol = "cast";
+                ports = [ 8000 ];
+                direction = "controller-to-receiver";
+                returnBehavior = "established-only";
+              };
+              management = {
+                allowed = false;
+                boundary = "no-management";
+              };
+              reverseInitiation = {
+                allowed = false;
+                boundary = "no-reverse";
+              };
+              deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+              ];
+              exposureClass = "internal-shared";
+              authenticationBoundary = "receiver-pairing";
+              cloudDependency = "optional";
+            };
+          }
+        ];
+        relations = [
+          {
+            id = "allow-media-to-receiver";
+            priority = 100;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "service"; name = "living-room-cast"; };
+            trafficType = "cast";
+            action = "allow";
+          }
+          {
+            id = "allow-media-to-wan";
+            priority = 200;
+            from = { kind = "tenant"; name = "media"; };
+            to = { kind = "external"; uplinks = [ "wan" ]; };
+            trafficType = "cast";
+            action = "allow";
+          }
+        ];
+      };
+      topology.nodes = {
+        access-media = {
+          role = "access";
+          attachments = [ { kind = "tenant"; name = "media"; } ];
+        };
+        downstream.role = "downstream-selector";
+        policy.role = "policy";
+        upstream.role = "upstream-selector";
+        core = {
+          role = "core";
+          uplinks.wan.ipv4 = [ "0.0.0.0/0" ];
+        };
+      };
+      topology.links = [
+        [ "access-media" "downstream" ]
+        [ "downstream" "policy" ]
+        [ "policy" "upstream" ]
+        [ "upstream" "core" ]
+      ];
+    };
+  };
+}
+MO3
+
+nix run "$ROOT#compile" -- "$media_dp_good_input" >"${tmp_dir}/media-dp-good-out.json" 2>/dev/null
+jq -e '
+  .sites.esp0xdeadbeef."site-a".services[0].deniedPaths[0].reason == "guest-to-media-denied"
+' "${tmp_dir}/media-dp-good-out.json" >/dev/null
+
+echo "PASS FS-640-HDS-010-SDS-010-SMS-050: media denied-path preservation OK (SN1 MEDIA_DENIED_PATH_MISSING, SN2 MEDIA_DENIED_PATH_OVERWRITTEN, POSITIVE)"

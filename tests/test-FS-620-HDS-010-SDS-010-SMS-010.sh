@@ -104,6 +104,7 @@ cat >"$good_input" <<'NIX'
                 boundary = "no-receiver-initiated-controller-paths";
               };
               deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "media-receiver"; }; reason = "guest-receiver-denied"; negativeProbe = "guest-to-receiver"; }
                 { from = { kind = "tenant"; name = "media"; }; to = { kind = "tenant"; name = "trusted"; }; reason = "reverse-discovery-denied"; }
               ];
               exposureClass = "internal-shared";

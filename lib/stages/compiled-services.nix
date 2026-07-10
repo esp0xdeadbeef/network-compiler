@@ -170,7 +170,18 @@ let
             (requireMediaPayloadAuth siteKey serviceName policy)
           ]
           true;
+      # FS-630-HDS-010-SDS-010-SMS-020: printer payload authorization with specific diagnostics
+      requirePrinterPayloadAuth =
+        import ./printer-payload-authorization.nix { inherit lib; };
+
+      _printerPayloadAuthBoundary =
+        builtins.deepSeq
+          [
+            (requirePrinterPayloadAuth siteKey serviceName policy)
+          ]
+          true;
     in
+    builtins.seq _printerPayloadAuthBoundary (
     builtins.seq _mediaPayloadAuthBoundary (
     builtins.seq _required (
       builtins.seq _discoveryBoundaryDecision (
@@ -191,6 +202,7 @@ let
         authenticationBoundary = policy.authenticationBoundary;
         cloudDependency = policy.cloudDependency;
       }
+    )
     )
     )
     )

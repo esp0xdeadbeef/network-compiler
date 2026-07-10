@@ -76,6 +76,9 @@ let
   # FS-610-HDS-010-SDS-010-SMS-040: broad flooding denial
   requireBroadFloodingDenial = import ../../broad-flooding-denial.nix { inherit lib; };
 
+  # FS-590-HDS-010-SDS-010-SMS-030: discovery transport explicitness
+  requireDiscoveryTransportExplicitness = import ./discovery-transport-explicitness.nix { inherit lib; };
+
   _accessSpaces =
     require (builtins.isAttrs accessSpaces && accessSpaces != { })
       "E_ACCESS_SPACE_DISCOVERY_ACCESS_SPACES_REQUIRED"
@@ -143,6 +146,7 @@ let
       _uniqueScopes
       _uniqueSharedServices
       _matrix
+      _discoveryTransportExplicitness
       _shared
       _exports
       _crossScopePolicy
@@ -154,6 +158,11 @@ let
   _broadFloodingDenial = builtins.deepSeq
     (map (contract: requireBroadFloodingDenial siteKey contract) exported)
     true; 
+
+  # Validate shared services for discovery transport explicitness (SMS-030)
+  _discoveryTransportExplicitness = builtins.deepSeq
+    (map (service: requireDiscoveryTransportExplicitness siteKey service) sharedServices)
+    true;
 
   confined = map decisions.confinementDecision indexedMatrix;
   exported = lib.concatMap (entry: map (exports.validateDiscoveryExport entry) (entry.discoveryExports or [ ])) indexedMatrix;

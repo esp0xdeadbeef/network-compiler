@@ -160,7 +160,18 @@ let
             (requireNonEmptyDeniedPaths siteKey serviceName policy)
           ]
           true;
+      # FS-640-HDS-010-SDS-010-SMS-020: media payload authorization with specific diagnostics
+      requireMediaPayloadAuth =
+        import ./media-payload-authorization.nix { inherit lib; };
+
+      _mediaPayloadAuthBoundary =
+        builtins.deepSeq
+          [
+            (requireMediaPayloadAuth siteKey serviceName policy)
+          ]
+          true;
     in
+    builtins.seq _mediaPayloadAuthBoundary (
     builtins.seq _required (
       builtins.seq _discoveryBoundaryDecision (
       builtins.seq _noInference (
@@ -180,6 +191,7 @@ let
         authenticationBoundary = policy.authenticationBoundary;
         cloudDependency = policy.cloudDependency;
       }
+    )
     )
     )
     )

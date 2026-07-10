@@ -122,7 +122,8 @@ let
     (roleA == "access" && roleB == "core" || roleA == "core" && roleB == "access")
     && builtins.length shared > 0;
 
-  transitLinks = lib.filter (pair: !isProviderHandoffLink pair) (topo.links or [ ]);
+  transitLinks = lib.filter (pair: !isProviderHandoffLink pair) (topo.links or []);
+  providerHandoffLinks = lib.filter isProviderHandoffLink (topo.links or [ ]);
 
   pools = site.pools or { };
 
@@ -148,6 +149,8 @@ in
     links = transitLinks;
     pool = transitPool;
   };
+
+  providerHandoffs = providerHandoffLinks;
 
   addressPools = {
     p2p = transitPool;

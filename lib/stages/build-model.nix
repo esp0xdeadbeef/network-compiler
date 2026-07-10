@@ -158,6 +158,7 @@ let
     hostNatIngress = topo.hostNatIngress or { };
     prefixAuthority = declared.prefixAuthority or { };
     transit = semantic.transit or { };
+    providerHandoffs = semantic.providerHandoffs or [ ];
   };
 
   model = sourceAudit.attach siteKey model0;

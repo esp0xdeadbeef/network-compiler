@@ -122,23 +122,42 @@ let
     else
       [ ];
 
-  hasRequiredRecord =
+  mismatchedRecord =
     recordsByPath: required:
     let
       key = pathKey required.outputPath;
       record = recordsByPath.${key} or null;
     in
-    record != null
-    && (record.sourceClass or null) == "user-intent"
-    && (record.authority or null) == "network-compiler"
-    && builtins.isList (record.sourcePath or null);
+    if record == null then
+      { reason = "missing"; }
+    else if (record.sourceClass or null) != "user-intent" then
+      {
+        reason = "wrong-source-class";
+        foundClass = record.sourceClass or null;
+      }
+    else if (record.authority or null) != "network-compiler" then
+      {
+        reason = "wrong-authority";
+        foundAuthority = record.authority or null;
+      }
+    else if !(builtins.isList (record.sourcePath or null)) then
+      { reason = "invalid-source-path"; }
+    else
+      null;
 
-  firstMissing =
+  hasRequiredRecord =
+    recordsByPath: required:
+    (mismatchedRecord recordsByPath required) == null;
+
+  firstGap =
     required: recordsByPath:
     let
-      missing = lib.filter (ref: !(hasRequiredRecord recordsByPath ref)) required;
+      gaps = lib.filter (ref: (mismatchedRecord recordsByPath ref) != null) required;
     in
-    if missing == [ ] then null else builtins.head missing;
+    if gaps == [ ] then { required = null; mismatch = null; } else {
+      required = builtins.head gaps;
+      mismatch = mismatchedRecord recordsByPath (builtins.head gaps);
+    };
 
   validate =
     siteKey: model:
@@ -153,16 +172,27 @@ let
           })
           records
       );
-      missing = firstMissing required recordsByPath;
+      gap = firstGap required recordsByPath;
+      gapRequired = gap.required;
+      gapMismatch = gap.mismatch;
+      gapMessage =
+        if gapMismatch == null || gapMismatch.reason == "missing" then
+          "compiler behavior output lacks a user-intent source audit reference"
+        else if gapMismatch.reason == "wrong-source-class" then
+          "compiler behavior output has non-intent sourceClass: found \"${gapMismatch.foundClass or "null"}\", expected \"user-intent\""
+        else if gapMismatch.reason == "wrong-authority" then
+          "compiler behavior output has non-compiler authority: found \"${gapMismatch.foundAuthority or "null"}\", expected \"network-compiler\""
+        else
+          "compiler behavior output has an invalid source audit reference";
     in
-    if missing == null then
+    if gapRequired == null then
       true
     else
       throwError {
         code = "E_COMPILER_BEHAVIOR_SOURCE_AUDIT";
         site = siteKey;
-        path = missing.outputPath;
-        message = "compiler behavior output lacks a user-intent source audit reference";
+        path = gapRequired.outputPath;
+        message = gapMessage;
         hints = [
           "Every compiler behavior-creating output must have sourceClass = \"user-intent\"."
           "Keep compiler source audit authority scoped to network-compiler behavior outputs."

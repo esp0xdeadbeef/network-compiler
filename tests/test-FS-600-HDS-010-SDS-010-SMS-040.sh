@@ -150,6 +150,7 @@ cat >"$good_input" <<'NIX'
                 boundary = "no-receiver-initiated-client-paths";
               };
               deniedPaths = [
+                { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "smart-tv-browse"; }; reason = "guest-receiver-denied"; negativeProbe = "guest-to-receiver"; }
                 {
                   from = { kind = "tenant"; name = "consumer"; };
                   to = { kind = "service"; name = "smart-tv-hidden"; };

@@ -117,6 +117,8 @@ in
           "access-space '${scope}' discovery export '${toString serviceName}' lacks relay or proxy boundary"
           [ "Declare relayOrProxyBoundary on the export or localServiceDiscovery on both access spaces." ];
       payloadAuthorized = builtins.elem serviceName (entry.allowedServices or [ ]);
+      reverseDiscovery = rawExport.reverseDiscovery or rawExport.reverse or false;
+      reversePathRelationship = rawExport.reversePathRelationship or rawExport.reversePath or null;
     in
     builtins.seq _serviceName (
       builtins.seq _serviceKnown (
@@ -127,7 +129,7 @@ in
             service = serviceName;
             serviceType = service.serviceClass;
             discovery = service.discovery;
-            inherit relayOrProxyBoundary;
+            inherit relayOrProxyBoundary reverseDiscovery reversePathRelationship;
             payload = {
               authorized = payloadAuthorized;
               inferredFromDiscovery = false;

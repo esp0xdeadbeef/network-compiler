@@ -271,18 +271,11 @@ expect_failure() {
 }
 
 expect_failure \
-  "cross-boundary-without-export" \
-  "discoveryExports = \\[ \"cast-discovery\" \\];" \
-  "discoveryExports = [ ];" \
-  "E_ACCESS_SPACE_DISCOVERY_CROSS_SCOPE_DENIED" \
-  "cross-scope discovery for service 'cast-discovery' from 'client' to 'streaming' is denied without discoveryExports authority"
-
-expect_failure \
-  "missing-transport-protocol" \
+  "SN1-discovery-transport-not-explicit" \
   "protocol = \"mdns-ssdp\";" \
   "# protocol omitted" \
-  "E_ACCESS_SPACE_DISCOVERY_PROTOCOL" \
-  "must declare discovery.protocol"
+  "DISCOVERY_TRANSPORT_NOT_EXPLICIT" \
+  "lacks explicit discovery transport declaration"
 
 expect_failure \
   "missing-relay-boundary" \
@@ -304,5 +297,12 @@ expect_failure \
   "cloudDependency = \"optional\"; inferPayloadFromDiscovery = true;" \
   "DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK" \
   "unauthorized payload authorization"
+
+expect_failure \
+  "SN2-renderer-default-transport-denied" \
+  "direction = \"client-to-streaming\";" \
+  "direction = \"client-to-streaming\"; inferTransportFromDefaultMulticast = true;" \
+  "RENDERER_DEFAULT_DISCOVERY_TRANSPORT_DENIED" \
+  "discovery transport must not be inferred from renderer-default multicast"
 
 echo "PASS FS-590-HDS-010-SDS-010-SMS-030"

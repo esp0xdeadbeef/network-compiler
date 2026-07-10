@@ -281,8 +281,8 @@ expect_failure \
   "missing-transport-protocol" \
   "protocol = \"mdns-ssdp\";" \
   "# protocol omitted" \
-  "E_ACCESS_SPACE_DISCOVERY_PROTOCOL" \
-  "must declare discovery.protocol"
+  "DISCOVERY_TRANSPORT_NOT_EXPLICIT" \
+  "lacks explicit discovery transport declaration"
 
 expect_failure \
   "missing-relay-boundary" \

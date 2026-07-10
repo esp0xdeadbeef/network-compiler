@@ -302,7 +302,7 @@ expect_failure \
   "infer-payload-from-discovery" \
   "cloudDependency = \"optional\";" \
   "cloudDependency = \"optional\"; inferPayloadFromDiscovery = true;" \
-  "E_SERVICE_POLICY_INFERRED_AUTHORITY" \
-  "must not infer authority from 'inferPayloadFromDiscovery'"
+  "DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK" \
+  "unauthorized payload authorization"
 
 echo "PASS FS-590-HDS-010-SDS-010-SMS-020"

@@ -183,6 +183,7 @@ expect_required_failure() {
 expect_inference_failure() {
   local label="$1"
   local injected_field="$2"
+  local expected_code="${3:-E_SERVICE_POLICY_INFERRED_AUTHORITY}"
   local input="${tmp_dir}/${label}.nix"
   local err="${tmp_dir}/${label}.err"
 
@@ -197,7 +198,7 @@ expect_inference_failure() {
     echo "FAIL fs200 shared-service exposure: ${label} compiled" >&2
     exit 1
   fi
-  grep -q "E_SERVICE_POLICY_INFERRED_AUTHORITY" "$err"
+  grep -q "$expected_code" "$err"
 }
 
 expect_required_failure \
@@ -225,7 +226,7 @@ expect_required_failure \
   "authenticationBoundary = \"printer-local-or-print-server\";" \
   "# authenticationBoundary omitted"
 
-expect_inference_failure "infer-payload-from-discovery" "inferPayloadFromDiscovery"
+expect_inference_failure "infer-payload-from-discovery" "inferPayloadFromDiscovery" "DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK"
 expect_inference_failure "infer-exposure-from-host-placement" "inferExposureFromHostPlacement"
 
 echo "PASS fs200-shared-service-exposure-boundary"

@@ -50,6 +50,7 @@ cat >"$good_input" <<'NIX'
               reverseInitiation = { allowed = false; boundary = "no-reverse"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -130,7 +131,9 @@ cat >"$sn1_input" <<'SN1'
               };
               management = { allowed = false; boundary = "no-management"; };
               reverseInitiation = { allowed = false; boundary = "no-reverse"; };
-              deniedPaths = [ ];
+              deniedPaths = [
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
+              ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
               cloudDependency = "optional";
@@ -214,6 +217,7 @@ cat >"$sn2_input" <<'SN2'
               reverseInitiation = { allowed = false; boundary = "no-reverse"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               clearDeniedPaths = true;
               exposureClass = "internal-shared";

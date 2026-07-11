@@ -105,6 +105,7 @@ cat >"$good_input" <<'NIX'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "media-receiver"; }; reason = "guest-receiver-denied"; negativeProbe = "guest-to-receiver"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "media-receiver"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
                 { from = { kind = "tenant"; name = "media"; }; to = { kind = "tenant"; name = "trusted"; }; reason = "reverse-discovery-denied"; }
               ];
               exposureClass = "internal-shared";

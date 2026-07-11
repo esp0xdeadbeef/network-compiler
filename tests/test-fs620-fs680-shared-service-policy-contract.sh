@@ -123,6 +123,7 @@ cat >"$good_input" <<'NIX'
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "tenant"; name = "trusted"; }; reason = "guest-to-trusted-denied"; negativeProbe = "guest-to-trusted-cast"; }
                 { from = { kind = "tenant"; name = "media"; }; to = { kind = "tenant"; name = "trusted"; }; reason = "reverse-discovery-denied"; negativeProbe = "receiver-to-controller-mdns"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "media-receiver"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -220,7 +221,8 @@ jq -e '
       and .discovery.protocol == "mdns"
       and .payload.ports == [7000, 7100]
       and .reverseInitiation.allowed == false
-      and (.deniedPaths | length == 2)
+      and (.deniedPaths | length == 3)
+      and any(.deniedPaths[]; .kind == "media-to-management")
       and .cloudDependency == "optional"
   )
 ' "$good_output" >/dev/null
@@ -669,6 +671,7 @@ cat >"$media_mgmt_good_input" <<'NIX'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -777,6 +780,7 @@ cat >"$media_mgmt_inferred_input" <<'NIN'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -1003,6 +1007,7 @@ cat >"$media_dp_overwrite_input" <<'MO1'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               clearDeniedPaths = true;
               exposureClass = "internal-shared";
@@ -1108,6 +1113,7 @@ cat >"$media_dp_missing_input" <<'MO2'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "media"; }; to = { kind = "tenant"; name = "unrelated"; }; reason = "media-to-unrelated-denied"; negativeProbe = "media-to-unrelated"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -1212,6 +1218,7 @@ cat >"$media_dp_good_input" <<'MO3'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-to-media-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";

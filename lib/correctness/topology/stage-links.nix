@@ -12,13 +12,6 @@ let
     core = 4;
   };
 
-  tenantAttachmentNames = node:
-    lib.filter (t: t != null) (
-      map (attachment:
-        if (attachment.kind or null) == "tenant" then attachment.name or null else null
-      ) (node.attachments or [ ])
-    );
-
   validateCanonicalStageLink =
     siteKey: nodes: overlays: pair:
     let
@@ -30,13 +23,8 @@ let
       idxB = stageIndex.${roleB} or null;
       distance = if idxA == null || idxB == null then null else idxA - idxB;
       adjacent = distance == 1 || distance == (-1);
-      # Provider handoff / virtual adapter: access<->core with shared tenant attachment
-      sharedTenants = lib.intersectLists (tenantAttachmentNames nodes.${a}) (tenantAttachmentNames nodes.${b});
-      isProviderHandoff =
-        (roleA == "access" && roleB == "core" || roleA == "core" && roleB == "access")
-        && builtins.length sharedTenants > 0;
     in
-    ensure (idxA != null && idxB != null && (adjacent || isProviderHandoff)) {
+    ensure (idxA != null && idxB != null && adjacent) {
       code = "E_TOPO_NON_CANONICAL_STAGE_LINK";
       site = siteKey;
       path = [
@@ -47,7 +35,6 @@ let
       hints = [
         "Allowed adjacencies are access <-> downstream-selector <-> policy <-> upstream-selector <-> core."
         "Do not model direct core-to-access, core-to-core, core-to-policy, access-to-policy, or selector-bypassing links."
-        "Direct access-to-core links are allowed only when both nodes share a tenant attachment (provider handoff / virtual adapter such as PPPoE, WireGuard, Nebula)."
         "If traffic needs to cross core functions, express it as policy-controlled traversal through the canonical stages."
       ];
     };

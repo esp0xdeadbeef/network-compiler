@@ -50,6 +50,8 @@ let
         "inferClientPaths"
         "inferDiscoveryFromPayload"
         "inferDiscoveryFromServiceExistence"
+        "inferDiscoveryFromDnsRecord"
+        "inferDiscoveryFromHostPlacement"
         "inferReverseInitiation"
         "inferReverseInitiationFromPayload"
         "inferExposureFromHostPlacement"
@@ -83,6 +85,17 @@ let
       _noInference =
         builtins.deepSeq
           (map (field: forbidTrue siteKey serviceName field policy) forbiddenInferenceFields)
+          true;
+
+      # FS-590-HDS-010-SDS-010-SMS-040: discovery authority inference denial with specific diagnostics
+      requireDiscoveryAuthorityInferenceDenial =
+        import ./discovery-authority-inference-denial.nix { inherit lib; };
+
+      _discoveryAuthorityInferenceDenial =
+        builtins.deepSeq
+          [
+            (requireDiscoveryAuthorityInferenceDenial siteKey serviceName policy)
+          ]
           true;
 
       # FS-610-HDS-010-SDS-010-SMS-020: discovery boundary decision separation with specific diagnostics
@@ -198,6 +211,7 @@ let
     builtins.seq _mediaDeniedPathPreservationBoundary (
     builtins.seq _required (
       builtins.seq _discoveryBoundaryDecision (
+      builtins.seq _discoveryAuthorityInferenceDenial (
       builtins.seq _noInference (
         builtins.seq _underlayAuthorityBoundary (
         builtins.seq _managementBoundary (
@@ -215,6 +229,7 @@ let
         authenticationBoundary = policy.authenticationBoundary;
         cloudDependency = policy.cloudDependency;
       }
+    )
     )
     )
     )

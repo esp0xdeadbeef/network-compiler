@@ -82,7 +82,7 @@ let
   );
 
   sharedAttachmentResult = builtins.tryEval (
-    stageLinks.validateCanonicalStageLinks "provider-handoff-site" {
+    stageLinks.validateCanonicalStageLinks "shared-core-access-site" {
       access = {
         role = "access";
         attachments = [
@@ -107,7 +107,7 @@ let
   );
 
   mismatchedAttachmentResult = builtins.tryEval (
-    stageLinks.validateCanonicalStageLinks "provider-handoff-site" {
+    stageLinks.validateCanonicalStageLinks "shared-core-access-site" {
       access = {
         role = "access";
         attachments = [
@@ -141,8 +141,8 @@ else if !(baseResult.success && baseResult.value) then
   builtins.throw "canonical base scheme failed"
 else if !(reverseBaseResult.success && reverseBaseResult.value) then
   builtins.throw "canonical base scheme failed when links were listed in reverse endpoint order"
-else if !(sharedAttachmentResult.success && sharedAttachmentResult.value) then
-  builtins.throw "canonical shared core/access attachment should be ACCEPTED (provider handoff per FS-267)"
+else if sharedAttachmentResult.success then
+  builtins.throw "shared core/access attachment should be rejected; SMS-050 forbids direct core-to-access links"
 else if mismatchedAttachmentResult.success then
   builtins.throw "mismatched core/access attachment should not be accepted"
 else

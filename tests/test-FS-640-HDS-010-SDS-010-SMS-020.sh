@@ -50,6 +50,7 @@ cat >"$good_input" <<'NIX'
               reverseInitiation = { allowed = false; boundary = "no-receiver-initiated-controller-paths"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-cast-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -128,6 +129,7 @@ cat >"$sn1_input" <<'SN1'
               reverseInitiation = { allowed = false; boundary = "no-receiver-initiated-controller-paths"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-cast-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -214,6 +216,7 @@ cat >"$sn2_input" <<'SN2'
               reverseInitiation = { allowed = false; boundary = "no-receiver-initiated-controller-paths"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-cast-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";
@@ -299,6 +302,7 @@ cat >"$sn2_positive_input" <<'SN2P'
               reverseInitiation = { allowed = false; boundary = "no-receiver-initiated-controller-paths"; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "living-room-cast"; }; reason = "guest-cast-denied"; negativeProbe = "guest-to-cast"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "media"; }; to = { kind = "management"; name = "living-room-cast"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";

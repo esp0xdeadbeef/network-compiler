@@ -124,6 +124,7 @@ cat >"$good_input" <<'NIX'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "cast-discovery"; }; reason = "guest-discovery-denied"; negativeProbe = "guest-to-cast-mdns"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "streaming"; }; to = { kind = "management"; name = "cast-discovery"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
               ];
               exposureClass = "internal-shared";
               authenticationBoundary = "receiver-pairing";

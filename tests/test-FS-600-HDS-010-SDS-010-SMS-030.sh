@@ -151,6 +151,7 @@ cat >"$good_input" <<'NIX'
               };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "smart-tv-browse"; }; reason = "guest-receiver-denied"; negativeProbe = "guest-to-receiver"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "streaming"; }; to = { kind = "management"; name = "smart-tv-browse"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
                 {
                   from = { kind = "tenant"; name = "consumer"; };
                   to = { kind = "service"; name = "smart-tv-hidden"; };

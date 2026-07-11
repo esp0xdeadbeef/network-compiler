@@ -99,6 +99,7 @@ cat >"$good_input" <<'NIX'
               reverseInitiation = { allowed = false; };
               deniedPaths = [
                 { from = { kind = "tenant"; name = "guest"; }; to = { kind = "service"; name = "svc1"; }; reason = "guest-receiver-denied"; negativeProbe = "guest-to-receiver"; }
+                { kind = "media-to-management"; from = { kind = "tenant"; name = "streaming"; }; to = { kind = "management"; name = "svc1"; }; reason = "media-to-management-denied"; negativeProbe = "media-to-management"; }
                 { sourceScope = "streaming"; destinationScope = "client"; reason = "test"; }
               ];
               exposureClass = "shared-local";

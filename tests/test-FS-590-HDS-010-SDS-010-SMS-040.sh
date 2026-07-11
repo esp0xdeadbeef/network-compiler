@@ -305,4 +305,18 @@ expect_failure \
   "DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK" \
   "unauthorized payload authorization"
 
+expect_failure \
+  "infer-discovery-from-dns-record" \
+  "cloudDependency = \"optional\";" \
+  "cloudDependency = \"optional\"; inferDiscoveryFromDnsRecord = true;" \
+  "DNS_RECORD_NOT_DISCOVERY_AUTHORITY" \
+  "DNS records, route availability, and payload reachability are separate from discovery authority"
+
+expect_failure \
+  "infer-discovery-from-host-placement" \
+  "cloudDependency = \"optional\";" \
+  "cloudDependency = \"optional\"; inferDiscoveryFromHostPlacement = true;" \
+  "HOST_PLACEMENT_NOT_DISCOVERY_AUTHORITY" \
+  "co-location, route availability, and service existence are separate from discovery authority"
+
 echo "PASS FS-590-HDS-010-SDS-010-SMS-040"

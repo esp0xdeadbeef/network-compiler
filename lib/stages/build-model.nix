@@ -18,6 +18,11 @@ let
   buildIsolationDecisions = import ./isolation-decisions.nix { inherit lib; };
   buildAccessSpaceDiscovery = import ./access-space-discovery { inherit lib; };
   sourceAudit = import ./source-audit.nix { inherit lib; };
+  buildDnsContract = import ./dns-contract { inherit lib; };
+  buildCoreUplinks = import ./core-uplinks.nix {
+    inherit lib normalizeUplinksForNode;
+    inherit (util) ensure;
+  };
   inherit (util) assertUnique ensure;
   inherit (policyC)
     buildTrafficTypeIndex
@@ -46,7 +51,7 @@ let
         ];
       };
 
-  communicationContractDeclared = if _hasCommunicationContract then communicationContract0 else { };
+  communicationContractBase = if _hasCommunicationContract then communicationContract0 else { };
   _noLegacyExternalPolicy = validateNoLegacyExternalPolicy siteKey declared;
   _intentSourceBoundary = validateIntentSourceBoundary siteKey declared;
   _platformIndependentIntent = platformIndependence.validateIntent siteKey declared;
@@ -69,46 +74,27 @@ let
       { }
     else
       builtins.listToAttrs (
-        map
-          (overlayName: {
-            name = overlayName;
-            value = overlayPool;
-          })
-          overlayNames
+        map (overlayName: {
+          name = overlayName;
+          value = overlayPool;
+        }) overlayNames
       );
 
-  coreUplinks = builtins.listToAttrs (
-    map
-      (n: {
-        name = n;
-        value =
-          let
-            us = normalizeUplinksForNode siteKey n (nodes.${n}.uplinks or null);
-
-            _required = ensure (builtins.length us > 0) {
-              code = "E_CORE_UPLINKS_REQUIRED";
-              site = siteKey;
-              path = [
-                "topology"
-                "nodes"
-                n
-                "uplinks"
-              ];
-              message = "core node '${n}' must define at least one uplink";
-              hints = [
-                "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
-              ];
-            };
-          in
-          if _required then us else us;
-      })
-      coreNodes
-  );
+  coreUplinks = buildCoreUplinks siteKey nodes coreNodes;
   uplinkNames = lib.sort builtins.lessThan (
     lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
   );
 
-  tenants0 = if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
+  dns = buildDnsContract siteKey declared nodes coreUplinks;
+  communicationContractDeclared = communicationContractBase // {
+    services =
+      (communicationContractBase.services or [ ]) ++ (dns.communicationContract.services or [ ]);
+    relations =
+      (communicationContractBase.relations or [ ]) ++ (dns.communicationContract.relations or [ ]);
+  };
+
+  tenants0 =
+    if semantic ? segments && semantic.segments ? tenants then semantic.segments.tenants else [ ];
   tenants = lib.sort (a: b: a.name < b.name) tenants0;
   tenantNames = map (t: t.name) tenants;
   _uniqTenants = assertUnique "tenant name" tenantNames;
@@ -120,21 +106,24 @@ let
   _uniqTrafficTypes = assertUnique "traffic type name" trafficTypeNames;
   _uniqServices = assertUnique "service name" serviceNames;
   relations0 = communicationContractDeclared.relations or [ ];
-  _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic relations0;
+  _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic nodes relations0;
 
-  normalizedRelations0 = lib.imap0
-    (
-      idx: r:
-        normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex trafficTypeIndex idx r
-    )
-    relations0;
+  normalizedRelations0 = lib.imap0 (
+    idx: r:
+    normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex
+      trafficTypeIndex
+      idx
+      r
+  ) relations0;
 
   normalizedRelationIds = map (r: r.source.id) normalizedRelations0;
   _uniqRelationIds = assertUnique "relation id" normalizedRelationIds;
 
   normalizedRelations = sortRelations normalizedRelations0;
   overlayAttachments = buildOverlayAttachments siteKey nodes overlays;
-  trafficPaths = buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts overlays normalizedRelations;
+  trafficPaths =
+    buildTrafficPaths siteKey nodes coreUplinks serviceIndex semantic.hosts overlays
+      normalizedRelations;
 
   _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
   _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
@@ -142,8 +131,12 @@ let
   _overlayModelExplicit = validateOverlayModel siteKey trafficTypeIndex normalizedRelations overlays;
 
   compiledServices = buildCompiledServices siteKey serviceIndex serviceNames;
-  isolationModel = buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices communicationContractDeclared;
-  accessSpaceDiscovery = buildAccessSpaceDiscovery siteKey serviceIndex communicationContractDeclared (declared.profileManifest or null);
+  isolationModel =
+    buildIsolationDecisions siteKey nodes tenants semantic.hosts compiledServices
+      communicationContractDeclared;
+  accessSpaceDiscovery =
+    buildAccessSpaceDiscovery siteKey serviceIndex communicationContractDeclared
+      (declared.profileManifest or null);
   model0 = {
     tenants = tenants;
     services = compiledServices;
@@ -159,40 +152,40 @@ let
     prefixAuthority = declared.prefixAuthority or { };
     transit = semantic.transit or { };
     providerHandoffs = semantic.providerHandoffs or [ ];
+    inherit dns;
   };
 
   model = sourceAudit.attach siteKey model0;
   _platformIndependentOutput = platformIndependence.validateOutput siteKey model;
-  _forced = builtins.deepSeq
-    {
-      inherit
-        _hasCommunicationContract
-        _noLegacyExternalPolicy
-        _intentSourceBoundary
-        _platformIndependentIntent
-        _platformIndependentOutput
-        _addrSafe
-        _topoValid
-        _uniqTrafficTypes
-        _uniqServices
-        _serviceProvidersLocal
-        _uniqTenants
-        _uniqRelationIds
-        _noConflictingRelations
-        _hasExternalAllow
-        _overlayModelExplicit
-        ;
-      tenants = tenants;
-      services = compiledServices;
-      accessSpaceDiscovery = accessSpaceDiscovery;
-      ipv6 = semantic.ipv6 or { };
-      relations = normalizedRelations;
-      overlayAttachments = overlayAttachments;
-      overlayAddressPools = overlayAddressPools;
-      trafficPaths = trafficPaths;
-      hostNatIngress = topo.hostNatIngress or { };
-      sourceAudit = model.sourceAudit;
-    }
-    true;
+  _forced = builtins.deepSeq {
+    inherit
+      _hasCommunicationContract
+      _noLegacyExternalPolicy
+      _intentSourceBoundary
+      _platformIndependentIntent
+      _platformIndependentOutput
+      _addrSafe
+      _topoValid
+      _uniqTrafficTypes
+      _uniqServices
+      _serviceProvidersLocal
+      _uniqTenants
+      _uniqRelationIds
+      _noConflictingRelations
+      _hasExternalAllow
+      _overlayModelExplicit
+      ;
+    tenants = tenants;
+    services = compiledServices;
+    accessSpaceDiscovery = accessSpaceDiscovery;
+    ipv6 = semantic.ipv6 or { };
+    relations = normalizedRelations;
+    overlayAttachments = overlayAttachments;
+    overlayAddressPools = overlayAddressPools;
+    trafficPaths = trafficPaths;
+    hostNatIngress = topo.hostNatIngress or { };
+    sourceAudit = model.sourceAudit;
+    inherit dns;
+  } true;
 in
 builtins.seq _forced model

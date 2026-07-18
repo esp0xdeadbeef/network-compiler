@@ -2,25 +2,36 @@
 siteKey: nodes: coreUplinks: serviceIndex: hosts: overlays: normalizedRelations:
 let
   util = import ../correctness/util.nix { inherit lib; };
-  selectors = import ./traffic-paths/selectors.nix { inherit lib; } siteKey nodes coreUplinks serviceIndex hosts;
+  selectors = import ./traffic-paths/selectors.nix {
+    inherit lib;
+  } siteKey nodes coreUplinks serviceIndex hosts;
   overlayUnderlay = import ./traffic-paths/overlay-underlay.nix { inherit lib; };
   buildCorePairs = import ./traffic-paths/core-pairs.nix { inherit lib; };
   wildcardDestinations = import ./traffic-paths/wildcard-destinations.nix { inherit lib; } {
     inherit siteKey nodes throwError;
   };
   inherit (util) throwError;
-  inherit (selectors) firstRole coresForExternal accessForEndpoint;
+  inherit (selectors) firstRole coresForEndpoint accessForEndpoint;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
+  stages = import ./traffic-paths/stages.nix {
+    inherit lib serviceIndex overlayUnderlayAccessFor;
+  };
+  inherit (stages) endpointStage pathStagesFor;
   # Returns overlay metadata for a relation that involves an overlay, or null.
   overlaysByName = builtins.listToAttrs (
-    map (overlay: { name = overlay.name; value = overlay; }) overlays
+    map (overlay: {
+      name = overlay.name;
+      value = overlay;
+    }) overlays
   );
   endpointOverlayName =
     endpoint:
     if !(builtins.isAttrs endpoint) || (endpoint.kind or null) != "external" then
       null
     else
-      let name = endpoint.name or ""; in
+      let
+        name = endpoint.name or "";
+      in
       if builtins.hasAttr name overlaysByName then name else null;
   overlayInfoForRelation =
     relation:
@@ -31,79 +42,17 @@ let
       overlay = if overlayName != null then overlaysByName.${overlayName} else null;
       isUnderlayRel =
         overlayName != null
-        && fromOverlayName != null  # underlay traffic originates FROM the overlay external
+        && fromOverlayName != null # underlay traffic originates FROM the overlay external
         && (relation.trafficType or "any") != "any";
     in
-    if overlay == null then null else {
-      overlayIdentity = overlayName;
-      peerSiteIdentity = overlay.peerSite or null;
-      transportKind = if isUnderlayRel then "overlay-underlay" else "overlay-payload";
-    };
-
-  accessToCoreStages = [
-    "access"
-    "downstream-selector"
-    "policy"
-    "upstream-selector"
-    "core"
-  ];
-  coreToAccessStages = lib.reverseList accessToCoreStages;
-  endpointStage =
-    endpoint:
-    if !builtins.isAttrs endpoint then
-      "access"
-    else if (endpoint.kind or null) == "external" then
-      "core"
-    else if (endpoint.kind or null) == "public-ipv4" then
-      "core"
+    if overlay == null then
+      null
     else
-      "access";
-
-  pathStagesFor =
-    relation:
-    let
-      fromStage = endpointStage relation.from;
-      toStage = endpointStage relation.to;
-      fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
-    in
-    if fromOverlayUnderlayAccess != null && fromStage == "core" && toStage == "core" then
-      [
-        "core"
-        "access"
-        "downstream-selector"
-        "policy"
-        "upstream-selector"
-        "core"
-      ]
-    else if fromOverlayUnderlayAccess != null && fromStage == "core" && toStage == "access" then
-      [
-        "core"
-        "access"
-        "downstream-selector"
-        "policy"
-        "downstream-selector"
-        "access"
-      ]
-    else if fromStage == "core" && toStage == "access" then
-      coreToAccessStages
-    else if fromStage == "access" && toStage == "core" then
-      accessToCoreStages
-    else if fromStage == "access" && toStage == "access" then
-      [
-        "access"
-        "downstream-selector"
-        "policy"
-        "downstream-selector"
-        "access"
-      ]
-    else
-      [
-        "core"
-        "upstream-selector"
-        "policy"
-        "upstream-selector"
-        "core"
-      ];
+      {
+        overlayIdentity = overlayName;
+        peerSiteIdentity = overlay.peerSite or null;
+        transportKind = if isUnderlayRel then "overlay-underlay" else "overlay-payload";
+      };
 
   buildOne =
     relation:
@@ -111,13 +60,25 @@ let
       stages = pathStagesFor relation;
       fromStage = endpointStage relation.from;
       toStage = endpointStage relation.to;
-      fromCores = if fromStage == "core" then coresForExternal relation.from else [ ];
-      toCores = if toStage == "core" then coresForExternal relation.to else [ ];
+      fromCores = if fromStage == "core" then coresForEndpoint relation.from else [ ];
+      toCores = if toStage == "core" then coresForEndpoint relation.to else [ ];
       fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
       corePairs = buildCorePairs {
-        inherit siteKey throwError firstRole relation fromCores toCores;
+        inherit
+          siteKey
+          throwError
+          firstRole
+          relation
+          fromCores
+          toCores
+          ;
       };
-      pathCores = lib.unique (lib.concatMap (pair: [ pair.fromCore pair.toCore ]) corePairs);
+      pathCores = lib.unique (
+        lib.concatMap (pair: [
+          pair.fromCore
+          pair.toCore
+        ]) corePairs
+      );
       fromAccess = if fromStage == "access" then accessForEndpoint relation.from else null;
       toAccessOptions =
         if toStage != "access" then
@@ -126,20 +87,15 @@ let
           wildcardDestinations.accessNodesFor relation
         else
           [ (accessForEndpoint relation.to) ];
-      pathVariants = lib.concatMap
-        (
-          corePair:
-          map
-            (toAccess: {
-              inherit corePair toAccess;
-            })
-            toAccessOptions
-        )
-        corePairs;
+      pathVariants = lib.concatMap (
+        corePair:
+        map (toAccess: {
+          inherit corePair toAccess;
+        }) toAccessOptions
+      ) corePairs;
 
       nodeForStage =
-        variant: idx:
-        stage:
+        variant: idx: stage:
         let
           inherit (variant) corePair toAccess;
         in

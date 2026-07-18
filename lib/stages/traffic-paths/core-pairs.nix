@@ -1,25 +1,36 @@
 { lib }:
-{ siteKey
-, throwError
-, firstRole
-, relation
-, fromCores
-, toCores
-,
+{
+  siteKey,
+  throwError,
+  firstRole,
+  relation,
+  fromCores,
+  toCores,
 }:
 
 let
+  bothEndpointsExternal =
+    builtins.isAttrs (relation.from or null)
+    && (relation.from.kind or null) == "external"
+    && builtins.isAttrs (relation.to or null)
+    && (relation.to.kind or null) == "external";
+
   sameCoreExternalPairs =
-    fromCores != [ ] && toCores != [ ] && builtins.any
-      (fromCore: builtins.elem fromCore toCores)
-      fromCores;
+    bothEndpointsExternal
+    && fromCores != [ ]
+    && toCores != [ ]
+    && builtins.any (fromCore: builtins.elem fromCore toCores) fromCores;
 
   _noExternalCoreLoop =
     if sameCoreExternalPairs then
       throwError {
         code = "E_TRAFFIC_PATH_EXTERNAL_CORE_LOOP";
         site = siteKey;
-        path = [ "communicationContract" "relations" relation.source.id ];
+        path = [
+          "communicationContract"
+          "relations"
+          relation.source.id
+        ];
         message = "external-to-external relation '${relation.source.id}' resolves source and destination to the same core node";
         hints = [
           "Model overlay ingress and WAN egress as distinct external uplinks on distinct core nodes."
@@ -31,30 +42,22 @@ let
       true;
 in
 if _noExternalCoreLoop && fromCores != [ ] && toCores != [ ] then
-  lib.concatMap
-    (
-      fromCore:
-      map
-        (toCore: {
-          inherit fromCore toCore;
-        })
-        toCores
-    )
-    fromCores
+  lib.concatMap (
+    fromCore:
+    map (toCore: {
+      inherit fromCore toCore;
+    }) toCores
+  ) fromCores
 else if fromCores != [ ] then
-  map
-    (core: {
-      fromCore = core;
-      toCore = core;
-    })
-    fromCores
+  map (core: {
+    fromCore = core;
+    toCore = core;
+  }) fromCores
 else if toCores != [ ] then
-  map
-    (core: {
-      fromCore = core;
-      toCore = core;
-    })
-    toCores
+  map (core: {
+    fromCore = core;
+    toCore = core;
+  }) toCores
 else
   [
     {

@@ -43,6 +43,36 @@ fi
 
 echo "PASS: FS-525 named core resolver binding is normalized without address literals or reproducibility warnings"
 
+relation_result="$(${NIX_BIN:-nix} eval --impure --json --expr "
+  let
+    compiler = builtins.getFlake (toString ${ROOT});
+    source = import ${LABS}/GAMP/SMT/FS-525-HDS-010-SDS-010-SMS-010/intent.nix;
+    site = (compiler.lib.compile builtins.currentSystem source)
+      .sites.mini-smt.FS-525-HDS-010-SDS-010-SMS-010;
+    relation = builtins.head (builtins.filter
+      (entry: entry.source.id == \"FS-525-HDS-010-SDS-010-SMS-010__access-dns-to-core-dns\")
+      site.relations);
+    path = builtins.head (builtins.filter
+      (entry: entry.relationId == relation.source.id)
+      site.trafficPaths);
+  in { inherit relation path; }
+")"
+
+jq -e '
+  .relation.returnBehavior == "symmetric"
+  and .relation.from == {kind: "service", name: "access-dns"}
+  and .relation.to == {kind: "service", name: "core-dns"}
+  and .path.nodePath == [
+    "access-dns",
+    "downstream-selector",
+    "policy",
+    "upstream-selector",
+    "core-primary"
+  ]
+' <<<"$relation_result" >/dev/null
+
+echo "PASS: FS-525 normalized relation retains symmetric authority and the named core path"
+
 seeded="$(${NIX_BIN:-nix} eval --impure --json --expr "
   let
     compiler = builtins.getFlake (toString ${ROOT});

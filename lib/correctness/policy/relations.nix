@@ -91,6 +91,12 @@ let
         ;
       trafficType = trafficType.name;
       match = trafficType.match;
+    }
+    // lib.optionalAttrs (relation ? returnBehavior) {
+      inherit (relation) returnBehavior;
+    }
+    // lib.optionalAttrs (relation ? publicIngressTupleAuthority) {
+      inherit (relation) publicIngressTupleAuthority;
     };
 
   sortRelations =

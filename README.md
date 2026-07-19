@@ -198,6 +198,12 @@ Those decisions belong to later stages.
 The compiler defines the **canonical model**.
 Other stages decide how to realize that model.
 
+An ingress-only site is valid when it declares an external-to-service allow
+with an explicit `publicIngressTupleAuthority`. The compiler must not require
+or synthesize an internal-to-external allow merely to make that site compile.
+An external-to-service relation without that explicit authority does not
+satisfy this exception.
+
 ---
 
 # Position in the architecture

@@ -132,6 +132,15 @@ let
   relationToIsExternal =
     relation: builtins.isAttrs relation.to && (relation.to.kind or null) == "external";
 
+  relationIsExplicitPublicIngress =
+    relation:
+    (relation.action or null) == "allow"
+    && builtins.isAttrs relation.from
+    && (relation.from.kind or null) == "external"
+    && builtins.isAttrs relation.to
+    && (relation.to.kind or null) == "service"
+    && builtins.isAttrs (relation.publicIngressTupleAuthority or null);
+
   relationConflictKey =
     relation: "${subjectKey relation.from}->${targetKey relation.to}:${relation.trafficType}";
 
@@ -173,7 +182,8 @@ let
         (
           r: (r.action or null) == "allow" && relationFromIsInternal r && relationToIsExternal r
         )
-        relations)
+        relations
+      || builtins.any relationIsExplicitPublicIngress relations)
       {
         code = "E_CONTRACT_MISSING_EXTERNAL_ALLOW";
         site = siteKey;
@@ -181,9 +191,9 @@ let
           "communicationContract"
           "relations"
         ];
-        message = "every site must declare at least one allow relation from an internal subject to an external network";
+        message = "every site must declare either an internal-to-external allow or an explicit public-ingress authority";
         hints = [
-          "Add a relation like { from = { kind = \"tenant\"; name = \"mgmt\"; }; to = { kind = \"external\"; name = \"wan\"; }; trafficType = \"any\"; action = \"allow\"; }."
+          "Add an authorized internal-to-external relation, or for an ingress-only site add an external-to-service allow with publicIngressTupleAuthority."
         ];
       };
 in

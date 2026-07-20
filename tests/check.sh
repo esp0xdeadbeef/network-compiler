@@ -12,6 +12,7 @@ fi
 bash "$ROOT/tests/test-nix-file-loc.sh"
 bash "$ROOT/tests/test-regression-md-resolved-states.sh"
 bash "$ROOT/tests/test-layer-entry-warning-contract.sh"
+bash "$ROOT/tests/test-controlled-skip-acknowledgement.sh"
 bash "$ROOT/tests/test-overlay-ingress-policy-reference.sh"
 bash "$ROOT/tests/test-uplink-name-ambiguity.sh"
 bash "$ROOT/tests/test-runtime-routed-prefix-contract.sh"

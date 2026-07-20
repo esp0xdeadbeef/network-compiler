@@ -12,11 +12,11 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , nixpkgs-network
-    , network-labs
-    ,
+    {
+      self,
+      nixpkgs,
+      nixpkgs-network,
+      network-labs,
     }:
     let
       systems = [
@@ -69,23 +69,53 @@
           compile = import ./lib/main.nix {
             lib = pkgs.lib;
           };
+          controlledSkip = import ./lib/controlled-skip.nix {
+            repository = "network-compiler";
+            repositoryRevision = self.sourceInfo.rev or self.dirtyRev or "uncommitted";
+            stageIndex = 1;
+            previousStage = "network-labs";
+            nextStage = "network-forwarding-model";
+            normalInputContract = "network-intent/v1";
+          };
         in
         rec {
-          inherit compile;
+          inherit compile controlledSkip;
+
+          controlledSkipAcknowledgement = controlledSkip.acknowledge;
 
           readInput = readValue;
 
           layerEntryWarnings =
-            { entryBoundary ? "intent-source" }:
+            {
+              entryBoundary ? "intent-source",
+            }:
             let
               currentRepo = "network-compiler";
               skippedForBoundary = {
                 intent-source = [ ];
                 compiler-output = [ "intent-source" ];
-                forwarding-model-input = [ "intent-source" "network-compiler" ];
-                control-plane-input = [ "intent-source" "network-compiler" "network-forwarding-model" ];
-                renderer-input = [ "intent-source" "network-compiler" "network-forwarding-model" "network-control-plane-model" ];
-                runtime-artifact = [ "intent-source" "network-compiler" "network-forwarding-model" "network-control-plane-model" "renderer" ];
+                forwarding-model-input = [
+                  "intent-source"
+                  "network-compiler"
+                ];
+                control-plane-input = [
+                  "intent-source"
+                  "network-compiler"
+                  "network-forwarding-model"
+                ];
+                renderer-input = [
+                  "intent-source"
+                  "network-compiler"
+                  "network-forwarding-model"
+                  "network-control-plane-model"
+                ];
+                runtime-artifact = [
+                  "intent-source"
+                  "network-compiler"
+                  "network-forwarding-model"
+                  "network-control-plane-model"
+                  "renderer"
+                ];
               };
               warningBySkippedLayer = {
                 intent-source = "WARN_LAYER_ENTRY_SKIPS_NETWORK_LABS_INTENT_SOURCE";
@@ -95,42 +125,37 @@
                 renderer = "WARN_LAYER_ENTRY_SKIPS_RENDERER";
               };
               skippedUpstreamLayers =
-                skippedForBoundary.${entryBoundary} or
-                (throw "network-compiler layer-entry warning: unknown entryBoundary '${entryBoundary}'");
+                skippedForBoundary.${entryBoundary}
+                  or (throw "network-compiler layer-entry warning: unknown entryBoundary '${entryBoundary}'");
               repoSkipped = builtins.elem currentRepo skippedUpstreamLayers;
             in
             {
               repo = currentRepo;
               inherit entryBoundary skippedUpstreamLayers repoSkipped;
-              warnings = map
-                (layer: {
-                  code = warningBySkippedLayer.${layer};
-                  severity = "warning";
-                  skippedLayer = layer;
-                  message =
-                    if layer == "network-compiler" then
-                      "layer-entry starts below network-compiler; compiler execution and validation are not covered by this scenario"
-                    else
-                      "layer-entry skips ${layer}; that layer is not covered by this scenario";
-                })
-                skippedUpstreamLayers;
-              inputTreatment =
-                if repoSkipped then
-                  "pass-through"
-                else
-                  "consume-or-normalize";
+              warnings = map (layer: {
+                code = warningBySkippedLayer.${layer};
+                severity = "warning";
+                skippedLayer = layer;
+                message =
+                  if layer == "network-compiler" then
+                    "layer-entry starts below network-compiler; compiler execution and validation are not covered by this scenario"
+                  else
+                    "layer-entry skips ${layer}; that layer is not covered by this scenario";
+              }) skippedUpstreamLayers;
+              inputTreatment = if repoSkipped then "pass-through" else "consume-or-normalize";
             };
 
           layerEntryEnvelope =
-            { input
-            , entryBoundary ? "intent-source"
-            ,
+            {
+              input,
+              entryBoundary ? "intent-source",
             }:
             let
               payload = readValue input;
               warningPayload = layerEntryWarnings { inherit entryBoundary; };
             in
-            warningPayload // {
+            warningPayload
+            // {
               normalizedTo = "nix-attrset";
               input = payload;
               output = payload;
@@ -141,10 +166,10 @@
           compilePath = valueOrPath: compile (readValue valueOrPath);
 
           writeJSON =
-            { value ? null
-            , path ? null
-            , name ? "output-compiler.json"
-            ,
+            {
+              value ? null,
+              path ? null,
+              name ? "output-compiler.json",
             }:
             let
               resolvedValue =

@@ -1,4 +1,4 @@
-# nixos-network-compiler
+# network-compiler
 
 A deterministic compiler that converts **network intent** into a **platform-independent, staged network model**.
 
@@ -215,7 +215,12 @@ This repository is part of a multi-stage pipeline.
 | **Compiler**            | defines communication semantics and canonical staged topology                 |
 | **Forwarding model**    | constructs deterministic forwarding structure from the canonical staged model |
 | **Control plane model** | derives control-plane mechanisms and realization inputs                       |
+| **Realization model**   | produces the validated canonical realization bundle without reinterpreting intent |
 | **Renderer**            | emits platform-specific configuration                                         |
+
+`network-realization-schema` is the pinned contract dependency shared by the
+realization-model producer, bundle validators, fixture validators, and
+renderers. It is not a transformation stage.
 
 Pipeline:
 
@@ -227,6 +232,10 @@ compiler
 forwarding model
   ↓
 control plane model
+  ↓
+realization model
+  ↓
+validated canonical realization bundle
   ↓
 renderer
 ```
@@ -245,7 +254,7 @@ before reaching this repository.
 
 | Layer | ID | Description |
 |-------|----|-------------|
-| URS   | L11, L29, L79-86 | Model portability, intent/realization boundaries, platform-independent output |
+| URS   | Model Portability; Canonical Realization and Renderer Boundary; Intent and Realization Boundaries | Platform-independent meaning and explicit authority boundaries |
 | FS    | FS-010 – FS-165 | Model inputs, provenance, determinism, scoped output, source-form minimality, portability |
 | FS    | FS-181 | Closed-World Policy Authority Set — derive network behavior from closed set of platform-neutral authority records |
 | FS    | FS-260 | Default Site Fabric Chain — logical chain of upstream surface, core boundary, policy point, downstream distribution, access space, clients |
@@ -255,8 +264,12 @@ before reaching this repository.
 ### Pipeline
 
 ```
-network-labs (intent) → network-compiler → NFM → CPM → renderers
+network-labs (intent) → network-compiler → NFM → CPM → network-realization-model → renderers
 ```
+
+`network-realization-schema` supplies the pinned canonical-bundle contract to
+the realization model and renderers without becoming an executable pipeline
+hop.
 
 Required input: `intent.nix` — user-owned desired behavior (tenants, services, policy, overlays, etc.).
 Output: platform-independent normalized site payload for the forwarding model.
@@ -839,9 +852,9 @@ that is allowed to use the overlay. For a consumer/site network, it can be the
 normal client LAN when that LAN has modeled WAN/default egress. The compiler must
 fail if the selected underlay tenant has no allowed egress relation to the
 underlay target external; NFM owns the deeper route collision and self-loop proof
-after compiler path construction. If the compiler, NFM, CPM, renderer, or NixOS
-host config derives this from a payload relation like `hostile -> east-west`,
-the model is wrong.
+after compiler path construction. If the compiler, NFM, CPM, realization model,
+renderer, or NixOS host config derives this from a payload relation like
+`hostile -> east-west`, the model is wrong.
 
 Overlay ingress at a remote site is not itself WAN authorization. After payload
 traffic crosses the overlay into `hetz-router-nebula-core`, it must enter
@@ -849,9 +862,10 @@ the remote site's forwarded overlay egress leg and pass through
 `hetz-router-policy` before it reaches `hetz-router-core` and Hetzner WAN. The
 forwarding model may then construct deterministic forwarding lanes from these
 compiler paths, and the control-plane model binds those lanes to inventory
-realization. Renderers only materialize the explicit downstream contracts and
-must not invent either the underlay/client-side access attachment or the
-forwarded overlay egress path from node names.
+realization. The realization model carries those explicit contracts into the
+validated canonical bundle. Renderers consume that bundle and must not invent
+either the underlay/client-side access attachment or the forwarded overlay
+egress path from node names.
 
 ---
 
@@ -957,18 +971,21 @@ It is trying to be:
 
 ---
 
-# Practical expectation for downstream renderers
+# Practical expectation for downstream stages
 
-If you write a renderer for this model, the expectation is:
+If you consume compiler output downstream, the expectation is:
 
 * consume the canonical staged architecture
 * preserve stage authority boundaries
 * realize co-located stages when appropriate
 * do not reorder or erase the stage model
 * do not repair missing intent by inventing policy
+* route renderer-bound semantics through `network-realization-model` and the
+  pinned `network-realization-schema` contract
 
-A renderer may choose **how** to realize the model.
-It may not choose **whether the model means something else**.
+A downstream stage may choose **how** to concretize or emit declared meaning
+within its authority. It may not choose **whether the model means something
+else**.
 
 ---
 

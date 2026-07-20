@@ -1,0 +1,1 @@
+../shared/test-fs620-fs680-shared-service-policy-contract.sh

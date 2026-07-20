@@ -3,53 +3,21 @@ set -euo pipefail
 # GAMP-ID: RTM-RUNNER-COMP-001
 # GAMP-SCOPE: runner-only; not SMT acceptance evidence
 
-ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
 
 if [[ "${NETWORK_REPO_SWEEP:-0}" != "1" && "${NETWORK_REPO_DIRECT_TEST_OK:-0}" != "1" ]]; then
   echo "WARN: direct repo tests are partial; set NETWORK_REPO_DIRECT_TEST_OK=1 for intentional focused runs, or run network-codex-agent/scripts/s-router-full-lab-rebuild-loop.sh for the locked full network-* sweep plus live validation." >&2
 fi
 
-bash "$ROOT/tests/test-nix-file-loc.sh"
-bash "$ROOT/tests/test-regression-md-resolved-states.sh"
-bash "$ROOT/tests/test-layer-entry-warning-contract.sh"
-bash "$ROOT/tests/test-controlled-skip-acknowledgement.sh"
-bash "$ROOT/tests/test-overlay-ingress-policy-reference.sh"
-bash "$ROOT/tests/test-uplink-name-ambiguity.sh"
-bash "$ROOT/tests/test-runtime-routed-prefix-contract.sh"
-bash "$ROOT/tests/test-ipv6-intent-contract.sh"
-bash "$ROOT/tests/test-wildcard-target-traffic-paths.sh"
-bash "$ROOT/tests/test-FS-180-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-180-HDS-010-SDS-010-SMS-030.sh"
-bash "$ROOT/tests/test-FS-230-HDS-010-SDS-010-SMS-040-ingress-only-site.sh"
-bash "$ROOT/tests/test-FS-480-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-260-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-260-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-290-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-290-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-290-HDS-010-SDS-010-SMS-030.sh"
-bash "$ROOT/tests/test-FS-390-HDS-010-SDS-010-SMS-030-public-ipv4-target.sh"
-bash "$ROOT/tests/test-FS-590-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-590-HDS-010-SDS-010-SMS-030.sh"
-bash "$ROOT/tests/test-FS-590-HDS-010-SDS-010-SMS-040.sh"
-bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-030.sh"
-bash "$ROOT/tests/test-FS-600-HDS-010-SDS-010-SMS-040.sh"
-bash "$ROOT/tests/test-FS-610-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-610-HDS-010-SDS-010-SMS-040.sh"
-bash "$ROOT/tests/test-FS-200-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-620-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-fs620-fs680-shared-service-policy-contract.sh"
-bash "$ROOT/tests/test-FS-640-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-640-HDS-010-SDS-010-SMS-050.sh"
-bash "$ROOT/tests/test-FS-630-HDS-010-SDS-010-SMS-020.sh"
-bash "$ROOT/tests/test-FS-760-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-intent-source-boundary.sh"
-bash "$ROOT/tests/test-canonical-stage-link-matrix.sh"
-bash "$ROOT/tests/test-FS-181-HDS-010-SDS-010-SMS-010.sh"
-bash "$ROOT/tests/test-FS-181-HDS-010-SDS-040-SMS-010.sh"
-bash "$ROOT/tests/test-FS-030-HDS-010-SDS-040-SMS-010.sh"
-bash "$ROOT/tests/test-FS-030-HDS-010-SDS-050-SMS-010.sh"
+mapfile -t focused_tests < <(
+  find "$ROOT/tests" -maxdepth 1 -regextype posix-extended \( -type f -o -type l \) \
+    \( -name 'test-*.sh' -o -regex '.*/FS-[0-9]+-HDS-[0-9]+-SDS-[0-9]+-SMS-[0-9]+\.sh' \) \
+    -printf '%p\n' | LC_ALL=C sort
+)
+
+for test_path in "${focused_tests[@]}"; do
+  bash "${test_path}"
+done
 
 signed_json_out="$(mktemp)"
 trap 'rm -f "$signed_json_out"' EXIT
@@ -280,15 +248,5 @@ jq -e '
 | select(.to == { kind: "external", uplinks: [ "uplink0" ] })
 ] | length == 1
 ' "$service_subject_json" > /dev/null
-
-"$ROOT/tests/test-dual-wan-branch-overlay.sh"
-"$ROOT/tests/test-canonical-traffic-paths.sh"
-"$ROOT/tests/test-overlay-canonical-access-attachment.sh"
-"$ROOT/tests/test-overlay-peer-sites.sh"
-"$ROOT/tests/test-overlay-address-pools.sh"
-"$ROOT/tests/test-emitter-provenance-repo-boundary.sh"
-"$ROOT/tests/FS-100-HDS-010-SDS-010-SMS-020-deterministic-source-identity.sh"
-"$ROOT/tests/FS-100-HDS-010-SDS-010-SMS-030-signed-output-source-containment.sh"
-"$ROOT/tests/test-network-labs-examples.sh"
 
 echo "all tests passed"

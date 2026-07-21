@@ -37,8 +37,8 @@ if ! jq -e '[.warnings[]? | .. | strings | select(
   test("(^|[^0-9])([0-9]{1,3}\\.){3}[0-9]{1,3}([^0-9]|$)")
   or test("^([0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f]{0,4}(/[0-9]+)?$")
 )] == []' <<<"$result" >/dev/null; then
-  echo "FAIL: DNS warnings leaked address material" >&2
-  exit 1
+	echo "FAIL: DNS warnings leaked address material" >&2
+	exit 1
 fi
 
 echo "PASS: FS-525 named core resolver binding is normalized without address literals or reproducibility warnings"
@@ -105,6 +105,9 @@ seeded="$(${NIX_BIN:-nix} eval --impure --json --expr "
       };
     };
   in {
+    noBindings = compileWarnings \"no-bindings\" (base // {
+      recursiveDnsIntent = recursive // { bindings = [ ]; };
+    });
     missing = compileWarnings \"missing\" (withBinding (builtins.removeAttrs binding [ \"upstreamResolver\" ]));
     literal = compileWarnings \"literal\" (withBinding (binding // { upstreamResolver = \"resolver-value\"; }));
     invalid = compileWarnings \"invalid\" (withBinding (binding // {
@@ -125,7 +128,13 @@ seeded="$(${NIX_BIN:-nix} eval --impure --json --expr "
 ")"
 
 jq -e '
-  ([.missing[].code] | index("DNS_CORE_BINDING_MISSING")) != null
+  ([.noBindings[].code] | index("DNS_CORE_BINDING_MISSING")) != null
+  and (.noBindings | length) == 1
+  and .noBindings[0].requester == "unbound-requester"
+  and .noBindings[0].resolverService == "core-dns"
+  and .noBindings[0].resolverNode == "core-primary"
+  and .noBindings[0].context == "named-core-binding"
+  and ([.missing[].code] | index("DNS_CORE_BINDING_MISSING")) != null
   and ([.literal[].code] | index("DNS_CORE_BINDING_LITERAL")) != null
   and ([.invalid[].code] | index("DNS_CORE_BINDING_INVALID")) != null
   and ([.ambiguous[].code] | index("DNS_CORE_BINDING_AMBIGUOUS")) != null
@@ -141,8 +150,8 @@ if ! jq -e '[.[][] | .. | strings | select(
   test("(^|[^0-9])([0-9]{1,3}\\.){3}[0-9]{1,3}([^0-9]|$)")
   or test("^([0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f]{0,4}(/[0-9]+)?$")
 )] == []' <<<"$seeded" >/dev/null; then
-  echo "FAIL: seeded DNS warnings leaked address material" >&2
-  exit 1
+	echo "FAIL: seeded DNS warnings leaked address material" >&2
+	exit 1
 fi
 
 echo "PASS: FS-525 seeded warning profiles are deterministic, privacy-safe, and fail closed"

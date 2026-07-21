@@ -34,7 +34,14 @@ let
       literal =
         (upstream != null && !upstreamIsAttrs)
         || containsLiteralFields upstream
-        || (upstreamIsAttrs && builtins.elem upstreamKind [ "address" "host" "literal" ]);
+        || (
+          upstreamIsAttrs
+          && builtins.elem upstreamKind [
+            "address"
+            "host"
+            "literal"
+          ]
+        );
       missing = upstream == null;
       ambiguous = builtins.length candidates > 1;
       invalid =
@@ -52,7 +59,13 @@ let
           sortedUnique binding.allowedAddressFamilies
         else
           [ ];
-      invalidFamilies = lib.filter (family: !builtins.elem family [ "ipv4" "ipv6" ]) families;
+      invalidFamilies = lib.filter (
+        family:
+        !builtins.elem family [
+          "ipv4"
+          "ipv6"
+        ]
+      ) families;
       egress = binding.egressSurface or null;
       egressUplinks =
         if builtins.isAttrs egress && builtins.isList (egress.uplinks or null) then
@@ -60,7 +73,10 @@ let
         else
           [ ];
       selectedCoreUplinks =
-        if selectedNode == null then [ ] else map (uplink: uplink.name) (coreUplinks.${selectedNode} or [ ]);
+        if selectedNode == null then
+          [ ]
+        else
+          map (uplink: uplink.name) (coreUplinks.${selectedNode} or [ ]);
       missingEgress = egressUplinks == [ ];
       ambiguousEgress = builtins.length egressUplinks > 1;
       invalidEgress = lib.filter (uplink: !builtins.elem uplink selectedCoreUplinks) egressUplinks;
@@ -92,15 +108,16 @@ let
           resolverNode = requestedNode;
           candidateIds = candidateIds;
         })
-        ++ map
-          (family: warning {
+        ++ map (
+          family:
+          warning {
             code = "DNS_CORE_FAMILY_INCOMPLETE";
             inherit requester family;
             resolverService = serviceName;
             resolverNode = selectedNode;
             candidateIds = candidateIds;
-          })
-          invalidFamilies
+          }
+        ) invalidFamilies
         ++ lib.optional missingEgress (warning {
           code = "DNS_EGRESS_SELECTION_MISSING";
           inherit requester;
@@ -138,7 +155,14 @@ let
           candidateIds = candidateIds;
           context = "direct-public-fallback";
         });
-      active = warnings == [ ] && families == [ "ipv4" "ipv6" ] && invalidFamilies == [ ];
+      active =
+        warnings == [ ]
+        &&
+          families == [
+            "ipv4"
+            "ipv6"
+          ]
+        && invalidFamilies == [ ];
       normalized = {
         requesterScope = binding.requesterScope;
         advertisedResolver = binding.advertisedResolver or binding.requesterScope;
@@ -158,12 +182,29 @@ let
         directPublicFallback = false;
       };
     in
-    { inherit warnings active normalized; };
+    {
+      inherit warnings active normalized;
+    };
 
   evaluations = map evaluate raw;
+  missingBindingWarnings =
+    if raw != [ ] || services.normalized == [ ] then
+      [ ]
+    else
+      map (
+        service:
+        warning {
+          code = "DNS_CORE_BINDING_MISSING";
+          requester = "unbound-requester";
+          resolverService = service.name;
+          resolverNode = service.providerNode;
+          candidateIds = map candidateId services.raw;
+          context = "named-core-binding";
+        }
+      ) services.normalized;
 in
 {
-  warnings = lib.concatMap (entry: entry.warnings) evaluations;
+  warnings = missingBindingWarnings ++ lib.concatMap (entry: entry.warnings) evaluations;
   normalized = sortRecords (
     map (entry: entry.normalized) (lib.filter (entry: entry.active) evaluations)
   );

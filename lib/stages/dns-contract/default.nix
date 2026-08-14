@@ -9,10 +9,13 @@ let
     else
       { };
   localRaw =
-    if builtins.isAttrs (declared.localDnsSharingIntent or null) then
-      declared.localDnsSharingIntent
+    if builtins.isList (declared.localDnsSharingIntents or null) then
+      declared.localDnsSharingIntents
+    else if builtins.isAttrs (declared.localDnsSharingIntent or null) then
+      [ declared.localDnsSharingIntent ]
     else
-      null;
+      [ ];
+  hasPluralLocalSharing = builtins.isList (declared.localDnsSharingIntents or null);
   nodeNames = lib.sort builtins.lessThan (builtins.attrNames nodes);
   coreNames = lib.filter (name: (nodes.${name}.role or null) == "core") nodeNames;
 
@@ -32,12 +35,12 @@ let
       services
       ;
   };
-  localSharing = import ./local-sharing.nix {
+  localSharingModule = import ./local-sharing.nix {
     inherit lib localRaw helpers;
   };
 
   allWarnings = helpers.sortRecords (
-    services.warnings ++ bindings.warnings ++ localSharing.warnings
+    services.warnings ++ bindings.warnings ++ localSharingModule.warnings
   );
   fatalWarnings = lib.filter (entry: entry.code != "DNS_CORE_UPSTREAM_HARDCODED") allWarnings;
   recursiveRelations =
@@ -62,6 +65,14 @@ let
           providerRole = "core";
         })
         services.normalized;
+  localSharingRelations = localSharingModule.normalized;
+  legacyLocalSharing =
+    if hasPluralLocalSharing then
+      null
+    else if localRaw == [ ] || localSharingRelations == [ ] then
+      null
+    else
+      builtins.head localSharingRelations;
 in
 {
   schemaVersion = 1;
@@ -70,7 +81,8 @@ in
     relations = recursiveRelations;
     bindings = bindings.normalized;
   };
-  localSharing = localSharing.normalized;
+  localSharing = legacyLocalSharing;
+  inherit localSharingRelations;
   warnings = allWarnings;
   communicationContract = {
     services = communicationServices;

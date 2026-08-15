@@ -5,10 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/0182a361324364ae3f436a63005877674cf45efb";
     nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
 
-    network-labs = {
-      url = "github:esp0xdeadbeef/network-labs";
-      flake = false;
-    };
+    network-labs.url = "github:esp0xdeadbeef/network-labs";
   };
 
   outputs =

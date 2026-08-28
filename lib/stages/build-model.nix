@@ -81,6 +81,13 @@ let
       );
 
   coreUplinks = buildCoreUplinks siteKey nodes coreNodes;
+  normalizedTopologyNodes = lib.mapAttrs (
+    nodeName: node:
+    node
+    // {
+      uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
+    }
+  ) nodes;
   uplinkNames = lib.sort builtins.lessThan (
     lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
   );
@@ -152,6 +159,10 @@ let
     prefixAuthority = declared.prefixAuthority or { };
     transit = semantic.transit or { };
     providerHandoffs = semantic.providerHandoffs or [ ];
+    topology = {
+      nodes = normalizedTopologyNodes;
+      links = topo.links or [ ];
+    };
     inherit dns;
   };
 

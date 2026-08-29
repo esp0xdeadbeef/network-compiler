@@ -112,6 +112,22 @@ let
 
   _uniqTrafficTypes = assertUnique "traffic type name" trafficTypeNames;
   _uniqServices = assertUnique "service name" serviceNames;
+  bgpBoundaries = lib.concatMap (
+    nodeName:
+    lib.concatMap (
+      uplink:
+      if ((uplink.egress or { }).mode or "static") == "bgp" then [ "${nodeName}.${uplink.name}" ] else [ ]
+    ) (builtins.attrValues (normalizedTopologyNodes.${nodeName}.uplinks or { }))
+  ) (builtins.attrNames normalizedTopologyNodes);
+  _bgpTrafficTypeRequired =
+    if bgpBoundaries == [ ] then
+      true
+    else if
+      builtins.any (t: (t.name or null) == "bgp") (communicationContractDeclared.trafficTypes or [ ])
+    then
+      true
+    else
+      throw "intent communicationContract.trafficTypes must declare a 'bgp' traffic type (tcp/179) when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
   relations0 = communicationContractDeclared.relations or [ ];
   _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic nodes relations0;
 
@@ -179,6 +195,7 @@ let
       _topoValid
       _uniqTrafficTypes
       _uniqServices
+      _bgpTrafficTypeRequired
       _serviceProvidersLocal
       _uniqTenants
       _uniqRelationIds

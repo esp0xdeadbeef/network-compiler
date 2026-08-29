@@ -52,19 +52,26 @@ let
     else if !builtins.isAttrs e then
       throw "intent topology uplink '${uplinkName}' egress must be an attribute set"
     else
-      e
-      // {
-        ipv4 =
-          if builtins.isAttrs (e.ipv4 or null) then
-            e.ipv4 // { translation = normalizeTranslation uplinkName "ipv4" (e.ipv4.translation or null); }
-          else
-            { };
-        ipv6 =
-          if builtins.isAttrs (e.ipv6 or null) then
-            e.ipv6 // { translation = normalizeTranslation uplinkName "ipv6" (e.ipv6.translation or null); }
-          else
-            { };
-      };
+      let
+        mode = e.mode or "static";
+      in
+      if mode != "static" && mode != "bgp" then
+        throw "intent topology uplink '${uplinkName}' egress.mode '${builtins.toString mode}' is not recognized; expected 'static' or 'bgp'"
+      else
+        e
+        // {
+          inherit mode;
+          ipv4 =
+            if builtins.isAttrs (e.ipv4 or null) then
+              e.ipv4 // { translation = normalizeTranslation uplinkName "ipv4" (e.ipv4.translation or null); }
+            else
+              { };
+          ipv6 =
+            if builtins.isAttrs (e.ipv6 or null) then
+              e.ipv6 // { translation = normalizeTranslation uplinkName "ipv6" (e.ipv6.translation or null); }
+            else
+              { };
+        };
 
   normalizeUplink =
     uplinkName: v:

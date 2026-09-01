@@ -175,6 +175,7 @@ let
     prefixAuthority = declared.prefixAuthority or { };
     transit = semantic.transit or { };
     providerHandoffs = semantic.providerHandoffs or [ ];
+    hostManagement = declared.hostManagement or null;
     topology = {
       nodes = normalizedTopologyNodes;
       links = topo.links or [ ];

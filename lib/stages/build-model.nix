@@ -17,6 +17,7 @@ let
   buildCompiledServices = import ./compiled-services.nix { inherit lib; };
   buildIsolationDecisions = import ./isolation-decisions.nix { inherit lib; };
   buildAccessSpaceDiscovery = import ./access-space-discovery { inherit lib; };
+  modelOutput = import ./build-model-output.nix { inherit lib; };
   sourceAudit = import ./source-audit.nix { inherit lib; };
   buildDnsContract = import ./dns-contract { inherit lib; };
   buildCoreUplinks = import ./core-uplinks.nix {
@@ -116,18 +117,13 @@ let
     nodeName:
     lib.concatMap (
       uplink:
-      if ((uplink.egress or { }).mode or "static") == "bgp" then [ "${nodeName}.${uplink.name}" ] else [ ]
+      lib.optional (((uplink.egress or { }).mode or "static") == "bgp") "${nodeName}.${uplink.name}"
     ) (builtins.attrValues (normalizedTopologyNodes.${nodeName}.uplinks or { }))
   ) (builtins.attrNames normalizedTopologyNodes);
   _bgpTrafficTypeRequired =
-    if bgpBoundaries == [ ] then
-      true
-    else if
-      builtins.any (t: (t.name or null) == "bgp") (communicationContractDeclared.trafficTypes or [ ])
-    then
-      true
-    else
-      throw "intent communicationContract.trafficTypes must declare a 'bgp' traffic type (tcp/179) when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
+    bgpBoundaries == [ ]
+    || builtins.any (t: (t.name or null) == "bgp") (communicationContractDeclared.trafficTypes or [ ])
+    || throw "intent communicationContract.trafficTypes must declare a 'bgp' traffic type (tcp/179) when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
   relations0 = communicationContractDeclared.relations or [ ];
   _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic nodes relations0;
 
@@ -160,38 +156,32 @@ let
   accessSpaceDiscovery =
     buildAccessSpaceDiscovery siteKey serviceIndex communicationContractDeclared
       (declared.profileManifest or null);
-  model0 = {
-    tenants = tenants;
-    services = compiledServices;
-    consumedInterfaces = isolationModel.consumedInterfaces;
-    isolationDecisions = isolationModel.isolationDecisions;
-    accessSpaceDiscovery = accessSpaceDiscovery;
-    ipv6 = semantic.ipv6 or { };
-    relations = normalizedRelations;
-    overlayAttachments = overlayAttachments;
-    overlayAddressPools = overlayAddressPools;
-    trafficPaths = trafficPaths;
-    hostNatIngress = topo.hostNatIngress or { };
-    prefixAuthority = declared.prefixAuthority or { };
-    transit = semantic.transit or { };
-    providerHandoffs = semantic.providerHandoffs or [ ];
-    hostManagement = declared.hostManagement or null;
-    topology = {
-      nodes = normalizedTopologyNodes;
-      links = topo.links or [ ];
-    };
-    inherit dns;
-  };
-
-  model = sourceAudit.attach siteKey model0;
-  _platformIndependentOutput = platformIndependence.validateOutput siteKey model;
-  _forced = builtins.deepSeq {
+in
+modelOutput.build {
+  inherit
+    sourceAudit
+    siteKey
+    platformIndependence
+    declared
+    semantic
+    topo
+    tenants
+    compiledServices
+    isolationModel
+    accessSpaceDiscovery
+    normalizedRelations
+    overlayAttachments
+    overlayAddressPools
+    trafficPaths
+    normalizedTopologyNodes
+    dns
+    ;
+  validations = {
     inherit
       _hasCommunicationContract
       _noLegacyExternalPolicy
       _intentSourceBoundary
       _platformIndependentIntent
-      _platformIndependentOutput
       _addrSafe
       _topoValid
       _uniqTrafficTypes
@@ -204,17 +194,5 @@ let
       _hasExternalAllow
       _overlayModelExplicit
       ;
-    tenants = tenants;
-    services = compiledServices;
-    accessSpaceDiscovery = accessSpaceDiscovery;
-    ipv6 = semantic.ipv6 or { };
-    relations = normalizedRelations;
-    overlayAttachments = overlayAttachments;
-    overlayAddressPools = overlayAddressPools;
-    trafficPaths = trafficPaths;
-    hostNatIngress = topo.hostNatIngress or { };
-    sourceAudit = model.sourceAudit;
-    inherit dns;
-  } true;
-in
-builtins.seq _forced model
+  };
+}

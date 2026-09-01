@@ -45,6 +45,27 @@ let
           translatedPrefixes = normalizeTranslatedPrefixes t;
         };
 
+  normalizeBgp =
+    uplinkName: b:
+    if b == null then
+      { }
+    else if !builtins.isAttrs b then
+      throw "intent topology uplink '${uplinkName}' egress.bgp must be an attribute set"
+    else
+      let
+        asn = b.asn or null;
+        topology = b.topology or "policy-rr";
+      in
+      if !builtins.isInt asn then
+        throw "intent topology uplink '${uplinkName}' egress.bgp.asn must be an integer when egress.mode = \"bgp\""
+      else if topology != "policy-rr" then
+        throw "intent topology uplink '${uplinkName}' egress.bgp.topology '${builtins.toString topology}' is not recognized; expected 'policy-rr'"
+      else
+        b
+        // {
+          inherit asn topology;
+        };
+
   normalizeEgress =
     uplinkName: e:
     if e == null then
@@ -57,10 +78,13 @@ let
       in
       if mode != "static" && mode != "bgp" then
         throw "intent topology uplink '${uplinkName}' egress.mode '${builtins.toString mode}' is not recognized; expected 'static' or 'bgp'"
+      else if mode == "bgp" && !builtins.isAttrs (e.bgp or null) then
+        throw "intent topology uplink '${uplinkName}' egress.mode = \"bgp\" requires egress.bgp = { asn = <int>; topology = \"policy-rr\"; }"
       else
         e
         // {
           inherit mode;
+          bgp = normalizeBgp uplinkName (e.bgp or null);
           ipv4 =
             if builtins.isAttrs (e.ipv4 or null) then
               e.ipv4 // { translation = normalizeTranslation uplinkName "ipv4" (e.ipv4.translation or null); }

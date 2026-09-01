@@ -10,7 +10,7 @@ let
     splitSiteKey = splitSiteKey;
   };
 
-  buildModel = import ./stages/build-model.nix { inherit lib; };
+  buildModel = import ./stages/build-model { inherit lib; };
   compileSite = import ./stages/compile-site.nix { inherit lib normalizeSite buildModel; };
 
   canonicalize = import ./canonicalize.nix { inherit lib; };

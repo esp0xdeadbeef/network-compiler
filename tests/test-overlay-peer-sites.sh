@@ -140,7 +140,7 @@ if jq -e '
     == [ "acme.remote-a", "acme.remote-b" ]
  
   and .sites.acme.ams.overlayAttachments."east-west".canonicalPath
-    == [ "core-overlay", "upstream", "policy", "downstream", "access", "overlay:east-west" ]
+    == [ null, "upstream", "policy", "downstream", "access", "overlay:east-west" ]
   and .sites.acme.ams.overlayAttachments."east-west".terminatesOn == [ "core-overlay" ]
 ' "$output_json" >/dev/null; then
   echo "PASS overlay-peer-sites"

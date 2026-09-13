@@ -32,6 +32,8 @@ let
 
   derivedAt = fieldClasses.classifyDerived;
 
+  inventoryAt = fieldClasses.classifyInventory;
+
   fail =
     siteKey: path: code: message: hints:
     util.throwError {
@@ -74,6 +76,16 @@ let
             [
               "Remove '${d.field}'; it is computed by ${d.owningStep} from ${d.derivedFrom}."
               "A derived path or stage list fails closed because it can bypass the canonical staged fabric."
+            ]
+        else if inventoryAt childPath != null then
+          let
+            d = inventoryAt childPath;
+          in
+          fail siteKey childPath "E_INTENT_SOURCE_BOUNDARY_INVENTORY_AS_INPUT"
+            "intent field '${pathString childPath}' (${d.field}) is a realization/inventory fact, not intent"
+            [
+              "Move '${d.field}' to inventory; it is owned by ${d.owningStep}."
+              "Intent decides behavior; inventory binds realization facts (meaning vs mechanics)."
             ]
         else
           validateValue siteKey childPath child

@@ -58,6 +58,17 @@ let
     }
   ];
 
+  inventoryFields = [
+    {
+      id = "mtu-value";
+
+      match = path: builtins.elem "mtu" path;
+      field = "mtu";
+      owningStep = "renderer (inventory link facts)";
+      fault = "E_INTENT_SOURCE_BOUNDARY_INVENTORY_AS_INPUT";
+    }
+  ];
+
   classifyDerived =
     path:
     let
@@ -65,7 +76,19 @@ let
     in
     if matches == [ ] then null else builtins.head matches;
 
+  classifyInventory =
+    path:
+    let
+      matches = builtins.filter (f: f.match path) inventoryFields;
+    in
+    if matches == [ ] then null else builtins.head matches;
+
 in
 {
-  inherit derivedFields classifyDerived;
+  inherit
+    derivedFields
+    inventoryFields
+    classifyDerived
+    classifyInventory
+    ;
 }

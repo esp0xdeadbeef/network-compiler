@@ -4,7 +4,7 @@ let
   util = import ../correctness/util.nix { inherit lib; };
   selectors = import ./traffic-paths/selectors.nix {
     inherit lib;
-  } siteKey nodes coreUplinks serviceIndex hosts;
+  } siteKey nodes coreUplinks serviceIndex hosts { inherit overlays; };
   overlayUnderlay = import ./traffic-paths/overlay-underlay.nix { inherit lib; };
   buildCorePairs = import ./traffic-paths/core-pairs.nix { inherit lib; };
   wildcardDestinations = import ./traffic-paths/wildcard-destinations.nix { inherit lib; } {
@@ -17,7 +17,7 @@ let
     inherit lib serviceIndex overlayUnderlayAccessFor;
   };
   inherit (stages) endpointStage pathStagesFor;
-  # Returns overlay metadata for a relation that involves an overlay, or null.
+
   overlaysByName = builtins.listToAttrs (
     map (overlay: {
       name = overlay.name;

@@ -5,6 +5,9 @@
 }:
 
 siteKey: nodes: coreNodes:
+{
+  overlayEndpointNodes ? [ ],
+}:
 
 builtins.listToAttrs (
   map (name: {
@@ -12,7 +15,9 @@ builtins.listToAttrs (
     value =
       let
         uplinks = normalizeUplinksForNode.forNodeList siteKey name (nodes.${name}.uplinks or null);
-        required = ensure (builtins.length uplinks > 0) {
+
+        isOverlayEndpoint = builtins.elem name overlayEndpointNodes;
+        required = ensure (builtins.length uplinks > 0 || isOverlayEndpoint) {
           code = "E_CORE_UPLINKS_REQUIRED";
           site = siteKey;
           path = [
@@ -21,9 +26,9 @@ builtins.listToAttrs (
             name
             "uplinks"
           ];
-          message = "core node '${name}' must define at least one uplink";
+          message = "core node '${name}' must define at least one uplink or be a modeled overlay/remote-egress endpoint";
           hints = [
-            "Set topology.nodes.${name}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
+            "Set topology.nodes.${name}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }, or model an overlay whose terminateOn is '${name}'."
           ];
         };
       in

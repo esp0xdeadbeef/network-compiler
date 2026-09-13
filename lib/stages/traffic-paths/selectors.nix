@@ -1,6 +1,9 @@
 { lib }:
 
 siteKey: nodes: coreUplinks: serviceIndex: hosts:
+{
+  overlays ? [ ],
+}:
 
 let
   util = import ../../correctness/util.nix { inherit lib; };
@@ -50,8 +53,35 @@ let
       matches = lib.filter (
         core: builtins.any (name: builtins.elem name (uplinkNamesForCore core)) requested
       ) (nodesByRole "core");
+
+      overlayTerminators = lib.unique (
+        builtins.concatLists (
+          map (
+            o:
+            let
+              t = o.terminateOn or null;
+            in
+            if (o.name or null) != null && builtins.elem (o.name or null) requested then
+              (
+                if builtins.isList t then
+                  t
+                else if t == null then
+                  [ ]
+                else
+                  [ t ]
+              )
+            else
+              [ ]
+          ) overlays
+        )
+      );
     in
-    if matches == [ ] then [ (firstRole "core") ] else matches;
+    if overlayTerminators != [ ] then
+      overlayTerminators
+    else if matches == [ ] then
+      [ (firstRole "core") ]
+    else
+      matches;
 
   coresForEndpoint =
     endpoint:

@@ -11,6 +11,16 @@ trap 'rm -f "${input_file}" "${out}"' EXIT
 cat >"${input_file}" <<'EOF'
 {
   espbranch.site-b = {
+    pools = {
+      p2p = {
+        ipv4 = "10.60.0.0/24";
+        ipv6 = "fd42:dead:feed:60::/118";
+      };
+      loopback = {
+        ipv4 = "10.61.0.0/24";
+        ipv6 = "fd42:dead:feed:61::/118";
+      };
+    };
     ownership.prefixes = [
       {
         kind = "tenant";

@@ -7,6 +7,7 @@ let
 
 in
 {
+
   resolve =
     {
       site,
@@ -54,4 +55,30 @@ in
       derived
     else
       null;
+
+  resolveSearchDomains =
+    {
+      site,
+      tenant,
+    }:
+    let
+      zone = tenant.zone or null;
+      dnsZones = site.dnsZones or { };
+      own = import ./dns-domain.nix { inherit lib; };
+      ownDomain = own.resolve { inherit site tenant; };
+      shared =
+        if zone != null && dnsZones ? ${zone} && (dnsZones.${zone}.suffix or null) != null then
+          normalise dnsZones.${zone}.suffix
+        else
+          null;
+    in
+    if ownDomain == null then
+      [ ]
+    else if shared != null && shared != ownDomain then
+      [
+        ownDomain
+        shared
+      ]
+    else
+      [ ownDomain ];
 }

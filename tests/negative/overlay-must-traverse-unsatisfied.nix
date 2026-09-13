@@ -14,24 +14,22 @@
     ownership.prefixes = [
       {
         kind = "tenant";
-        name = "client";
-        ipv4 = "10.20.20.0/24";
-        ipv6 = "fd42:dead:beef:20::/64";
+        name = "mgmt";
+        ipv4 = "10.20.10.0/24";
+        ipv6 = "fd42:dead:beef:10::/64";
       }
     ];
-
-    mustTraverse = [ "policy" ];
 
     communicationContract = {
       trafficTypes = [ ];
       services = [ ];
       relations = [
         {
-          id = "allow-client-to-uplink0";
+          id = "allow-mgmt-to-uplink0";
           priority = 100;
           from = {
             kind = "tenant";
-            name = "client";
+            name = "mgmt";
           };
           to = {
             kind = "external";
@@ -43,50 +41,66 @@
       ];
     };
 
+    transport.overlays = [
+      {
+        name = "east-west";
+        peerSite = "default.other";
+        terminateOn = "s-router-core";
+        mustTraverse = [ "s-router-upstream-selector" ];
+      }
+    ];
+
     topology = {
       nodes = {
-        core = {
+        s-router-core = {
           role = "core";
-          uplinks.uplink0 = {
-            ipv4 = [ "0.0.0.0/0" ];
-            ipv6 = [ "::/0" ];
+          uplinks = {
+            uplink0 = {
+              ipv4 = [ "0.0.0.0/0" ];
+              ipv6 = [ "::/0" ];
+            };
           };
         };
-        upstream = {
+
+        s-router-upstream-selector = {
           role = "upstream-selector";
         };
-        policy = {
+
+        s-router-policy = {
           role = "policy";
         };
-        downstream = {
+
+        s-router-downstream-selector = {
           role = "downstream-selector";
         };
-        access = {
+
+        s-router-access = {
           role = "access";
           attachments = [
             {
               kind = "tenant";
-              name = "client";
+              name = "mgmt";
             }
           ];
         };
       };
+
       links = [
         [
-          "core"
-          "upstream"
+          "s-router-core"
+          "s-router-upstream-selector"
         ]
         [
-          "upstream"
-          "policy"
+          "s-router-upstream-selector"
+          "s-router-policy"
         ]
         [
-          "policy"
-          "downstream"
+          "s-router-policy"
+          "s-router-downstream-selector"
         ]
         [
-          "downstream"
-          "access"
+          "s-router-downstream-selector"
+          "s-router-access"
         ]
       ];
     };

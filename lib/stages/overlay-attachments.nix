@@ -98,20 +98,44 @@ let
       policy = firstRole "policy";
       downstream = firstRole "downstream-selector";
       ingressCore = nonOverlayCoreFor overlay;
+
+      canonicalPath = [
+        ingressCore
+        upstream
+        policy
+        downstream
+        accessNode
+        "overlay:${overlay.name}"
+      ];
+      mustTraverse = overlay.mustTraverse or [ ];
+      unsupportedMustTraverse = lib.filter (s: !(builtins.elem s canonicalPath)) mustTraverse;
+      _mustTraverseSatisfied =
+        unsupportedMustTraverse == [ ]
+        || throwError {
+          code = "E_OVERLAY_MUST_TRAVERSE_UNSATISFIED";
+          site = siteKey;
+          path = [
+            "transport"
+            "overlays"
+            overlay.name
+            "mustTraverse"
+          ];
+          message = "overlay '${overlay.name}' mustTraverse names stage(s) not present in the derived canonical path: ${lib.concatStringsSep ", " unsupportedMustTraverse}";
+          hints = [
+            "mustTraverse asserts which stages the derived overlay path crosses; it does not author the path."
+            "Remove stages the canonical fabric does not traverse, or model the topology so they are traversed."
+          ];
+        };
     in
     {
       name = overlay.name;
       value = {
         attachAfterStage = "access";
         accessNodes = accessNodes;
-        canonicalPath = [
-          ingressCore
-          upstream
-          policy
-          downstream
-          accessNode
-          "overlay:${overlay.name}"
-        ];
+        inherit
+          canonicalPath
+          mustTraverse
+          ;
         site = siteKey;
         terminatesOn = overlay.terminateOn;
       };

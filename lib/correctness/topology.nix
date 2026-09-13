@@ -21,6 +21,7 @@ let
   validateTopology =
     siteKey: topo: overlays:
     let
+      overlayEndpoints = import ./overlay-endpoints.nix { inherit lib; };
       nodes = topo.nodes or { };
       nodeNames = builtins.attrNames nodes;
       structureSelection = topo.structure or (topo.fabricStructure or null);
@@ -138,22 +139,7 @@ let
         site = siteKey;
       };
 
-      overlayEndpointNodes = lib.unique (
-        builtins.concatLists (
-          map (
-            o:
-            let
-              t = o.terminateOn or null;
-            in
-            if builtins.isList t then
-              t
-            else if t == null then
-              [ ]
-            else
-              [ t ]
-          ) overlays
-        )
-      );
+      overlayEndpointNodes = overlayEndpoints.overlayEndpointNodes overlays;
 
       coreUplinks = builtins.listToAttrs (
         map (n: {

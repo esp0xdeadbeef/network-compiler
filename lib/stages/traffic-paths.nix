@@ -41,9 +41,7 @@ let
       overlayName = if fromOverlayName != null then fromOverlayName else toOverlayName;
       overlay = if overlayName != null then overlaysByName.${overlayName} else null;
       isUnderlayRel =
-        overlayName != null
-        && fromOverlayName != null # underlay traffic originates FROM the overlay external
-        && (relation.trafficType or "any") != "any";
+        overlayName != null && fromOverlayName != null && (relation.trafficType or "any") != "any";
     in
     if overlay == null then
       null

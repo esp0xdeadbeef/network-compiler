@@ -19,7 +19,8 @@ let
     candidateIds = [ (toString ((relation.relation or { }).id or "<missing>")) ];
     disposition = "fail-closed";
   };
-  evaluate = relation:
+  evaluate =
+    relation:
     let
       authority = relation.authority or { };
       requester = relation.requester or { };
@@ -41,28 +42,42 @@ let
         || (provider.action or null) != "refuse_non_local"
         || (lateral.action or null) != "refuse_non_local";
       warnings =
-        lib.optional missingIdentity (warning "DNS_LOCAL_SHARING_BINDING_INCOMPLETE" relation "relationship-identity")
+        lib.optional missingIdentity (
+          warning "DNS_LOCAL_SHARING_BINDING_INCOMPLETE" relation "relationship-identity"
+        )
         ++ lib.optional leaks (warning "DNS_LOCAL_ONLY_AUTHORITY_LEAK" relation "local-only-authority");
     in
-    { inherit relation warnings; active = warnings == [ ]; };
+    {
+      inherit relation warnings;
+      active = warnings == [ ];
+    };
   evaluations = map evaluate localRaw;
-  activeRelations = map (entry: entry.relation) (lib.filter (entry: entry.active) evaluations);
+
+  stripResolverPath =
+    relation:
+    relation
+    // {
+      relation = builtins.removeAttrs (relation.relation or { }) [ "resolverPath" ];
+    };
+  activeRelations = map (entry: stripResolverPath entry.relation) (
+    lib.filter (entry: entry.active) evaluations
+  );
   relationIds = map (relation: (relation.relation or { }).id or "<missing>") activeRelations;
-  duplicateIds = lib.filter
-    (relationId: builtins.length (lib.filter (candidate: candidate == relationId) relationIds) > 1)
-    (lib.unique relationIds);
-  duplicateWarnings = map
-    (relationId: {
-      traceId = "FS-560-HDS-010-SDS-020-SMS-010";
-      code = "DNS_LOCAL_SHARING_RELATION_DUPLICATE";
-      requester = "local-namespace-sharing";
-      resolverService = "local-namespace-sharing";
-      candidateIds = [ relationId ];
-      context = "relation-identity";
-      disposition = "fail-closed";
-    })
-    duplicateIds;
-  warnings = helpers.sortRecords (lib.concatMap (entry: entry.warnings) evaluations ++ duplicateWarnings);
+  duplicateIds = lib.filter (
+    relationId: builtins.length (lib.filter (candidate: candidate == relationId) relationIds) > 1
+  ) (lib.unique relationIds);
+  duplicateWarnings = map (relationId: {
+    traceId = "FS-560-HDS-010-SDS-020-SMS-010";
+    code = "DNS_LOCAL_SHARING_RELATION_DUPLICATE";
+    requester = "local-namespace-sharing";
+    resolverService = "local-namespace-sharing";
+    candidateIds = [ relationId ];
+    context = "relation-identity";
+    disposition = "fail-closed";
+  }) duplicateIds;
+  warnings = helpers.sortRecords (
+    lib.concatMap (entry: entry.warnings) evaluations ++ duplicateWarnings
+  );
 in
 {
   inherit warnings;

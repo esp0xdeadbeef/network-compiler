@@ -32,15 +32,7 @@ let
       fault = "E_INTENT_SOURCE_BOUNDARY_DERIVED_AS_INPUT";
     }
     {
-      id = "overlay-traversal-list";
 
-      match = path: builtins.elem "mustTraverse" path;
-      field = "mustTraverse";
-      owningStep = "overlay-attachments (canonical path)";
-      derivedFrom = "overlay core, roles";
-      fault = "E_INTENT_SOURCE_BOUNDARY_DERIVED_AS_INPUT";
-    }
-    {
       id = "relation-stage-path";
 
       match =

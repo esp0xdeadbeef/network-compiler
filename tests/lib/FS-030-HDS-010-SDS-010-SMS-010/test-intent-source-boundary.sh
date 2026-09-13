@@ -70,7 +70,6 @@ run_positive() {
 run_negative intent-source-boundary-side-channel E_INTENT_SOURCE_BOUNDARY_SIDE_CHANNEL upstreamEmulation
 run_negative intent-source-boundary-realization-technology E_INTENT_SOURCE_BOUNDARY_REALIZATION_TECHNOLOGY hatProviderFixture.technology
 run_negative intent-source-boundary-derived-resolver-path E_INTENT_SOURCE_BOUNDARY_DERIVED_AS_INPUT localDnsSharingIntent.0.relation.resolverPath
-run_negative intent-source-boundary-derived-must-traverse E_INTENT_SOURCE_BOUNDARY_DERIVED_AS_INPUT mustTraverse
 run_positive single-uplink
 
 echo "PASS intent-source-boundary"

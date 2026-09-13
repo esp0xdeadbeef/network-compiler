@@ -27,33 +27,34 @@ let
 
       _uniqNodes = assertUnique "node name" nodeNames;
 
-      _supportedStructure = ensure (
-        builtins.elem structureSelection [
-          null
-          "default"
-          "canonical"
-          "canonical-site-fabric"
-        ]
-      ) {
-        code = "E_TOPO_UNMODELED_ALTERNATE_STRUCTURE";
-        site = siteKey;
-        path = [
-          "topology"
-          "structure"
-        ];
-        message =
-          "unmodeled alternate topology structure requested: "
-          + (
-            if builtins.isString structureSelection then
-              structureSelection
-            else
-              builtins.typeOf structureSelection
-          );
-        hints = [
-          "Omit topology.structure for the default access -> downstream-selector -> policy -> upstream-selector -> core fabric."
-          "Add an explicit modeled structure selection before requesting an alternate fabric shape."
-        ];
-      };
+      _supportedStructure =
+        ensure
+          (builtins.elem structureSelection [
+            null
+            "default"
+            "canonical"
+            "canonical-site-fabric"
+          ])
+          {
+            code = "E_TOPO_UNMODELED_ALTERNATE_STRUCTURE";
+            site = siteKey;
+            path = [
+              "topology"
+              "structure"
+            ];
+            message =
+              "unmodeled alternate topology structure requested: "
+              + (
+                if builtins.isString structureSelection then
+                  structureSelection
+                else
+                  builtins.typeOf structureSelection
+              );
+            hints = [
+              "Omit topology.structure for the default access -> downstream-selector -> policy -> upstream-selector -> core fabric."
+              "Add an explicit modeled structure selection before requesting an alternate fabric shape."
+            ];
+          };
 
       roles = map (n: nodes.${n}.role or null) nodeNames;
       coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") (
@@ -111,25 +112,20 @@ let
       _coreStageAdjacency = validateCoreStageAdjacency siteKey nodes normalizedLinks virtualLinks;
 
       touched = lib.unique (
-        lib.concatMap
-          (pair: [
-            (builtins.elemAt pair 0)
-            (builtins.elemAt pair 1)
-          ])
-          connectivityLinks
+        lib.concatMap (pair: [
+          (builtins.elemAt pair 0)
+          (builtins.elemAt pair 1)
+        ]) connectivityLinks
       );
 
-      _noIsolated = builtins.foldl'
-        (
-          acc: n:
-            acc
-            && ensure (builtins.elem n touched) {
-              code = "E_TOPO_DISCONNECTED";
-              site = siteKey;
-            }
-        )
-        true
-        nodeNames;
+      _noIsolated = builtins.foldl' (
+        acc: n:
+        acc
+        && ensure (builtins.elem n touched) {
+          code = "E_TOPO_DISCONNECTED";
+          site = siteKey;
+        }
+      ) true nodeNames;
 
       neigh = neighborsMap nodeNames connectivityLinks;
 
@@ -142,56 +138,69 @@ let
         site = siteKey;
       };
 
-      coreUplinks = builtins.listToAttrs (
-        map
-          (n: {
-            name = n;
-            value =
-              let
-                us = normalizeUplinks siteKey n (nodes.${n}.uplinks or null);
+      overlayEndpointNodes = lib.unique (
+        builtins.concatLists (
+          map (
+            o:
+            let
+              t = o.terminateOn or null;
+            in
+            if builtins.isList t then
+              t
+            else if t == null then
+              [ ]
+            else
+              [ t ]
+          ) overlays
+        )
+      );
 
-                _required = ensure (builtins.length us > 0) {
-                  code = "E_CORE_UPLINKS_REQUIRED";
-                  site = siteKey;
-                  path = [
-                    "topology"
-                    "nodes"
-                    n
-                    "uplinks"
-                  ];
-                  message = "core node '${n}' must define at least one uplink";
-                  hints = [
-                    "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }."
-                  ];
-                };
-              in
-              if _required then us else us;
-          })
-          coreNodes
+      coreUplinks = builtins.listToAttrs (
+        map (n: {
+          name = n;
+          value =
+            let
+              us = normalizeUplinks siteKey n (nodes.${n}.uplinks or null);
+
+              _required = ensure (builtins.length us > 0 || builtins.elem n overlayEndpointNodes) {
+                code = "E_CORE_UPLINKS_REQUIRED";
+                site = siteKey;
+                path = [
+                  "topology"
+                  "nodes"
+                  n
+                  "uplinks"
+                ];
+                message = "core node '${n}' must define at least one uplink or be a modeled overlay/remote-egress endpoint";
+                hints = [
+                  "Set topology.nodes.${n}.uplinks = { uplink0 = { ipv4 = [\"0.0.0.0/0\"]; ipv6 = [\"::/0\"]; }; }, or model an overlay whose terminateOn is '${n}'."
+                ];
+              };
+            in
+            if _required then us else us;
+        }) coreNodes
       );
 
       allUplinkNames = lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes;
       _uniqSiteUplinks = assertUniqueSiteUplinkNames siteKey allUplinkNames;
 
-      _force = builtins.deepSeq
-        {
-          inherit
-            _uniqNodes
-            _supportedStructure
-            _hasCore
-            _hasPolicy
-            _hasAccess
-            _hasDownstreamSelector
-            _hasUpstreamSelector
-            _canonicalStageLinks
-            _coreStageAdjacency
-            _noIsolated
-            _connected
-            coreUplinks
-            _uniqSiteUplinks
-            ;
-        }
-        true;
+      _force = builtins.deepSeq {
+        inherit
+          _uniqNodes
+          _supportedStructure
+          _hasCore
+          _hasPolicy
+          _hasAccess
+          _hasDownstreamSelector
+          _hasUpstreamSelector
+          _canonicalStageLinks
+          _coreStageAdjacency
+          _noIsolated
+          _connected
+          coreUplinks
+          _uniqSiteUplinks
+          ;
+      } true;
     in
     builtins.seq _force true;
 in

@@ -18,6 +18,23 @@
       coreNodes = lib.filter (n: (nodes.${n}.role or null) == "core") nodeNamesSorted;
       overlays = normalizeTransportOverlays siteKey topo declared;
       overlayNames = lib.sort builtins.lessThan (lib.unique (map (o: o.name) overlays));
+
+      overlayEndpointNodes = lib.unique (
+        builtins.concatLists (
+          map (
+            o:
+            let
+              t = o.terminateOn or null;
+            in
+            if builtins.isList t then
+              t
+            else if t == null then
+              [ ]
+            else
+              [ t ]
+          ) overlays
+        )
+      );
       overlayPool =
         if builtins.isAttrs ((declared.pools or { }).overlay or null) then
           (declared.pools or { }).overlay
@@ -36,7 +53,7 @@
             }) overlayNames
           );
 
-      coreUplinks = buildCoreUplinks siteKey nodes coreNodes;
+      coreUplinks = buildCoreUplinks siteKey nodes coreNodes { inherit overlayEndpointNodes; };
       normalizedTopologyNodes = lib.mapAttrs (
         nodeName: node:
         node

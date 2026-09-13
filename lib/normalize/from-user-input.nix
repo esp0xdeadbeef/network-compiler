@@ -46,39 +46,40 @@ let
 
   isTenantPrefix = p: builtins.isAttrs p && (p.kind or null) == "tenant" && (p.name or null) != null;
 
-  tenants = map
-    (
-      p:
-      {
-        name = p.name;
-        ipv4 = p.ipv4 or null;
-        ipv6 = p.ipv6 or null;
-      }
-      // lib.optionalAttrs (p ? ra6Prefixes) {
-        ra6Prefixes = p.ra6Prefixes;
-      }
-      // lib.optionalAttrs (p ? routedPrefixes) {
-        routedPrefixes = p.routedPrefixes;
-      }
-    )
-    (lib.filter isTenantPrefix prefixes);
+  dnsDomainFor = (import ./dns-domain.nix { inherit lib; }).resolve;
+
+  tenants = map (
+    p:
+    {
+      name = p.name;
+      ipv4 = p.ipv4 or null;
+      ipv6 = p.ipv6 or null;
+      dnsDomain = dnsDomainFor {
+        inherit site;
+        tenant = p;
+      };
+    }
+    // lib.optionalAttrs (p ? ra6Prefixes) {
+      ra6Prefixes = p.ra6Prefixes;
+    }
+    // lib.optionalAttrs (p ? routedPrefixes) {
+      routedPrefixes = p.routedPrefixes;
+    }
+  ) (lib.filter isTenantPrefix prefixes);
 
   isHostEndpoint = e: builtins.isAttrs e && (e.kind or null) == "host" && (e.name or null) != null;
-  isServiceProviderEndpoint = e: builtins.isAttrs e && (e.kind or null) == "service" && (e.name or null) != null;
+  isServiceProviderEndpoint =
+    e: builtins.isAttrs e && (e.kind or null) == "service" && (e.name or null) != null;
 
-  hosts = map
-    (e: {
-      name = e.name;
-      tenant = e.tenant or null;
-    })
-    (lib.filter isHostEndpoint endpoints);
+  hosts = map (e: {
+    name = e.name;
+    tenant = e.tenant or null;
+  }) (lib.filter isHostEndpoint endpoints);
 
-  serviceProviderEndpoints = map
-    (e: {
-      name = e.name;
-      tenant = e.tenant or null;
-    })
-    (lib.filter isServiceProviderEndpoint endpoints);
+  serviceProviderEndpoints = map (e: {
+    name = e.name;
+    tenant = e.tenant or null;
+  }) (lib.filter isServiceProviderEndpoint endpoints);
 
   segments = {
     tenants = tenants;
@@ -87,29 +88,24 @@ let
 
   segRef = seg: attachmentRef { inherit site util seg; };
 
-  attachments = lib.concatMap
-    (
-      unit:
-      map
-        (a: {
-          inherit unit;
-          segment = segRef a;
-        })
-        (units.${unit}.attachments or [ ])
-    )
-    accessUnits;
+  attachments = lib.concatMap (
+    unit:
+    map (a: {
+      inherit unit;
+      segment = segRef a;
+    }) (units.${unit}.attachments or [ ])
+  ) accessUnits;
 
-  # Detect provider handoff links: access<->core with shared tenant attachment.
-  # These are virtual adapter links (PPPoE, WireGuard, Nebula) that bypass
-  # the canonical fabric chain and must not appear in transit ordering.
-  tenantAttachmentNames = node:
+  tenantAttachmentNames =
+    node:
     lib.filter (t: t != null) (
-      map (attachment:
-        if (attachment.kind or null) == "tenant" then attachment.name or null else null
-      ) (node.attachments or [ ])
+      map (attachment: if (attachment.kind or null) == "tenant" then attachment.name or null else null) (
+        node.attachments or [ ]
+      )
     );
 
-  isProviderHandoffLink = pair:
+  isProviderHandoffLink =
+    pair:
     let
       a = builtins.elemAt pair 0;
       b = builtins.elemAt pair 1;
@@ -122,7 +118,7 @@ let
     (roleA == "access" && roleB == "core" || roleA == "core" && roleB == "access")
     && builtins.length shared > 0;
 
-  transitLinks = lib.filter (pair: !isProviderHandoffLink pair) (topo.links or []);
+  transitLinks = lib.filter (pair: !isProviderHandoffLink pair) (topo.links or [ ]);
   providerHandoffLinks = lib.filter isProviderHandoffLink (topo.links or [ ]);
 
   pools = site.pools or { };

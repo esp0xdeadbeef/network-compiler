@@ -171,7 +171,7 @@ in
           name = serviceName;
           node = selectedNode;
         };
-        resolverPath = binding.resolverPath or [ ];
+
         egressSurface = {
           kind = "external";
           uplinks = egressUplinks;

@@ -47,6 +47,7 @@ let
   isTenantPrefix = p: builtins.isAttrs p && (p.kind or null) == "tenant" && (p.name or null) != null;
 
   dnsDomainFor = (import ./dns-domain.nix { inherit lib; }).resolve;
+  searchDomainsFor = (import ./dns-domain.nix { inherit lib; }).resolveSearchDomains;
 
   tenants = map (
     p:
@@ -55,6 +56,10 @@ let
       ipv4 = p.ipv4 or null;
       ipv6 = p.ipv6 or null;
       dnsDomain = dnsDomainFor {
+        inherit site;
+        tenant = p;
+      };
+      domainSearch = searchDomainsFor {
         inherit site;
         tenant = p;
       };

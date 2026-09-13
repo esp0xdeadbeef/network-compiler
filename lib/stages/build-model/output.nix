@@ -23,6 +23,15 @@
       validations,
     }:
     let
+      poolCapacity = import ../../allocators/pool-capacity.nix { inherit lib; };
+      semanticAddressPools = semantic.addressPools or { };
+
+      _poolCapacity = poolCapacity.validateSite {
+        siteKey = siteKey;
+        transitLinks = (semantic.transit or { }).links or [ ];
+        nodeCount = builtins.length (builtins.attrNames (topo.nodes or { }));
+        addressPools = semanticAddressPools;
+      };
       model0 = {
         tenants = tenants;
         services = compiledServices;
@@ -33,6 +42,7 @@
         relations = normalizedRelations;
         overlayAttachments = overlayAttachments;
         overlayAddressPools = overlayAddressPools;
+        addressPools = builtins.seq _poolCapacity semanticAddressPools;
         trafficPaths = trafficPaths;
         hostNatIngress = topo.hostNatIngress or { };
         prefixAuthority = declared.prefixAuthority or { };
@@ -58,6 +68,7 @@
           relations = model0.relations;
           overlayAttachments = model0.overlayAttachments;
           overlayAddressPools = model0.overlayAddressPools;
+          addressPools = model0.addressPools;
           trafficPaths = model0.trafficPaths;
           hostNatIngress = model0.hostNatIngress;
           sourceAudit = model.sourceAudit;

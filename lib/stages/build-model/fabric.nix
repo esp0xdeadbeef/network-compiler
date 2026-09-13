@@ -19,22 +19,8 @@
       overlays = normalizeTransportOverlays siteKey topo declared;
       overlayNames = lib.sort builtins.lessThan (lib.unique (map (o: o.name) overlays));
 
-      overlayEndpointNodes = lib.unique (
-        builtins.concatLists (
-          map (
-            o:
-            let
-              t = o.terminateOn or null;
-            in
-            if builtins.isList t then
-              t
-            else if t == null then
-              [ ]
-            else
-              [ t ]
-          ) overlays
-        )
-      );
+      overlayEndpoints = import ../../correctness/overlay-endpoints.nix { inherit lib; };
+      overlayEndpointNodes = overlayEndpoints.overlayEndpointNodes overlays;
       overlayPool =
         if builtins.isAttrs ((declared.pools or { }).overlay or null) then
           (declared.pools or { }).overlay

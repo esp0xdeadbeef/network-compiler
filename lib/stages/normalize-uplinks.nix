@@ -99,14 +99,34 @@ let
 
   normalizeUplink =
     uplinkName: v:
-    v
-    // {
-      name = uplinkName;
+    let
       ipv4 = v.ipv4 or [ ];
       ipv6 = v.ipv6 or [ ];
-      ingressSubject = v.ingressSubject or null;
-      egress = normalizeEgress uplinkName (v.egress or null);
-    };
+
+      defaultV4 = "0.0.0.0/0";
+      defaultV6 = "::/0";
+      nonDefaultV4 = builtins.filter (p: p != defaultV4) ipv4;
+      nonDefaultV6 = builtins.filter (p: p != defaultV6) ipv6;
+      tenantPrefixList = (builtins.length nonDefaultV4 > 1) || (builtins.length nonDefaultV6 > 1);
+    in
+    if tenantPrefixList then
+      throw (
+        "FS-260-HDS-010-SDS-010-SMS-010: uplink '"
+        + uplinkName
+        + "' carries a tenant-prefix list ("
+        + builtins.toString (builtins.length nonDefaultV4)
+        + " IPv4, "
+        + builtins.toString (builtins.length nonDefaultV6)
+        + " IPv6 non-default prefixes). An uplink is a provider/WAN egress surface with one provider prefix or the default route. Express tenant and peer-site reachability as a relation (source scope to a named egress surface), not as an uplink prefix list."
+      )
+    else
+      v
+      // {
+        name = uplinkName;
+        inherit ipv4 ipv6;
+        ingressSubject = v.ingressSubject or null;
+        egress = normalizeEgress uplinkName (v.egress or null);
+      };
 
   forNodeList =
     siteKey: nodeName: u:

@@ -8,6 +8,10 @@
   validateSupersededContract,
 }:
 
+let
+  util = import ../../correctness/util.nix { inherit lib; };
+  inherit (util) throwError;
+in
 {
 
   prepare =
@@ -69,15 +73,35 @@
           target = if owner != null then owner else name;
         in
         if name == null then
-          throw (
-            "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] entries must name a scope "
-            + "(FS-322 Scope Reachability; owning item: FS-322)."
-          )
+          throwError {
+            code = "E_CONTRACT_SELECTS";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+              nodeName
+              "selects"
+            ];
+            message = "selects entries must name a scope (FS-322 Scope Reachability; owning item: FS-322).";
+            spec = "FS-322 Scope Reachability; owning item: FS-322";
+            hints = [ "Give each selects entry a scope string, for example selects = [ \"<exit-scope>\" ]." ];
+          }
         else if !(builtins.hasAttr target nodes) then
-          throw (
-            "E_CONTRACT_UNKNOWN_SELECT: topology.nodes.${nodeName}.selects names '${target}', "
-            + "which is not a modeled scope (FS-322 Scope Reachability; owning item: FS-322)."
-          )
+          throwError {
+            code = "E_CONTRACT_UNKNOWN_SELECT";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+              nodeName
+              "selects"
+            ];
+            message = "topology.nodes.${nodeName}.selects names '${target}', which is not a modeled scope (FS-322 Scope Reachability; owning item: FS-322).";
+            spec = "FS-322 Scope Reachability; owning item: FS-322";
+            hints = [
+              "Declare the scope under topology.nodes.<name>, or name an uplink a modeled scope owns."
+            ];
+          }
         else
           target;
 
@@ -87,10 +111,19 @@
           raw = node.selects or [ ];
         in
         if !(builtins.isList raw) then
-          throw (
-            "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects must be a list "
-            + "(FS-322 Scope Reachability; owning item: FS-322)."
-          )
+          throwError {
+            code = "E_CONTRACT_SELECTS";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+              nodeName
+              "selects"
+            ];
+            message = "topology.nodes.${nodeName}.selects must be a list (FS-322 Scope Reachability; owning item: FS-322).";
+            spec = "FS-322 Scope Reachability; owning item: FS-322";
+            hints = [ "Declare selects as a list of scope names." ];
+          }
         else
           map (
             entry:
@@ -101,10 +134,19 @@
                   if builtins.isList (entry.behaviors or null) then
                     entry.behaviors
                   else
-                    throw (
-                      "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] behaviors must be a list "
-                      + "(FS-481 Routing Behavior Selection)."
-                    )
+                    throwError {
+                      code = "E_CONTRACT_SELECTS";
+                      site = siteKey;
+                      path = [
+                        "topology"
+                        "nodes"
+                        nodeName
+                        "selects"
+                      ];
+                      message = "topology.nodes.${nodeName}.selects[] behaviors must be a list (FS-481 Routing Behavior Selection).";
+                      spec = "FS-481 Routing Behavior Selection";
+                      hints = [ "Declare behaviors as a list of required behavior names." ];
+                    }
                 else
                   [ ];
             in
@@ -124,10 +166,19 @@
         else if builtins.isList raw && builtins.all builtins.isString raw then
           raw
         else
-          throw (
-            "E_CONTRACT_OFFERS: topology.nodes.${nodeName}.offers must be a list of prefix strings "
-            + "(FS-322 Scope Reachability; owning item: FS-322)."
-          );
+          throwError {
+            code = "E_CONTRACT_OFFERS";
+            site = siteKey;
+            path = [
+              "topology"
+              "nodes"
+              nodeName
+              "offers"
+            ];
+            message = "topology.nodes.${nodeName}.offers must be a list of prefix strings (FS-322 Scope Reachability; owning item: FS-322).";
+            spec = "FS-322 Scope Reachability; owning item: FS-322";
+            hints = [ "Declare offers as a list of CIDR prefix strings." ];
+          };
 
       normalizedTopologyNodes = builtins.deepSeq _superseded (
         lib.mapAttrs (

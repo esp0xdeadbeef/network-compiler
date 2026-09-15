@@ -71,6 +71,8 @@ in
               null;
           owner = if name != null then coreUplinkOwner name else null;
           target = if owner != null then owner else name;
+
+          surface = name;
         in
         if name == null then
           throwError {
@@ -103,7 +105,7 @@ in
             ];
           }
         else
-          target;
+          { inherit target surface; };
 
       normalizeSelects =
         nodeName: node:
@@ -128,7 +130,9 @@ in
           map (
             entry:
             let
-              target = selectionTarget nodeName entry;
+              resolved = selectionTarget nodeName entry;
+              target = resolved.target;
+              surface = resolved.surface;
               behaviors =
                 if builtins.isAttrs entry then
                   if builtins.isList (entry.behaviors or null) then
@@ -152,6 +156,7 @@ in
             in
             {
               scope = target;
+              surface = surface;
               inherit behaviors;
             }
           ) raw;
@@ -172,7 +177,7 @@ in
                 if builtins.isString entry then
                   entry
                 else if builtins.isAttrs entry then
-                  (entry.scope or entry.uplink or null)
+                  (entry.surface or entry.scope or entry.uplink or null)
                 else
                   null;
               owner = if raw != null then coreUplinkOwner raw else null;

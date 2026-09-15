@@ -156,13 +156,22 @@ in
             }
           ) raw;
 
+      ownedPrefixesOf =
+        nodeName:
+        let
+          uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (nodes.${nodeName}.uplinks or null);
+        in
+        lib.sort builtins.lessThan (
+          lib.unique (lib.concatMap (u: (u.ipv4 or [ ]) ++ (u.ipv6 or [ ])) (builtins.attrValues uplinks))
+        );
+
       normalizeOffers =
         nodeName: node:
         let
           raw = node.offers or null;
         in
         if raw == null then
-          null
+          ownedPrefixesOf nodeName
         else if builtins.isList raw && builtins.all builtins.isString raw then
           raw
         else
@@ -187,8 +196,6 @@ in
           // {
             uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
             selects = normalizeSelects nodeName node;
-          }
-          // lib.optionalAttrs (node ? offers) {
             offers = normalizeOffers nodeName node;
           }
         ) nodes

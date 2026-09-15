@@ -54,10 +54,11 @@ let
     actual == "any" || actual == wanted;
 
   relationAllowsUnderlayTenantEgress =
-    tenantName: targetExternalNames: underlayTrafficType: relation:
+    tenantName: underlayTrafficType: relation:
     (relation.action or null) == "allow"
     && builtins.elem tenantName (endpointTenants relation.from)
-    && builtins.any (name: builtins.elem name targetExternalNames) (externalNames relation.to)
+    && builtins.isAttrs (relation.to or null)
+    && (relation.to.kind or null) == "external"
     && trafficCompatible underlayTrafficType relation;
 
   relationReferencesOverlay =
@@ -121,13 +122,11 @@ let
       _underlayTenantHasWanEgress = lib.forEach underlayExternalRelations (
         relation:
         let
-          targetNames = externalNames relation.to;
           ok =
             underlayAccessTenant != null
             && builtins.any (
               candidate:
-              relationAllowsUnderlayTenantEgress underlayAccessTenant targetNames (relation.trafficType or null
-              ) candidate
+              relationAllowsUnderlayTenantEgress underlayAccessTenant (relation.trafficType or null) candidate
             ) normalizedRelations;
         in
         ensure ok {

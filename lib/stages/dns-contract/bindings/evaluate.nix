@@ -66,19 +66,33 @@ in
         ]
       ) families;
       egress = binding.egressSurface or null;
-      egressUplinks =
-        if builtins.isAttrs egress && builtins.isList (egress.uplinks or null) then
+
+      egressNamed =
+        if !(builtins.isAttrs egress) then
+          [ ]
+        else if builtins.isList (egress.uplinks or null) then
           sortedUnique egress.uplinks
+        else if builtins.isString (egress.scope or null) && egress.scope != "" then
+          let
+            scopeUplinks = map (u: u.name) (coreUplinks.${egress.scope} or [ ]);
+            coreNamesOf = coreUplinks.${egress.scope} or null;
+          in
+          sortedUnique (if scopeUplinks != [ ] then scopeUplinks else [ egress.scope ])
+        else if builtins.isString (egress.name or null) && egress.name != "" then
+          [ egress.name ]
         else
           [ ];
+
+      egressUplinks = egressNamed;
       selectedCoreUplinks =
         if selectedNode == null then
           [ ]
         else
           map (uplink: uplink.name) (coreUplinks.${selectedNode} or [ ]);
+
       missingEgress = egressUplinks == [ ];
       ambiguousEgress = builtins.length egressUplinks > 1;
-      invalidEgress = lib.filter (uplink: !builtins.elem uplink selectedCoreUplinks) egressUplinks;
+      invalidEgress = lib.filter (uplink: !(builtins.elem uplink selectedCoreUplinks)) egressUplinks;
       unstableEgress = (binding.egressSelectionMode or null) == "first-listed";
       fallbackInvalid = (binding.directPublicFallback or false) != false;
       warnings =

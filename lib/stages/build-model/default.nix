@@ -93,6 +93,7 @@ outputMod.build {
     topo
     normalizedTopologyNodes
     overlayAddressPools
+    overlays
     ;
   inherit (contracts)
     tenants

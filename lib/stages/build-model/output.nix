@@ -17,6 +17,7 @@
       normalizedRelations,
       overlayAttachments,
       overlayAddressPools,
+      overlays,
       trafficPaths,
       normalizedTopologyNodes,
       dns,
@@ -42,6 +43,9 @@
         relations = normalizedRelations;
         overlayAttachments = overlayAttachments;
         overlayAddressPools = overlayAddressPools;
+        transport = {
+          overlays = overlays;
+        };
         addressPools = builtins.seq _poolCapacity semanticAddressPools;
         trafficPaths = trafficPaths;
         hostNatIngress = topo.hostNatIngress or { };
@@ -68,6 +72,7 @@
           relations = model0.relations;
           overlayAttachments = model0.overlayAttachments;
           overlayAddressPools = model0.overlayAddressPools;
+          transport = model0.transport;
           addressPools = model0.addressPools;
           trafficPaths = model0.trafficPaths;
           hostNatIngress = model0.hostNatIngress;

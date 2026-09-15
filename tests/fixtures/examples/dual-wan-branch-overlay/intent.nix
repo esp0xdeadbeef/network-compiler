@@ -47,7 +47,6 @@
             priority = 100;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -73,7 +72,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "isp-a";
+              scope = "s-router-core-isp-a";
             };
             id = "allow-wan-to-dmz-nebula";
             priority = 120;
@@ -221,6 +220,10 @@
         ];
         nodes = {
           s-router-access-admin = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -230,6 +233,10 @@
             role = "access";
           };
           s-router-access-client = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -239,6 +246,10 @@
             role = "access";
           };
           s-router-access-dmz = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -248,6 +259,10 @@
             role = "access";
           };
           s-router-access-mgmt = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -329,7 +344,6 @@
             priority = 100;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -357,7 +371,7 @@
             priority = 120;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "b-router-core-wan";
             };
             trafficType = "nebula";
           }
@@ -438,6 +452,10 @@
         ];
         nodes = {
           b-router-access-branch = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";

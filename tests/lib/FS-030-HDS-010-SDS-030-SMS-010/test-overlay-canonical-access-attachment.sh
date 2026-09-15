@@ -64,7 +64,7 @@ cat > "$input_file" <<'EOF'
             id = "allow-client-underlay-access-to-wan";
             priority = 105;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; };
             trafficType = "any";
             action = "allow";
           }
@@ -72,7 +72,7 @@ cat > "$input_file" <<'EOF'
             id = "allow-east-west-underlay-to-wan";
             priority = 110;
             from = { kind = "external"; name = "east-west"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; scope = "core-wan"; };
             trafficType = "nebula";
             action = "allow";
           }
@@ -100,6 +100,10 @@ cat > "$input_file" <<'EOF'
             };
           };
           core-overlay = {
+            selects = [
+              "wan"
+            ];
+
             role = "core";
             attachments = [
               { kind = "tenant"; name = "client"; }
@@ -119,6 +123,10 @@ cat > "$input_file" <<'EOF'
             ];
           };
           access-client = {
+            selects = [
+              "wan"
+            ];
+
             role = "access";
             attachments = [
               { kind = "tenant"; name = "client"; }
@@ -220,7 +228,7 @@ cat > "$bad_input_file" <<'EOF'
             id = "allow-client-to-wan";
             priority = 101;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; };
             trafficType = "any";
             action = "allow";
           }
@@ -228,7 +236,7 @@ cat > "$bad_input_file" <<'EOF'
             id = "allow-east-west-underlay-to-wan";
             priority = 110;
             from = { kind = "external"; name = "east-west"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; scope = "core-wan"; };
             trafficType = "nebula";
             action = "allow";
           }
@@ -255,7 +263,18 @@ cat > "$bad_input_file" <<'EOF'
         policy = { role = "policy"; };
         downstream = { role = "downstream-selector"; };
         access-hostile = { role = "access"; attachments = [ { kind = "tenant"; name = "hostile"; } ]; };
-        access-client = { role = "access"; attachments = [ { kind = "tenant"; name = "client"; } ]; };
+        access-client = {
+          selects = [
+            "wan"
+          ];
+          role = "access";
+          attachments = [
+            {
+              kind = "tenant";
+              name = "client";
+            }
+          ];
+        };
       };
 
       topology.links = [

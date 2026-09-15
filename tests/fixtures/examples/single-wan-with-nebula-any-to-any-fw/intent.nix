@@ -24,7 +24,6 @@
             priority = 50;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -52,7 +51,7 @@
             priority = 80;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "s-router-core-wan";
             };
             trafficType = "nebula";
           }
@@ -195,6 +194,10 @@
         ];
         nodes = {
           s-router-access-admin = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -204,6 +207,10 @@
             role = "access";
           };
           s-router-access-client = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -213,6 +220,10 @@
             role = "access";
           };
           s-router-access-mgmt = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";

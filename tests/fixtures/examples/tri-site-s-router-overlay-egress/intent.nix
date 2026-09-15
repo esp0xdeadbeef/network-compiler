@@ -23,7 +23,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "isp-a";
+              scope = "home-example-router-core-isp-a";
             };
             id = "allow-site-wan-icmp-anywhere";
             priority = 6;
@@ -136,7 +136,7 @@
             priority = 24;
             to = {
               kind = "external";
-              scope = "isp-a";
+              scope = "home-example-router-core-isp-a";
             };
             trafficType = "dns";
           }
@@ -155,7 +155,6 @@
             priority = 25;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "dns";
           }
@@ -169,7 +168,6 @@
             priority = 26;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -229,7 +227,6 @@
             priority = 100;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -257,7 +254,6 @@
             priority = 101;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -279,7 +275,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "isp-a";
+              scope = "home-example-router-core-isp-a";
             };
             id = "allow-wan-to-dmz-nebula";
             priority = 120;
@@ -299,7 +295,7 @@
             priority = 130;
             to = {
               kind = "external";
-              scope = "isp-a";
+              scope = "home-example-router-core-isp-a";
             };
             trafficType = "nebula";
           }
@@ -313,7 +309,7 @@
             priority = 131;
             to = {
               kind = "external";
-              scope = "isp-a";
+              scope = "home-example-router-core-isp-a";
             };
             trafficType = "nebula-runtime";
           }
@@ -585,6 +581,10 @@
         ];
         nodes = {
           home-example-router-access-admin = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -594,6 +594,10 @@
             role = "access";
           };
           home-example-router-access-client = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -603,6 +607,10 @@
             role = "access";
           };
           home-example-router-access-dmz = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -621,6 +629,10 @@
             role = "access";
           };
           home-example-router-access-hostile = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -630,6 +642,10 @@
             role = "access";
           };
           home-example-router-access-streaming = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -657,6 +673,10 @@
             };
           };
           home-example-router-core-nebula = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -736,7 +756,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             id = "allow-edge-wan-icmp-anywhere";
             priority = 6;
@@ -778,7 +798,6 @@
             priority = 25;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "dns";
           }
@@ -792,7 +811,6 @@
             priority = 100;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -806,7 +824,6 @@
             priority = 101;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -834,7 +851,7 @@
             priority = 110;
             to = {
               kind = "external";
-              name = "wan";
+              scope = "edge-example-router-core";
             };
             trafficType = "dns";
           }
@@ -848,7 +865,7 @@
             priority = 120;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             trafficType = "any";
           }
@@ -856,7 +873,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             id = "allow-wan-to-dmz-nebula";
             priority = 125;
@@ -884,7 +901,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             id = "allow-wan-to-home-hostile-4444";
             priority = 130;
@@ -898,7 +915,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             id = "allow-wan-to-lab-client-4445";
             priority = 131;
@@ -912,7 +929,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "edge-example-router-core";
             };
             id = "allow-wan-to-edge-client-4446";
             priority = 132;
@@ -1164,6 +1181,10 @@
         ];
         nodes = {
           edge-example-router-access-client = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1173,6 +1194,10 @@
             role = "access";
           };
           edge-example-router-access-dmz = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1259,7 +1284,7 @@
             action = "allow";
             from = {
               kind = "external";
-              name = "wan";
+              scope = "lab-example-router-core-simulated-isp";
             };
             id = "allow-lab-wan-icmp-anywhere";
             priority = 6;
@@ -1377,7 +1402,6 @@
             priority = 25;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "dns";
           }
@@ -1424,7 +1448,6 @@
             priority = 100;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -1438,7 +1461,6 @@
             priority = 101;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -1494,7 +1516,7 @@
             priority = 130;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "lab-example-router-core-simulated-isp";
             };
             trafficType = "nebula";
           }
@@ -1763,6 +1785,10 @@
         ];
         nodes = {
           lab-example-router-access-admin = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1772,6 +1798,10 @@
             role = "access";
           };
           lab-example-router-access-client = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1781,6 +1811,10 @@
             role = "access";
           };
           lab-example-router-access-dmz = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1790,6 +1824,10 @@
             role = "access";
           };
           lab-example-router-access-hostile = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1808,6 +1846,10 @@
             role = "access";
           };
           lab-example-router-access-streaming = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -1817,6 +1859,10 @@
             role = "access";
           };
           lab-example-router-core-nebula = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";

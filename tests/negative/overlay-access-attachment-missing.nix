@@ -49,7 +49,7 @@
             };
             to = {
               kind = "external";
-              name = "wan";
+              scope = "core-wan";
             };
             trafficType = "nebula";
             action = "allow";

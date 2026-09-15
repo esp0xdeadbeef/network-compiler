@@ -42,15 +42,30 @@ in
 
       bgpBoundaries = lib.concatMap (
         nodeName:
-        lib.concatMap (
-          uplink:
-          lib.optional (((uplink.egress or { }).mode or "static") == "bgp") "${nodeName}.${uplink.name}"
-        ) (builtins.attrValues (normalizedTopologyNodes.${nodeName}.uplinks or { }))
+        lib.optional (builtins.elem "bgp" (normalizedTopologyNodes.${nodeName}.behaviors or [ ])) nodeName
       ) (builtins.attrNames normalizedTopologyNodes);
       _bgpTrafficTypeRequired =
         bgpBoundaries == [ ]
         || builtins.any (t: (t.name or null) == "bgp") (communicationContractDeclared.trafficTypes or [ ])
         || throw "intent communicationContract.trafficTypes must declare a 'bgp' traffic type (tcp/179) when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
+
+      livenessBoundaries = lib.concatMap (
+        nodeName:
+        lib.optional (builtins.elem "liveness" (
+          normalizedTopologyNodes.${nodeName}.behaviors or [ ]
+        )) nodeName
+      ) (builtins.attrNames normalizedTopologyNodes);
+      hasLivenessTrafficType = builtins.any (
+        t:
+        builtins.elem (t.name or null) [
+          "liveness"
+          "bfd"
+        ]
+      ) (communicationContractDeclared.trafficTypes or [ ]);
+      _livenessTrafficTypeRequired =
+        livenessBoundaries == [ ]
+        || hasLivenessTrafficType
+        || throw "FS-483-HDS-010-SDS-010-SMS-010: intent communicationContract.trafficTypes must declare a 'liveness' (or 'bfd') control-plane traffic type when a scope requires the liveness behavior (${builtins.concatStringsSep ", " livenessBoundaries})";
 
       relations0 = communicationContractDeclared.relations or [ ];
       _serviceProvidersLocal = validateServiceProviders siteKey serviceIndex semantic nodes relations0;
@@ -96,6 +111,7 @@ in
       validations = {
         inherit
           _bgpTrafficTypeRequired
+          _livenessTrafficTypeRequired
           _serviceProvidersLocal
           _noConflictingRelations
           _hasExternalAllow

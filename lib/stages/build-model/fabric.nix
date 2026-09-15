@@ -157,6 +157,7 @@ in
           ) raw;
 
       recognizedBehaviors = [
+        "bgp"
         "liveness"
         "equal-cost-multipath"
       ];

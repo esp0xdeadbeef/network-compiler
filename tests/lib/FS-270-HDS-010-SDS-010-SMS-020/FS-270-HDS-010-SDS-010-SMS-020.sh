@@ -47,7 +47,7 @@ cat >"$input_nix" <<'NIX'
             id = "allow-client-to-wan";
             priority = 130;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan0" ]; };
+            to = { kind = "external"; scope = "wan0"; };
             trafficType = "any";
             action = "allow";
           }

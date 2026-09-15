@@ -2,109 +2,123 @@
 
 let
   util = import ../util.nix { inherit lib; };
-  inherit (util) ensure assertUnique throwError;
+  inherit (util) ensure throwError;
 
   normalizeExternalSelector =
-    siteKey: path: overlayNames: uplinkNames: ext:
+    siteKey: path: overlayNames: scopeNames: ext:
     let
       hasName = ext ? name;
+      hasScope = ext ? scope;
       hasUplinks = ext ? uplinks;
 
-      _oneSelector = ensure (hasName || hasUplinks) {
-        code = "E_CONTRACT_EXTERNAL_SELECTOR";
+      _rejectLegacyUplinks = ensure (!hasUplinks) {
+        code = "E_SUPERSEDED_CONTRACT";
         site = siteKey;
-        path = path;
-        message = "external selector requires either name or uplinks";
+        path = path ++ [ "uplinks" ];
+        message = "external selector names uplinks; reachability is a scope property, not a permission-relation field";
+        spec = "FS-081 Superseded-Contract Rejection; owning item: FS-322 Scope Reachability";
         hints = [
-          "Use name = \"east-west\" for overlays."
-          "Or use uplinks = [ \"wan\" ] for explicit uplink selection."
+          "FS-081 Superseded-Contract Rejection; owning item: FS-322 Scope Reachability."
+          "Remove 'uplinks'; declare 'offers'/'selects' on the scopes and name the exit scope with 'scope = \"<exit-scope>\"' if the relation must pin an exit."
         ];
       };
 
-      _notBoth = ensure (!(hasName && hasUplinks)) {
+      _atMostOne =
+        ensure
+          (
+            builtins.length (
+              builtins.filter (x: x) [
+                hasName
+                hasScope
+              ]
+            ) <= 1
+          )
+          {
+            code = "E_CONTRACT_EXTERNAL_SELECTOR";
+            site = siteKey;
+            path = path;
+            message = "external selector must use at most one of name or scope";
+            hints = [
+              "Use name = \"east-west\" for an overlay, or scope = \"<exit-scope>\" for an exit scope."
+            ];
+          };
+
+      _someSelector = ensure (hasName || hasScope || (ext.kind or null) == "external") {
         code = "E_CONTRACT_EXTERNAL_SELECTOR";
         site = siteKey;
         path = path;
-        message = "external selector must use either name or uplinks, not both";
-        hints = [
-          "Keep name only for overlays or the single-uplink alias 'wan'."
-          "Use uplinks = [ \"<uplink-name>\" ] for explicit uplink selection."
-        ];
+        message = "external selector is empty";
+        hints = [ "Use { kind = \"external\"; } or { kind = \"external\"; scope = \"<exit-scope>\"; }." ];
       };
     in
-    if hasUplinks then
-      let
-        uplinks0 = ext.uplinks;
+    builtins.seq _rejectLegacyUplinks (
+      builtins.seq _atMostOne (
+        builtins.seq _someSelector (
+          if hasScope then
+            let
+              scope = ext.scope;
 
-        _shape =
-          ensure (builtins.isList uplinks0 && uplinks0 != [ ] && builtins.all builtins.isString uplinks0)
+              _shape = ensure (builtins.isString scope && scope != "") {
+                code = "E_CONTRACT_EXTERNAL_SCOPE";
+                site = siteKey;
+                path = path ++ [ "scope" ];
+                message = "external.scope must be a non-empty scope name";
+                hints = [ "Name a modeled exit scope, for example scope = \"onyx\"." ];
+              };
+
+              _exists = ensure (builtins.elem scope scopeNames) {
+                code = "E_CONTRACT_UNKNOWN_EXTERNAL_SCOPE";
+                site = siteKey;
+                path = path ++ [ "scope" ];
+                message = "relation references exit scope '${scope}', which is not a modeled scope";
+                hints = [
+                  "Declare the scope under topology.nodes.<scope>, or use a bare { kind = \"external\"; }."
+                ];
+              };
+            in
             {
-              code = "E_CONTRACT_EXTERNAL_UPLINKS";
-              site = siteKey;
-              path = path ++ [ "uplinks" ];
-              message = "external.uplinks must be a non-empty list of uplink names";
-              hints = [ "Use uplinks = [ \"wan\" ] or uplinks = [ \"isp-a\" \"isp-b\" ]." ];
-            };
+              kind = "external";
+              inherit scope;
+            }
+          else if hasName then
+            let
+              name = ext.name;
 
-        _uniq = assertUnique "external uplink selector" uplinks0;
+              _name = ensure (builtins.isString name && name != "") {
+                code = "E_CONTRACT_SUBJECT_NAME";
+                site = siteKey;
+                path = path ++ [ "name" ];
+                message = "external selector name must be a non-empty string";
+                hints = [ "Use name = \"east-west\" for an overlay." ];
+              };
+            in
+            if builtins.elem name overlayNames then
+              {
+                kind = "external";
+                inherit name;
+              }
+            else if name == "wan" then
 
-        _exists = ensure (builtins.all (u: builtins.elem u uplinkNames) uplinks0) {
-          code = "E_CONTRACT_UNKNOWN_EXTERNAL";
-          site = siteKey;
-          path = path ++ [ "uplinks" ];
-          message = "relation references unknown uplink";
-          hints = [ "Declare the uplink under topology.nodes.<core>.uplinks.<name>." ];
-        };
-      in
-      {
-        kind = "external";
-        uplinks = lib.sort builtins.lessThan uplinks0;
-      }
-    else
-      let
-        name = ext.name or null;
-
-        _name = ensure (name != null && builtins.isString name && name != "") {
-          code = "E_CONTRACT_SUBJECT_NAME";
-          site = siteKey;
-          path = path ++ [ "name" ];
-          message = "external subject requires a non-empty name";
-          hints = [ "Set name = \"wan\" for the single-uplink alias or name = \"east-west\" for overlays." ];
-        };
-      in
-      if builtins.elem name overlayNames then
-        {
-          kind = "external";
-          inherit name;
-        }
-      else if builtins.elem name uplinkNames then
-        if name == "wan" then
-          {
-            kind = "external";
-            inherit name;
-          }
-        else
-          throwError {
-            code = "E_UPLINK_LEGACY_SELECTOR";
-            site = siteKey;
-            path = path ++ [ "name" ];
-            message = "uplink '${name}' must be selected via external.uplinks";
-            hints = [
-              "Replace name = \"${name}\" with uplinks = [ \"${name}\" ]."
-              "Keep external.name only for overlay names and the single-uplink alias 'wan'."
-            ];
-          }
-      else
-        throwError {
-          code = "E_CONTRACT_UNKNOWN_EXTERNAL";
-          site = siteKey;
-          path = path ++ [ "name" ];
-          message = "relation references unknown external '${name}'";
-          hints = [
-            "Declare an uplink under topology.nodes.<core>.uplinks.<name>."
-            "Or declare a transport overlay with transport.overlays[].name."
-          ];
-        };
+              {
+                kind = "external";
+                scope = "wan";
+              }
+            else
+              throwError {
+                code = "E_CONTRACT_UNKNOWN_EXTERNAL";
+                site = siteKey;
+                path = path ++ [ "name" ];
+                message = "relation references unknown overlay '${name}'";
+                hints = [
+                  "Declare the overlay under transport.overlays[].name."
+                  "For an exit scope use { kind = \"external\"; scope = \"${name}\"; }."
+                ];
+              }
+          else
+            { kind = "external"; }
+        )
+      )
+    );
 in
 {
   inherit normalizeExternalSelector;

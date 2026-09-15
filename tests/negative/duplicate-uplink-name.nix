@@ -33,7 +33,7 @@
           };
           to = {
             kind = "external";
-            uplinks = [ "wan" ];
+            scope = "wan";
           };
           trafficType = "any";
           action = "allow";

@@ -29,7 +29,7 @@ cat >"${input_file}" <<'NIX'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -135,7 +135,7 @@ cat >"${missing_role_input}" <<'NIX'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -190,7 +190,7 @@ cat >"${noncanonical_input}" <<'NIX'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -246,7 +246,7 @@ cat >"${alternate_structure_input}" <<'NIX'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }

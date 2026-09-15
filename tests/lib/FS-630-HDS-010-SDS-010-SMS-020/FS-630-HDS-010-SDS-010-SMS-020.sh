@@ -80,7 +80,7 @@ cat >"$positive_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -195,7 +195,7 @@ cat >"$sn1_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -304,7 +304,7 @@ cat >"$sn2_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -421,7 +421,7 @@ cat >"$non_printer_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "dns";
             action = "allow";
           }

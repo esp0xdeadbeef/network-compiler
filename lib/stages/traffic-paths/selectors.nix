@@ -44,14 +44,14 @@ let
     endpoint:
     let
       requested =
-        if builtins.isAttrs endpoint && endpoint ? uplinks then
-          endpoint.uplinks
+        if builtins.isAttrs endpoint && endpoint ? scope then
+          [ endpoint.scope ]
         else if builtins.isAttrs endpoint && endpoint ? name then
           [ endpoint.name ]
         else
           [ ];
       matches = lib.filter (
-        core: builtins.any (name: builtins.elem name (uplinkNamesForCore core)) requested
+        core: builtins.any (name: name == core || builtins.elem name (uplinkNamesForCore core)) requested
       ) (nodesByRole "core");
 
       overlayTerminators = lib.unique (

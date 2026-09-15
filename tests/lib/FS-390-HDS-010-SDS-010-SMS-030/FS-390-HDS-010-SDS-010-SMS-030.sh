@@ -48,7 +48,7 @@ cat >"${input_nix}" <<'NIX'
             priority = 100;
             action = "allow";
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "testnet" ]; };
+            to = { kind = "external"; scope = "testnet"; };
             trafficType = "any";
           }
           {

@@ -143,7 +143,7 @@ cat >"$good_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 130;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "any";
             action = "allow";
           }

@@ -40,7 +40,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -54,7 +54,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -108,11 +108,26 @@
         };
 
         links = [
-          [ "s-router-core" "s-router-upstream-selector" ]
-          [ "s-router-upstream-selector" "s-router-policy" ]
-          [ "s-router-policy" "s-router-downstream-selector" ]
-          [ "s-router-downstream-selector" "s-router-access-adm" ]
-          [ "s-router-downstream-selector" "s-router-access-mgmt" ]
+          [
+            "s-router-core"
+            "s-router-upstream-selector"
+          ]
+          [
+            "s-router-upstream-selector"
+            "s-router-policy"
+          ]
+          [
+            "s-router-policy"
+            "s-router-downstream-selector"
+          ]
+          [
+            "s-router-downstream-selector"
+            "s-router-access-adm"
+          ]
+          [
+            "s-router-downstream-selector"
+            "s-router-access-mgmt"
+          ]
         ];
       };
     };

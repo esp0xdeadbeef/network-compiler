@@ -60,7 +60,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "ipv4-any";
             action = "allow";

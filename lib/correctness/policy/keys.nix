@@ -9,10 +9,12 @@ let
       "tenant-set:${lib.concatStringsSep "," (lib.sort builtins.lessThan subj.members)}"
     else if subj.kind == "service" then
       "service:${subj.name}"
-    else if subj ? uplinks then
-      "external-uplinks:${lib.concatStringsSep "," (lib.sort builtins.lessThan subj.uplinks)}"
+    else if subj ? scope then
+      "external-scope:${subj.scope}"
+    else if subj ? name then
+      "external:${subj.name}"
     else
-      "external:${subj.name}";
+      "external";
 
   targetKey =
     target:

@@ -34,7 +34,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -134,7 +134,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink1" ];
+              scope = "uplink1";
             };
             trafficType = "any";
             action = "allow";

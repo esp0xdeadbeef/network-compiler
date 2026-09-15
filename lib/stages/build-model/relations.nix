@@ -30,6 +30,7 @@ in
         overlayNames
         uplinkNames
         ;
+      scopeNames = lib.sort builtins.lessThan (builtins.attrNames nodes);
       inherit (contracts)
         communicationContractDeclared
         serviceIndex
@@ -56,7 +57,7 @@ in
 
       normalizedRelations0 = lib.imap0 (
         idx: r:
-        normalizeRelationWithProvenance siteKey overlayNames uplinkNames tenantNames serviceIndex
+        normalizeRelationWithProvenance siteKey overlayNames uplinkNames scopeNames tenantNames serviceIndex
           trafficTypeIndex
           idx
           r

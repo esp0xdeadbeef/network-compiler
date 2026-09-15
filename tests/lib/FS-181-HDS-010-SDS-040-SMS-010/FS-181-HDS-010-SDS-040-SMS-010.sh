@@ -106,7 +106,7 @@ let
         id = "test-allow-mgmt-to-wan";
         priority = 100;
         from = { kind = "tenant"; name = "mgmt"; };
-        to = { kind = "external"; uplinks = [ "wan" ]; };
+        to = { kind = "external"; scope = "wan"; };
         trafficType = "any";
         action = "allow";
         source = {
@@ -158,7 +158,7 @@ let
         id = "dup-allow-mgmt-to-wan";
         priority = 100;
         from = { kind = "tenant"; name = "mgmt"; };
-        to = { kind = "external"; uplinks = [ "wan" ]; };
+        to = { kind = "external"; scope = "wan"; };
         trafficType = "any";
         action = "allow";
         source = {
@@ -175,7 +175,7 @@ let
         id = "dup-allow-adm-to-wan";
         priority = 200;
         from = { kind = "tenant"; name = "adm"; };
-        to = { kind = "external"; uplinks = [ "wan" ]; };
+        to = { kind = "external"; scope = "wan"; };
         trafficType = "any";
         action = "allow";
         source = {
@@ -230,7 +230,7 @@ let
         id = "allow-mgmt-to-wan";
         priority = 100;
         from = { kind = "tenant"; name = "mgmt"; };
-        to = { kind = "external"; uplinks = [ "wan" ]; };
+        to = { kind = "external"; scope = "wan"; };
         trafficType = "any";
         action = "allow";
         source = {
@@ -248,7 +248,7 @@ let
       {
         relationId = "NONEXISTENT-RELATION-ID";  # does NOT exist in relations[]
         source = { kind = "tenant"; name = "mgmt"; };
-        destination = { kind = "external"; uplinks = [ "wan" ]; };
+        destination = { kind = "external"; scope = "wan"; };
         stagePath = [ "access" "downstream-selector" "policy" "upstream-selector" "core" ];
         nodePath = [ ];
         nodePathAlternatives = [ [ ] ];

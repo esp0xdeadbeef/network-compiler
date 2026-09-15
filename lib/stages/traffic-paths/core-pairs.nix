@@ -33,9 +33,9 @@ let
         ];
         message = "external-to-external relation '${relation.source.id}' resolves source and destination to the same core node";
         hints = [
-          "Model overlay ingress and WAN egress as distinct external uplinks on distinct core nodes."
-          "For WAN egress, use external.uplinks = [ \"<uplink-name>\" ] so intent selects the desired ISP/core explicitly."
-          "Do not let overlay ingress return to the same core as WAN authorization."
+          "Model overlay ingress and WAN egress as distinct external scopes on distinct core nodes."
+          "For egress, name the exit scope with external.scope = \"<exit-scope>\" and declare the selection with the scope's 'selects'."
+          "Do not let overlay ingress return to the same core as egress authorization."
         ];
       }
     else

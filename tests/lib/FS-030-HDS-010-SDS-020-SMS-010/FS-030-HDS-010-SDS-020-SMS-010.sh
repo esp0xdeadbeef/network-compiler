@@ -72,7 +72,7 @@ cat > "${tmp_dir}/multi-core-canonical.nix" <<'MULTICORE'
           id = "allow-mgmt-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "mgmt"; };
-          to = { kind = "external"; uplinks = [ "wan" "east-west" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -271,7 +271,7 @@ cat > "${tmp_dir}/missing-downstream.nix" <<'MISSINGDS'
           id = "allow-mgmt-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "mgmt"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -371,7 +371,7 @@ cat > "${tmp_dir}/core-upstream-core-connected.nix" <<'COREUPCORE'
           id = "allow-mgmt-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "mgmt"; };
-          to = { kind = "external"; uplinks = [ "wan" "east-west" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -446,7 +446,7 @@ cat > "${tmp_dir}/access-upstream.nix" <<'ACCUP'
     ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
     communicationContract = {
       trafficTypes = [ ]; services = [ ];
-      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "any"; action = "allow"; } ];
     };
     topology = {
       nodes = {
@@ -499,7 +499,7 @@ cat > "${tmp_dir}/core-policy.nix" <<'COREPOL'
     ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
     communicationContract = {
       trafficTypes = [ ]; services = [ ];
-      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "any"; action = "allow"; } ];
     };
     topology = {
       nodes = {
@@ -552,7 +552,7 @@ cat > "${tmp_dir}/access-core-no-shared.nix" <<'ACCNOSHARE'
     ownership.prefixes = [ { kind = "tenant"; name = "mgmt"; ipv4 = "10.20.10.0/24"; } ];
     communicationContract = {
       trafficTypes = [ ]; services = [ ];
-      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "mgmt"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "any"; action = "allow"; } ];
     };
     topology = {
       nodes = {
@@ -610,7 +610,7 @@ cat > "${tmp_dir}/access-ds-access.nix" <<'ACCACC'
     ];
     communicationContract = {
       trafficTypes = [ ]; services = [ ];
-      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "any"; action = "allow"; } ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "any"; action = "allow"; } ];
     };
     topology = {
       nodes = {
@@ -676,7 +676,7 @@ cat > "${tmp_dir}/us-core-us.nix" <<'USCOREUS'
     ownership.prefixes = [ { kind = "tenant"; name = "t1"; ipv4 = "10.20.10.0/24"; } ];
     communicationContract = {
       trafficTypes = [ ]; services = [ ];
-      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; uplinks = [ "wan" "ew" ]; }; trafficType = "any"; action = "allow"; } ];
+      relations = [ { id = "r1"; priority = 100; from = { kind = "tenant"; name = "t1"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "any"; action = "allow"; } ];
     };
     topology = {
       nodes = {

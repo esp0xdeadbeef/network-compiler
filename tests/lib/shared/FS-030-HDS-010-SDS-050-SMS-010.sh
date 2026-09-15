@@ -50,7 +50,7 @@ cat > "${tmp_dir}/valid-core-site.nix" <<'VALIDCORE'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "t1"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };
@@ -125,7 +125,7 @@ cat > "${tmp_dir}/core-access-no-share.nix" <<'COREACC1'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "t1"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };
@@ -197,7 +197,7 @@ cat > "${tmp_dir}/core-access-shared.nix" <<'COREACC2'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "mgmt"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };
@@ -265,7 +265,7 @@ cat > "${tmp_dir}/core-ds.nix" <<'COREDS'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "t1"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };
@@ -328,7 +328,7 @@ cat > "${tmp_dir}/core-no-policy.nix" <<'CORENOPOL'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "t1"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };
@@ -437,7 +437,7 @@ cat > "${tmp_dir}/core-with-tenant.nix" <<'CORETENANT'
       relations = [
         { id = "r1"; priority = 100;
           from = { kind = "tenant"; name = "t1"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any"; action = "allow"; }
       ];
     };

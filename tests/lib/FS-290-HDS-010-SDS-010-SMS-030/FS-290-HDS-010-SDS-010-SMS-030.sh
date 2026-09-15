@@ -119,7 +119,7 @@ cat >"$good_input" <<'NIX'
             id = "allow-client-to-wan";
             priority = 110;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "cast-control";
             action = "allow";
           }

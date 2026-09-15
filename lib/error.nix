@@ -28,6 +28,7 @@ let
         message = err.message or (err.msg or "error");
         hints = toList (err.hints or [ ]);
       }
+      // lib.optionalAttrs (err ? spec) { inherit (err) spec; }
     else
       {
         code = "E_ASSERT";

@@ -10,13 +10,14 @@ if legacyPolicy == null then
 else
   throw (
     builtins.toJSON {
-      code = "E_LEGACY_POLICY_REMOVED";
+      code = "E_SUPERSEDED_CONTRACT";
       site = siteKey;
       path = [ "policy" ];
-      message = "policy is removed; use communicationContract instead";
+      message = "top-level intent key 'policy' is removed; use communicationContract";
       hints = [
         "Rename policy to communicationContract."
         "Use communicationContract.trafficTypes, communicationContract.services, and communicationContract.relations."
       ];
+      spec = "FS-081 Superseded-Contract Rejection";
     }
   )

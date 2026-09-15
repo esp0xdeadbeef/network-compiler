@@ -201,7 +201,7 @@ cat >"$good_input" <<'NIX'
             id = "allow-consumer-to-wan";
             priority = 120;
             from = { kind = "tenant"; name = "consumer"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "smart-tv-control";
             action = "allow";
           }

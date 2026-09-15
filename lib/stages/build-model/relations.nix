@@ -73,8 +73,8 @@ in
       _noConflictingRelations = ensureNoConflictingRelations siteKey normalizedRelations;
       _hasExternalAllow = ensureHasExternalAllow siteKey normalizedRelations;
       _overlayModelExplicit =
-        validateOverlayModel siteKey trafficTypeIndex normalizedRelations
-          fabric.overlays;
+        validateOverlayModel siteKey trafficTypeIndex normalizedRelations fabric.overlays
+          normalizedTopologyNodes;
 
       compiledServices = buildCompiledServices siteKey serviceIndex (builtins.attrNames serviceIndex);
       isolationModel =

@@ -48,7 +48,7 @@ cat >"${input_file}" <<'EOF'
           id = "allow-hostile-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "hostile"; };
-          to = { kind = "external"; name = "wan"; };
+          to = { kind = "external"; };
           trafficType = "any";
           action = "allow";
         }
@@ -61,6 +61,10 @@ cat >"${input_file}" <<'EOF'
         policy.role = "policy";
         downstream.role = "downstream-selector";
         access = {
+          selects = [
+            "wan"
+          ];
+
           role = "access";
           attachments = [ { kind = "tenant"; name = "hostile"; } ];
         };

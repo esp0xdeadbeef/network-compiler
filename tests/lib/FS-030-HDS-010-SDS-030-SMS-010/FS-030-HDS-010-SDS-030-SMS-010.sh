@@ -300,7 +300,7 @@ cat > "$bad_underlay_egress" <<'EOF'
             id = "allow-client-to-wan";
             priority = 101;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; };
             trafficType = "any";
             action = "allow";
           }
@@ -308,7 +308,7 @@ cat > "$bad_underlay_egress" <<'EOF'
             id = "allow-east-west-underlay-to-wan";
             priority = 110;
             from = { kind = "external"; name = "east-west"; };
-            to = { kind = "external"; name = "wan"; };
+            to = { kind = "external"; scope = "core-wan"; };
             trafficType = "nebula";
             action = "allow";
           }
@@ -340,6 +340,10 @@ cat > "$bad_underlay_egress" <<'EOF'
           attachments = [ { kind = "tenant"; name = "hostile"; } ];
         };
         access-client = {
+          selects = [
+            "wan"
+          ];
+
           role = "access";
           attachments = [ { kind = "tenant"; name = "client"; } ];
         };

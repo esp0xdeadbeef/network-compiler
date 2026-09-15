@@ -32,7 +32,7 @@ cat >"$input_file" <<'EOF'
         id = "allow-client-to-wan";
         priority = 90;
         from = { kind = "tenant"; name = "client"; };
-        to = { kind = "external"; name = "wan"; };
+        to = { kind = "external"; };
         trafficType = "any";
         action = "allow";
       }
@@ -40,7 +40,7 @@ cat >"$input_file" <<'EOF'
         id = "allow-overlay-ingress-to-wan";
         priority = 100;
         from = { kind = "external"; name = "east-west"; };
-        to = { kind = "external"; name = "wan"; };
+        to = { kind = "external"; scope = "hetz-router-core"; };
         trafficType = "any";
         action = "allow";
       }
@@ -48,7 +48,7 @@ cat >"$input_file" <<'EOF'
         id = "allow-overlay-underlay-to-wan";
         priority = 110;
         from = { kind = "external"; name = "east-west"; };
-        to = { kind = "external"; name = "wan"; };
+        to = { kind = "external"; scope = "hetz-router-core"; };
         trafficType = "nebula";
         action = "allow";
       }
@@ -73,6 +73,7 @@ cat >"$input_file" <<'EOF'
       hetz-router-downstream.role = "downstream-selector";
       hetz-router-access-client.role = "access";
       hetz-router-access-client.attachments = [ { kind = "tenant"; name = "client"; } ];
+      hetz-router-access-client.selects = [ "wan" ];
       hetz-router-access-iot.role = "access";
       hetz-router-access-iot.attachments = [ { kind = "tenant"; name = "iot"; } ];
     };

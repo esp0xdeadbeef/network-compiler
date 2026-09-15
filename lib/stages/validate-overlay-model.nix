@@ -46,6 +46,23 @@ let
     else
       [ ];
 
+  tenantScopeSelects =
+    nodes: tenantName: exitName:
+    let
+      matching = lib.filter (
+        nodeName:
+        builtins.any (a: (a.kind or null) == "tenant" && (a.name or null) == tenantName) (
+          nodes.${nodeName}.attachments or [ ]
+        )
+      ) (builtins.attrNames nodes);
+    in
+    if exitName == null then
+      builtins.any (nodeName: (nodes.${nodeName}.selects or [ ]) != [ ]) matching
+    else
+      builtins.any (
+        nodeName: builtins.any (s: (s.scope or null) == exitName) (nodes.${nodeName}.selects or [ ])
+      ) matching;
+
   trafficCompatible =
     wanted: candidate:
     let
@@ -54,11 +71,26 @@ let
     actual == "any" || actual == wanted;
 
   relationAllowsUnderlayTenantEgress =
-    tenantName: underlayTrafficType: relation:
+    overlayName: underlayTargetScope: tenantName: underlayTrafficType: relation:
+    let
+      to = relation.to or { };
+      toScope = if builtins.isAttrs to then (to.scope or null) else null;
+      toName = if builtins.isAttrs to then (to.name or null) else null;
+
+      targetIsExit = toName != overlayName;
+
+      targetMatches =
+        if underlayTargetScope != null then
+          toScope == underlayTargetScope || (toScope == null && toName == null)
+        else
+          toScope != null || toName == null;
+    in
     (relation.action or null) == "allow"
     && builtins.elem tenantName (endpointTenants relation.from)
-    && builtins.isAttrs (relation.to or null)
-    && (relation.to.kind or null) == "external"
+    && builtins.isAttrs to
+    && (to.kind or null) == "external"
+    && targetIsExit
+    && targetMatches
     && trafficCompatible underlayTrafficType relation;
 
   relationReferencesOverlay =
@@ -75,7 +107,7 @@ let
     );
 
   validateOne =
-    siteKey: trafficTypeIndex: normalizedRelations: overlay:
+    siteKey: trafficTypeIndex: normalizedRelations: overlay: nodes:
     let
       overlayName = overlay.name;
       _referenced = ensure (builtins.any (relationReferencesOverlay overlayName) normalizedRelations) {
@@ -122,11 +154,18 @@ let
       _underlayTenantHasWanEgress = lib.forEach underlayExternalRelations (
         relation:
         let
+          underlayTargetScope =
+            if builtins.isAttrs (relation.to or null) then (relation.to.scope or null) else null;
+          selectsExit =
+            underlayAccessTenant != null && tenantScopeSelects nodes underlayAccessTenant underlayTargetScope;
           ok =
             underlayAccessTenant != null
+            && selectsExit
             && builtins.any (
               candidate:
-              relationAllowsUnderlayTenantEgress underlayAccessTenant (relation.trafficType or null) candidate
+              relationAllowsUnderlayTenantEgress overlayName underlayTargetScope underlayAccessTenant
+                (relation.trafficType or null)
+                candidate
             ) normalizedRelations;
         in
         ensure ok {
@@ -152,10 +191,10 @@ let
     } true;
 
 in
-siteKey: trafficTypeIndex: normalizedRelations: overlays:
+siteKey: trafficTypeIndex: normalizedRelations: overlays: nodes:
 if overlays == [ ] then
   true
 else
   builtins.all (
-    idx: validateOne siteKey trafficTypeIndex normalizedRelations (builtins.elemAt overlays idx)
+    idx: validateOne siteKey trafficTypeIndex normalizedRelations (builtins.elemAt overlays idx) nodes
   ) (lib.range 0 ((builtins.length overlays) - 1))

@@ -65,7 +65,6 @@
             priority = 16;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "dns";
           }
@@ -84,7 +83,6 @@
             priority = 20;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "dns";
           }
@@ -103,7 +101,6 @@
             priority = 100;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -144,7 +141,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "isp-a";
+              scope = "s-router-core-isp-a";
             };
             id = "allow-wan-to-dmz-nebula";
             priority = 120;
@@ -195,7 +192,6 @@
             priority = 22;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "dns";
           }
@@ -209,7 +205,6 @@
             priority = 103;
             to = {
               kind = "external";
-              scope = "isp-a";
             };
             trafficType = "any";
           }
@@ -223,7 +218,7 @@
             priority = 118;
             to = {
               kind = "external";
-              scope = "isp-a";
+              scope = "s-router-core-isp-a";
             };
             trafficType = "nebula";
           }
@@ -396,6 +391,10 @@
         ];
         nodes = {
           s-router-access-admin = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -405,6 +404,10 @@
             role = "access";
           };
           s-router-access-client = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -414,6 +417,10 @@
             role = "access";
           };
           s-router-access-client2 = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -432,6 +439,10 @@
             role = "access";
           };
           s-router-access-mgmt = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -441,6 +452,10 @@
             role = "access";
           };
           s-router-access-streaming = {
+            selects = [
+              "isp-a"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -601,7 +616,6 @@
             priority = 101;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -615,7 +629,7 @@
             priority = 111;
             to = {
               kind = "external";
-              name = "wan";
+              scope = "c-router-core";
             };
             trafficType = "dns";
           }
@@ -643,7 +657,6 @@
             priority = 100;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -651,7 +664,7 @@
             action = "allow";
             from = {
               kind = "external";
-              scope = "wan";
+              scope = "c-router-core";
             };
             id = "allow-sitec-wan-to-dmz-nebula";
             priority = 128;
@@ -693,7 +706,6 @@
             priority = 99;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "dns";
           }
@@ -707,7 +719,7 @@
             priority = 133;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "c-router-core";
             };
             trafficType = "nebula";
           }
@@ -848,6 +860,10 @@
         ];
         nodes = {
           c-router-access-client = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -857,6 +873,10 @@
             role = "access";
           };
           c-router-access-dmz = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";
@@ -947,7 +967,6 @@
             priority = 90;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "dns";
           }
@@ -961,7 +980,6 @@
             priority = 100;
             to = {
               kind = "external";
-              name = "wan";
             };
             trafficType = "any";
           }
@@ -1059,7 +1077,7 @@
             priority = 117;
             to = {
               kind = "external";
-              scope = "wan";
+              scope = "b-router-core-simulated-isp";
             };
             trafficType = "nebula-storage";
           }
@@ -1176,6 +1194,10 @@
         ];
         nodes = {
           b-router-access-branch = {
+            selects = [
+              "wan"
+            ];
+
             attachments = [
               {
                 kind = "tenant";

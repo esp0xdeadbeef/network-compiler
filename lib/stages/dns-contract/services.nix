@@ -13,17 +13,13 @@ let
     warning
     ;
   raw = if builtins.isList (recursiveRaw.services or null) then recursiveRaw.services else [ ];
-  candidatesByName =
-    builtins.foldl'
-      (
-        acc: service:
-        let
-          name = toString (service.name or "<missing>");
-        in
-        acc // { ${name} = (acc.${name} or [ ]) ++ [ service ]; }
-      )
-      { }
-      raw;
+  candidatesByName = builtins.foldl' (
+    acc: service:
+    let
+      name = toString (service.name or "<missing>");
+    in
+    acc // { ${name} = (acc.${name} or [ ]) ++ [ service ]; }
+  ) { } raw;
 
   warningsFor =
     service:
@@ -66,15 +62,22 @@ let
     && builtins.elem service.providerNode coreNames
     && (service.addressAuthority or null) == "model-allocated-service-prefix";
   normalized = sortRecords (
-    map
-      (service: {
+    map (
+      service:
+      {
         name = service.name;
         providerNode = service.providerNode;
         addressAuthority = service.addressAuthority;
         trafficType = service.trafficType or "dns";
         recursionMode = service.recursionMode or "iterative";
-      })
-      (lib.filter valid raw)
+      }
+      // lib.optionalAttrs (builtins.isList (service.forwarders or null)) {
+        inherit (service) forwarders;
+      }
+      // lib.optionalAttrs (builtins.isList (service.upstreamResolvers or null)) {
+        inherit (service) upstreamResolvers;
+      }
+    ) (lib.filter valid raw)
   );
 in
 {

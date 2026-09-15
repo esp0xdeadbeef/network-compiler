@@ -97,12 +97,6 @@ let
                 kind = "external";
                 inherit name;
               }
-            else if name == "wan" then
-
-              {
-                kind = "external";
-                scope = "wan";
-              }
             else
               throwError {
                 code = "E_CONTRACT_UNKNOWN_EXTERNAL";

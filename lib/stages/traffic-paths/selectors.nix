@@ -40,6 +40,65 @@ let
 
   uplinkNamesForCore = core: map (u: u.name) (coreUplinks.${core} or [ ]);
 
+  selectsOf =
+    nodeName:
+    map (
+      s:
+      if builtins.isString s then
+        s
+      else if builtins.isAttrs s then
+        (s.scope or s.uplink or null)
+      else
+        null
+    ) (nodes.${nodeName}.selects or [ ]);
+
+  coresForSelection =
+    selection:
+    let
+      deterministic = lib.sort builtins.lessThan (
+        lib.filter (core: core == selection || builtins.elem selection (uplinkNamesForCore core)) (
+          nodesByRole "core"
+        )
+      );
+    in
+    if deterministic != [ ] then deterministic else [ selection ];
+
+  exitsForRelation =
+    relation:
+    let
+      endpoint = relation.to or { };
+      pinned =
+        if builtins.isAttrs endpoint && endpoint ? scope then
+          [ endpoint.scope ]
+        else if builtins.isAttrs endpoint && endpoint ? name then
+          [ endpoint.name ]
+        else
+          [ ];
+      fromScope =
+        let
+          tenants = endpointTenants relation.from;
+          matches =
+            if tenants == [ ] then
+              [ ]
+            else
+              lib.filter (
+                name:
+                builtins.any (
+                  attachment: (attachment.kind or null) == "tenant" && builtins.elem (attachment.name or null) tenants
+                ) (nodes.${name}.attachments or [ ])
+              ) nodeNames;
+        in
+        if matches == [ ] then null else builtins.head matches;
+      selections =
+        if pinned != [ ] then
+          pinned
+        else if fromScope != null then
+          selectsOf fromScope
+        else
+          [ ];
+    in
+    lib.unique (lib.concatMap coresForSelection selections);
+
   coresForExternal =
     endpoint:
     let
@@ -156,5 +215,6 @@ in
     coresForExternal
     coresForEndpoint
     accessForEndpoint
+    exitsForRelation
     ;
 }

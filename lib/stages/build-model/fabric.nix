@@ -46,6 +46,41 @@
         buildCoreUplinks siteKey nodes coreNodes { inherit overlayEndpointNodes; }
       );
 
+      coreUplinkOwner =
+        uplinkName:
+        let
+          owners = lib.filter (
+            name: builtins.elem uplinkName (map (u: u.name) (coreUplinks.${name} or [ ]))
+          ) coreNodes;
+        in
+        if owners == [ ] then null else builtins.head owners;
+
+      selectionTarget =
+        nodeName: entry:
+        let
+          name =
+            if builtins.isString entry then
+              entry
+            else if builtins.isAttrs entry then
+              (entry.scope or entry.uplink or null)
+            else
+              null;
+          owner = if name != null then coreUplinkOwner name else null;
+          target = if owner != null then owner else name;
+        in
+        if name == null then
+          throw (
+            "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] entries must name a scope "
+            + "(FS-322 Scope Reachability; owning item: FS-322)."
+          )
+        else if !(builtins.hasAttr target nodes) then
+          throw (
+            "E_CONTRACT_UNKNOWN_SELECT: topology.nodes.${nodeName}.selects names '${target}', "
+            + "which is not a modeled scope (FS-322 Scope Reachability; owning item: FS-322)."
+          )
+        else
+          target;
+
       normalizeSelects =
         nodeName: node:
         let
@@ -59,29 +94,24 @@
         else
           map (
             entry:
-            if builtins.isString entry then
-              {
-                uplink = entry;
-                behaviors = [ ];
-              }
-            else if builtins.isAttrs entry then
-              {
-                uplink = entry.uplink or null;
-                scope = entry.scope or null;
-                behaviors =
+            let
+              target = selectionTarget nodeName entry;
+              behaviors =
+                if builtins.isAttrs entry then
                   if builtins.isList (entry.behaviors or null) then
                     entry.behaviors
                   else
                     throw (
-                      "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] behavior must be a list "
+                      "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] behaviors must be a list "
                       + "(FS-481 Routing Behavior Selection)."
-                    );
-              }
-            else
-              throw (
-                "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects entries must be a string (uplink) or an attrset "
-                + "(FS-322 Scope Reachability)."
-              )
+                    )
+                else
+                  [ ];
+            in
+            {
+              scope = target;
+              inherit behaviors;
+            }
           ) raw;
 
       normalizeOffers =

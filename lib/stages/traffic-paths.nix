@@ -11,7 +11,12 @@ let
     inherit siteKey nodes throwError;
   };
   inherit (util) throwError;
-  inherit (selectors) firstRole coresForEndpoint accessForEndpoint;
+  inherit (selectors)
+    firstRole
+    coresForEndpoint
+    accessForEndpoint
+    exitsForRelation
+    ;
   overlayUnderlayAccessFor = overlayUnderlay overlays accessForEndpoint;
   stages = import ./traffic-paths/stages.nix {
     inherit lib serviceIndex overlayUnderlayAccessFor;
@@ -59,7 +64,14 @@ let
       fromStage = endpointStage relation.from;
       toStage = endpointStage relation.to;
       fromCores = if fromStage == "core" then coresForEndpoint relation.from else [ ];
-      toCores = if toStage == "core" then coresForEndpoint relation.to else [ ];
+      toCores =
+        if toStage != "core" then
+          [ ]
+        else
+          let
+            exits = exitsForRelation relation;
+          in
+          if exits != [ ] then exits else coresForEndpoint relation.to;
       fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
       corePairs = buildCorePairs {
         inherit

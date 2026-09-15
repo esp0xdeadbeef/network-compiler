@@ -152,7 +152,7 @@ cat >"$good_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 120;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -308,7 +308,7 @@ cat >"$resolver_underlay_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "dns";
             action = "allow";
           }
@@ -429,7 +429,7 @@ cat >"$printer_no_requester_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -552,7 +552,7 @@ cat >"$printer_empty_denied_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }
@@ -692,7 +692,7 @@ cat >"$media_mgmt_good_input" <<'NIX'
             id = "allow-media-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "media"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "cast";
             action = "allow";
           }
@@ -801,7 +801,7 @@ cat >"$media_mgmt_inferred_input" <<'NIN'
             id = "allow-media-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "media"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "cast";
             action = "allow";
           }
@@ -911,7 +911,7 @@ cat >"$media_mgmt_denied_path_input" <<'FIX'
             id = "allow-media-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "media"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "audio";
             action = "allow";
           }
@@ -1239,7 +1239,7 @@ cat >"$media_dp_good_input" <<'MO3'
             id = "allow-media-to-wan";
             priority = 200;
             from = { kind = "tenant"; name = "media"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "cast";
             action = "allow";
           }

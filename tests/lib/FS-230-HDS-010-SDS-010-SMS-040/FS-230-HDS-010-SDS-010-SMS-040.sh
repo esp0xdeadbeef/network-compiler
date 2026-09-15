@@ -15,10 +15,7 @@ let
     id = "${trace}__lab-wan-to-nebula-ipv6";
     priority = 100;
     action = "allow";
-    from = {
-      kind = "external";
-      uplinks = [ "lab-wan" ];
-    };
+    from = { kind = "external"; scope = "lab-wan"; };
     to = {
       kind = "service";
       name = "nebula-lab";

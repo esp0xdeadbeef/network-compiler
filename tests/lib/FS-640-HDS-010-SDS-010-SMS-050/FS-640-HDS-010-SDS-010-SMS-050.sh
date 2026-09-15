@@ -60,7 +60,7 @@ cat >"$good_input" <<'NIX'
         ];
         relations = [
           { id = "allow-media-to-receiver"; priority = 100; from = { kind = "tenant"; name = "media"; }; to = { kind = "service"; name = "living-room-cast"; }; trafficType = "cast"; action = "allow"; }
-          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "cast"; action = "allow"; }
+          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "cast"; action = "allow"; }
         ];
       };
       topology.nodes = {
@@ -142,7 +142,7 @@ cat >"$sn1_input" <<'SN1'
         ];
         relations = [
           { id = "allow-media-to-receiver"; priority = 100; from = { kind = "tenant"; name = "media"; }; to = { kind = "service"; name = "living-room-cast"; }; trafficType = "cast"; action = "allow"; }
-          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "cast"; action = "allow"; }
+          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "cast"; action = "allow"; }
         ];
       };
       topology.nodes = {
@@ -228,7 +228,7 @@ cat >"$sn2_input" <<'SN2'
         ];
         relations = [
           { id = "allow-media-to-receiver"; priority = 100; from = { kind = "tenant"; name = "media"; }; to = { kind = "service"; name = "living-room-cast"; }; trafficType = "cast"; action = "allow"; }
-          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "cast"; action = "allow"; }
+          { id = "allow-media-to-wan"; priority = 200; from = { kind = "tenant"; name = "media"; }; to = { kind = "external"; scope = "wan"; }; trafficType = "cast"; action = "allow"; }
         ];
       };
       topology.nodes = {

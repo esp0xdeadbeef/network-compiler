@@ -37,7 +37,7 @@
           };
           to = {
             kind = "external";
-            uplinks = [ "uplink0" ];
+            scope = "uplink0";
           };
           trafficType = "any";
           action = "allow";

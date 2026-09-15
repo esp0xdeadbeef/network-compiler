@@ -33,10 +33,7 @@
           };
           to = {
             kind = "external";
-            uplinks = [
-              "isp-a"
-              "isp-b"
-            ];
+            scope = "isp-a";
           };
           trafficType = "any";
           action = "allow";

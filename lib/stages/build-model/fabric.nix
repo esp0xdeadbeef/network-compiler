@@ -5,6 +5,7 @@
   normalizeUplinksForNode,
   normalizeTransportOverlays,
   buildCoreUplinks,
+  validateSupersededContract,
 }:
 
 {
@@ -12,6 +13,8 @@
   prepare =
     siteKey: declared: semantic:
     let
+
+      _superseded = validateSupersededContract.perSite siteKey declared;
       topo = declared.topology or { };
       nodes = topo.nodes or { };
       nodeNamesSorted = lib.sort builtins.lessThan (builtins.attrNames nodes);
@@ -39,14 +42,76 @@
             }) overlayNames
           );
 
-      coreUplinks = buildCoreUplinks siteKey nodes coreNodes { inherit overlayEndpointNodes; };
-      normalizedTopologyNodes = lib.mapAttrs (
+      coreUplinks = builtins.deepSeq _superseded (
+        buildCoreUplinks siteKey nodes coreNodes { inherit overlayEndpointNodes; }
+      );
+
+      normalizeSelects =
         nodeName: node:
-        node
-        // {
-          uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
-        }
-      ) nodes;
+        let
+          raw = node.selects or [ ];
+        in
+        if !(builtins.isList raw) then
+          throw (
+            "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects must be a list "
+            + "(FS-322 Scope Reachability; owning item: FS-322)."
+          )
+        else
+          map (
+            entry:
+            if builtins.isString entry then
+              {
+                uplink = entry;
+                behaviors = [ ];
+              }
+            else if builtins.isAttrs entry then
+              {
+                uplink = entry.uplink or null;
+                scope = entry.scope or null;
+                behaviors =
+                  if builtins.isList (entry.behaviors or null) then
+                    entry.behaviors
+                  else
+                    throw (
+                      "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects[] behavior must be a list "
+                      + "(FS-481 Routing Behavior Selection)."
+                    );
+              }
+            else
+              throw (
+                "E_CONTRACT_SELECTS: topology.nodes.${nodeName}.selects entries must be a string (uplink) or an attrset "
+                + "(FS-322 Scope Reachability)."
+              )
+          ) raw;
+
+      normalizeOffers =
+        nodeName: node:
+        let
+          raw = node.offers or null;
+        in
+        if raw == null then
+          null
+        else if builtins.isList raw && builtins.all builtins.isString raw then
+          raw
+        else
+          throw (
+            "E_CONTRACT_OFFERS: topology.nodes.${nodeName}.offers must be a list of prefix strings "
+            + "(FS-322 Scope Reachability; owning item: FS-322)."
+          );
+
+      normalizedTopologyNodes = builtins.deepSeq _superseded (
+        lib.mapAttrs (
+          nodeName: node:
+          node
+          // {
+            uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
+            selects = normalizeSelects nodeName node;
+          }
+          // lib.optionalAttrs (node ? offers) {
+            offers = normalizeOffers nodeName node;
+          }
+        ) nodes
+      );
       uplinkNames = lib.sort builtins.lessThan (
         lib.unique (lib.concatMap (n: map (u: u.name) (coreUplinks.${n} or [ ])) coreNodes)
       );
@@ -66,6 +131,7 @@
       validations = {
         _addrSafe = addressSafety.validateSite siteKey declared;
         _topoValid = topoC.validateTopology siteKey topo overlays;
+        inherit _superseded;
       };
     };
 }

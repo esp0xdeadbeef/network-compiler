@@ -37,7 +37,7 @@
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -47,7 +47,7 @@
             priority = 100;
             from = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             to = {
               kind = "service";
@@ -61,7 +61,7 @@
             priority = 100;
             from = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             to = {
               kind = "service";
@@ -75,7 +75,7 @@
             priority = 100;
             from = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             to = {
               kind = "tenant";

@@ -11,6 +11,7 @@ let
   validateOverlayModel = import ../validate-overlay-model.nix { inherit lib; };
   buildTrafficPaths = import ../traffic-paths.nix { inherit lib; };
   validateNoLegacyExternalPolicy = import ../validate-no-legacy-external.nix { inherit lib; };
+  validateSupersededContract = import ../validate-superseded-contract.nix { inherit lib; };
   validateIntentSourceBoundary = import ../validate-intent-source-boundary.nix { inherit lib; };
   platformIndependence = import ../validate-platform-independence.nix { inherit lib; };
   validateServiceProviders = import ../validate-service-providers.nix { inherit lib; };
@@ -41,6 +42,7 @@ let
       normalizeUplinksForNode
       normalizeTransportOverlays
       buildCoreUplinks
+      validateSupersededContract
       ;
   };
   contractsMod = import ./contracts.nix {

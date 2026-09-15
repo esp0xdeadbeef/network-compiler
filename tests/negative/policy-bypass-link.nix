@@ -20,8 +20,14 @@
         {
           id = "allow-mgmt-to-wan";
           priority = 100;
-          from = { kind = "tenant"; name = "mgmt"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          from = {
+            kind = "tenant";
+            name = "mgmt";
+          };
+          to = {
+            kind = "external";
+            scope = "wan";
+          };
           trafficType = "any";
           action = "allow";
         }
@@ -39,16 +45,36 @@
         downstream.role = "downstream-selector";
         access = {
           role = "access";
-          attachments = [{ kind = "tenant"; name = "mgmt"; }];
+          attachments = [
+            {
+              kind = "tenant";
+              name = "mgmt";
+            }
+          ];
         };
       };
 
       links = [
-        [ "core" "upstream" ]
-        [ "upstream" "policy" ]
-        [ "policy" "downstream" ]
-        [ "downstream" "access" ]
-        [ "access" "policy" ]
+        [
+          "core"
+          "upstream"
+        ]
+        [
+          "upstream"
+          "policy"
+        ]
+        [
+          "policy"
+          "downstream"
+        ]
+        [
+          "downstream"
+          "access"
+        ]
+        [
+          "access"
+          "policy"
+        ]
       ];
     };
   };

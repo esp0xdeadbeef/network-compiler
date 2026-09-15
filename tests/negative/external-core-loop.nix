@@ -26,7 +26,7 @@
           };
           to = {
             kind = "external";
-            uplinks = [ "wan" ];
+            scope = "wan";
           };
           trafficType = "any";
           action = "allow";
@@ -69,10 +69,22 @@
       };
 
       links = [
-        [ "edge-core" "upstream" ]
-        [ "upstream" "policy" ]
-        [ "policy" "downstream" ]
-        [ "downstream" "access" ]
+        [
+          "edge-core"
+          "upstream"
+        ]
+        [
+          "upstream"
+          "policy"
+        ]
+        [
+          "policy"
+          "downstream"
+        ]
+        [
+          "downstream"
+          "access"
+        ]
       ];
     };
   };

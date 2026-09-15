@@ -71,7 +71,7 @@ cat >"$good_input" <<'NIX'
             id = "r2";
             action = "allow";
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "internet-vlan4" ]; };
+            to = { kind = "external"; scope = "internet-vlan4"; };
             trafficType = "any";
             priority = 100;
           }

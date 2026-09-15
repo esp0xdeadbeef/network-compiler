@@ -38,7 +38,7 @@ cat >"$input_nix" <<'NIX'
           {
             id = "allow-provider-to-client";
             priority = 100;
-            from = { kind = "external"; uplinks = [ "wan0" ]; };
+            from = { kind = "external"; scope = "wan0"; };
             to = { kind = "tenant"; name = "client"; };
             trafficType = "any";
             action = "allow";
@@ -47,7 +47,7 @@ cat >"$input_nix" <<'NIX'
             id = "allow-client-to-provider";
             priority = 110;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan0" ]; };
+            to = { kind = "external"; scope = "wan0"; };
             trafficType = "any";
             action = "allow";
           }
@@ -55,7 +55,7 @@ cat >"$input_nix" <<'NIX'
             id = "allow-dmz-api-to-provider";
             priority = 130;
             from = { kind = "service"; name = "dmz-api"; };
-            to = { kind = "external"; uplinks = [ "wan0" ]; };
+            to = { kind = "external"; scope = "wan0"; };
             trafficType = "any";
             action = "allow";
           }

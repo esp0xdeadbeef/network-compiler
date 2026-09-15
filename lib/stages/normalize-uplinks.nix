@@ -45,57 +45,41 @@ let
           translatedPrefixes = normalizeTranslatedPrefixes t;
         };
 
-  normalizeBgp =
-    uplinkName: b:
-    if b == null then
-      { }
-    else if !builtins.isAttrs b then
-      throw "intent topology uplink '${uplinkName}' egress.bgp must be an attribute set"
-    else
-      let
-        asn = b.asn or null;
-        topology = b.topology or "policy-rr";
-      in
-      if !builtins.isInt asn then
-        throw "intent topology uplink '${uplinkName}' egress.bgp.asn must be an integer when egress.mode = \"bgp\""
-      else if topology != "policy-rr" then
-        throw "intent topology uplink '${uplinkName}' egress.bgp.topology '${builtins.toString topology}' is not recognized; expected 'policy-rr'"
-      else
-        b
-        // {
-          inherit asn topology;
-        };
-
   normalizeEgress =
     uplinkName: e:
     if e == null then
       { }
     else if !builtins.isAttrs e then
       throw "intent topology uplink '${uplinkName}' egress must be an attribute set"
+    else if e ? mode || e ? bgp then
+
+      builtins.throw (
+        builtins.toJSON {
+          code = "E_SUPERSEDED_CONTRACT";
+          site = null;
+          path = [
+            "topology"
+            "nodes"
+          ];
+          message = "uplink egress declares a per-uplink routing/egress mode (not caught by FS-081 pre-check)";
+          spec = "FS-081 Superseded-Contract Rejection; owning item: FS-481 Routing Behavior Selection";
+          hints = [ "Remove 'egress.mode' and 'egress.bgp'; declare routing behaviors on the selection." ];
+        }
+      )
     else
-      let
-        mode = e.mode or "static";
-      in
-      if mode != "static" && mode != "bgp" then
-        throw "intent topology uplink '${uplinkName}' egress.mode '${builtins.toString mode}' is not recognized; expected 'static' or 'bgp'"
-      else if mode == "bgp" && !builtins.isAttrs (e.bgp or null) then
-        throw "intent topology uplink '${uplinkName}' egress.mode = \"bgp\" requires egress.bgp = { asn = <int>; topology = \"policy-rr\"; }"
-      else
-        e
-        // {
-          inherit mode;
-          bgp = normalizeBgp uplinkName (e.bgp or null);
-          ipv4 =
-            if builtins.isAttrs (e.ipv4 or null) then
-              e.ipv4 // { translation = normalizeTranslation uplinkName "ipv4" (e.ipv4.translation or null); }
-            else
-              { };
-          ipv6 =
-            if builtins.isAttrs (e.ipv6 or null) then
-              e.ipv6 // { translation = normalizeTranslation uplinkName "ipv6" (e.ipv6.translation or null); }
-            else
-              { };
-        };
+      e
+      // {
+        ipv4 =
+          if builtins.isAttrs (e.ipv4 or null) then
+            e.ipv4 // { translation = normalizeTranslation uplinkName "ipv4" (e.ipv4.translation or null); }
+          else
+            { };
+        ipv6 =
+          if builtins.isAttrs (e.ipv6 or null) then
+            e.ipv6 // { translation = normalizeTranslation uplinkName "ipv6" (e.ipv6.translation or null); }
+          else
+            { };
+      };
 
   normalizeUplink =
     uplinkName: v:

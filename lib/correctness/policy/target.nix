@@ -9,7 +9,7 @@ let
   inherit (external) normalizeExternalSelector;
 
   normalizeTarget =
-    siteKey: idx: tenantNames: serviceIndex: overlayNames: uplinkNames: target:
+    siteKey: idx: tenantNames: serviceIndex: overlayNames: uplinkNames: scopeNames: target:
     let
       basePath = [
         "communicationContract"
@@ -64,7 +64,8 @@ let
               "tenant-set"
             ]
           then
-            normalizeSubject siteKey idx basePath tenantNames serviceIndex overlayNames uplinkNames target
+            normalizeSubject siteKey idx basePath tenantNames serviceIndex overlayNames uplinkNames scopeNames
+              target
           else if kind == "service" then
             let
               name = target.name or null;
@@ -108,7 +109,7 @@ let
               inherit ipv4;
             }
           else
-            normalizeExternalSelector siteKey basePath overlayNames uplinkNames target
+            normalizeExternalSelector siteKey basePath overlayNames scopeNames target
         )
       );
 in

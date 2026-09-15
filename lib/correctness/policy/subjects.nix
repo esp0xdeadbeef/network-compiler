@@ -7,7 +7,7 @@ let
   inherit (external) normalizeExternalSelector;
 
   normalizeSubject =
-    siteKey: idx: path: tenantNames: serviceIndex: overlayNames: uplinkNames: subj:
+    siteKey: idx: path: tenantNames: serviceIndex: overlayNames: uplinkNames: scopeNames: subj:
     let
       _shape = ensure (builtins.isAttrs subj) {
         code = "E_CONTRACT_SUBJECT_SHAPE";
@@ -123,7 +123,7 @@ let
         inherit name;
       }
     else
-      normalizeExternalSelector siteKey path overlayNames uplinkNames subj;
+      normalizeExternalSelector siteKey path overlayNames scopeNames subj;
 in
 {
   inherit normalizeSubject;

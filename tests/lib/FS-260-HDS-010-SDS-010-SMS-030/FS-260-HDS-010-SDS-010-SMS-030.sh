@@ -160,7 +160,7 @@ cat >"${missing_role_chain_input}" <<'NIX'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "wan"; };
           trafficType = "any";
           action = "allow";
         }

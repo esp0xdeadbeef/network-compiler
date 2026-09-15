@@ -88,7 +88,7 @@ cat >"$good_input" <<'NIX'
             id = "allow-trusted-to-wan";
             priority = 110;
             from = { kind = "tenant"; name = "trusted"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "wan"; };
             trafficType = "ipp";
             action = "allow";
           }

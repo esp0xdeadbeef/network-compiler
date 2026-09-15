@@ -12,7 +12,6 @@
         };
       };
 
-      # Two tenants, each eligible for egress
       ownership.prefixes = [
         {
           kind = "tenant";
@@ -37,11 +36,14 @@
             priority = 100;
             from = {
               kind = "tenant-set";
-              members = [ "mgmt" "adm" ];
+              members = [
+                "mgmt"
+                "adm"
+              ];
             };
             to = {
               kind = "external";
-              uplinks = [ "uplink0" ];
+              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -95,16 +97,24 @@
         };
 
         links = [
-          [ "s-router-core" "s-router-upstream-selector" ]
-          [ "s-router-upstream-selector" "s-router-policy" ]
-          [ "s-router-policy" "s-router-downstream-selector" ]
-          # CORRUPTED: only adm access node is connected to downstream-selector.
-          # mgmt access node (s-router-access-mgmt) is INTENTIONALLY missing its link
-          # to downstream-selector, so the compiler should NOT emit a trafficPath
-          # for the mgmt tenant. This is the seeded negative: an eligible path
-          # is silently dropped because the graph mapping is incomplete.
-          [ "s-router-downstream-selector" "s-router-access-adm" ]
-          # MISSING: [ "s-router-downstream-selector" "s-router-access-mgmt" ]
+          [
+            "s-router-core"
+            "s-router-upstream-selector"
+          ]
+          [
+            "s-router-upstream-selector"
+            "s-router-policy"
+          ]
+          [
+            "s-router-policy"
+            "s-router-downstream-selector"
+          ]
+
+          [
+            "s-router-downstream-selector"
+            "s-router-access-adm"
+          ]
+
         ];
       };
     };

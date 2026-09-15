@@ -25,7 +25,7 @@ cat >"$good_input" <<'NIX'
       communicationContract = {
         relations = [
           { id = "r1"; action = "allow"; from = { kind = "tenant"; name = "client"; }; to = { kind = "tenant"; name = "streaming"; }; trafficType = "tcp8008"; }
-          { id = "r2"; action = "allow"; from = { kind = "tenant"; name = "client"; }; to = { kind = "external"; uplinks = [ "internet-vlan4" ]; }; trafficType = "any"; priority = 100; }
+          { id = "r2"; action = "allow"; from = { kind = "tenant"; name = "client"; }; to = { kind = "external"; scope = "internet-vlan4"; }; trafficType = "any"; priority = 100; }
         ];
         services = [
           { name = "svc1"; trafficType = "tcp8008"; servicePolicy = {

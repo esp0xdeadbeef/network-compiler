@@ -38,16 +38,16 @@ let
   };
 
   normalizeRelationWithProvenance =
-    siteKey: overlayNames: uplinkNames: tenantNames: serviceIndex: trafficTypeIndex: idx: relation:
+    siteKey: overlayNames: uplinkNames: scopeNames: tenantNames: serviceIndex: trafficTypeIndex: idx: relation:
     let
       from = normalizeSubject siteKey idx [
         "communicationContract"
         "relations"
         idx
         "from"
-      ] tenantNames serviceIndex overlayNames uplinkNames (relation.from or { });
+      ] tenantNames serviceIndex overlayNames uplinkNames scopeNames (relation.from or { });
 
-      to = normalizeTarget siteKey idx tenantNames serviceIndex overlayNames uplinkNames (
+      to = normalizeTarget siteKey idx tenantNames serviceIndex overlayNames uplinkNames scopeNames (
         relation.to or null
       );
 

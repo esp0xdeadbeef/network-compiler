@@ -21,6 +21,7 @@
       trafficPaths,
       normalizedTopologyNodes,
       dns,
+      communicationContractDeclared,
       validations,
     }:
     let
@@ -41,6 +42,12 @@
         accessSpaceDiscovery = accessSpaceDiscovery;
         ipv6 = semantic.ipv6 or { };
         relations = normalizedRelations;
+
+        communicationContract = {
+          trafficTypes = communicationContractDeclared.trafficTypes or [ ];
+          services = communicationContractDeclared.services or [ ];
+          relations = normalizedRelations;
+        };
         overlayAttachments = overlayAttachments;
         overlayAddressPools = overlayAddressPools;
         transport = {
@@ -70,6 +77,7 @@
           accessSpaceDiscovery = model0.accessSpaceDiscovery;
           ipv6 = model0.ipv6;
           relations = model0.relations;
+          communicationContract = model0.communicationContract;
           overlayAttachments = model0.overlayAttachments;
           overlayAddressPools = model0.overlayAddressPools;
           transport = model0.transport;

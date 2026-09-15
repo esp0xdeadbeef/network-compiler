@@ -98,6 +98,7 @@ outputMod.build {
   inherit (contracts)
     tenants
     dns
+    communicationContractDeclared
     ;
   inherit (relations)
     normalizedRelations

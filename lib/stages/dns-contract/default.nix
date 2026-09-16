@@ -4,13 +4,12 @@ siteKey: declared: nodes: coreUplinks:
 
 let
   recursiveRaw =
-    if builtins.isAttrs (declared.recursiveDnsIntent or null) then
-      declared.recursiveDnsIntent
-    else
-      { };
+    if builtins.isAttrs (declared.recursiveDnsIntent or null) then declared.recursiveDnsIntent else { };
   localRaw =
     if builtins.isList (declared.localDnsSharingIntents or null) then
       declared.localDnsSharingIntents
+    else if builtins.isList (declared.localDnsSharingIntent or null) then
+      declared.localDnsSharingIntent
     else if builtins.isAttrs (declared.localDnsSharingIntent or null) then
       [ declared.localDnsSharingIntent ]
     else
@@ -23,7 +22,12 @@ let
     inherit lib siteKey declared;
   };
   services = import ./services.nix {
-    inherit lib recursiveRaw coreNames helpers;
+    inherit
+      lib
+      recursiveRaw
+      coreNames
+      helpers
+      ;
   };
   bindings = import ./bindings.nix {
     inherit
@@ -52,19 +56,17 @@ let
     if fatalWarnings != [ ] then
       [ ]
     else
-      map
-        (service: {
-          inherit (service)
-            name
-            trafficType
-            providerNode
-            addressAuthority
-            recursionMode
-            ;
-          providers = [ service.providerNode ];
-          providerRole = "core";
-        })
-        services.normalized;
+      map (service: {
+        inherit (service)
+          name
+          trafficType
+          providerNode
+          addressAuthority
+          recursionMode
+          ;
+        providers = [ service.providerNode ];
+        providerRole = "core";
+      }) services.normalized;
   localSharingRelations = localSharingModule.normalized;
   legacyLocalSharing =
     if hasPluralLocalSharing then

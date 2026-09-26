@@ -30,6 +30,34 @@ let
     in
     if builtins.isAttrs (topo.nodes or null) then topo.nodes else { };
 
+  checkUplinkReachability =
+    siteKey: nodeName: uplinkName: uplink:
+    let
+      ipv4 = if builtins.isList (uplink.ipv4 or null) then uplink.ipv4 else [ ];
+      ipv6 = if builtins.isList (uplink.ipv6 or null) then uplink.ipv6 else [ ];
+      nonDefault = builtins.filter (p: p != "0.0.0.0/0" && p != "::/0") (ipv4 ++ ipv6);
+      hasDefault = builtins.elem "0.0.0.0/0" ipv4 || builtins.elem "::/0" ipv6;
+    in
+    if !hasDefault && builtins.length nonDefault > 1 then
+      fail {
+        site = siteKey;
+        path = [
+          "topology"
+          "nodes"
+          nodeName
+          "uplinks"
+          uplinkName
+        ];
+        owner = "FS-260-HDS-010-SDS-010-SMS-010 Default Site Fabric Chain";
+        message = "uplink '${uplinkName}' on node '${nodeName}' carries a tenant-prefix list (${builtins.toString (builtins.length nonDefault)} non-default prefixes); an uplink is a provider/WAN/exit surface (one provider prefix or the default) or a service/fabric uplink, not a tenant or peer-site reachability list";
+        hints = [
+          "Declare tenant and peer-site reachability with 'offers'/'selects' on the scopes (FS-322), not as an uplink prefix list."
+          "A core or access that federates other scopes over fabric links declares no uplinks."
+        ];
+      }
+    else
+      true;
+
   checkUplink =
     siteKey: nodeName: uplinkName: uplink:
     let
@@ -54,7 +82,7 @@ let
         ];
       }
     else
-      true;
+      checkUplinkReachability siteKey nodeName uplinkName uplink;
 
   checkNode =
     siteKey: nodeName: node:

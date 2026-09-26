@@ -333,6 +333,90 @@ in
           )
       );
 
+      declareOwnershipFailure =
+        {
+          nodeName,
+          field,
+          prefix,
+          owner,
+          owningItem,
+          extraHint,
+        }:
+        throwError {
+          code = "E_CONTRACT_PREFIX_OWNERSHIP";
+          site = siteKey;
+          path = [
+            "topology"
+            "nodes"
+            nodeName
+            field
+          ];
+          message = "topology.nodes.${nodeName}.${field} lists prefix '${prefix}', which is owned by scope '${owner}'; a scope may only offer or carry prefixes it owns (owning item: ${owningItem}).";
+          spec = "${owningItem}";
+          hints = [
+            "A scope shall not restate a prefix another scope owns (FS-322); reachability toward it is expressed with 'selects'."
+          ]
+          ++ (if extraHint == null then [ ] else [ extraHint ]);
+        };
+
+      validatePrefixOwnership =
+        nodeName: node:
+        let
+          owned = builtins.attrNames declaredTenantPrefixesByName;
+          tenantsOwning =
+            prefix: lib.filter (t: builtins.elem prefix declaredTenantPrefixesByName.${t}) owned;
+
+          attachedTenants = map (
+            a: if builtins.isAttrs a then (a.name or null) else (if builtins.isString a then a else null)
+          ) (node.attachments or [ ]);
+          nodeOwnsTenant = tenant: tenant == nodeName || builtins.elem tenant attachedTenants;
+          checkOffers =
+            prefix:
+            let
+              owners = tenantsOwning prefix;
+            in
+            if owners == [ ] then
+              true
+            else if lib.any nodeOwnsTenant owners then
+              true
+            else
+              declareOwnershipFailure {
+                inherit nodeName prefix;
+                field = "offers";
+                owner = builtins.head owners;
+                owningItem = "FS-322 Scope Reachability; owning item: FS-322";
+                extraHint = "Declare selects = [ \"${builtins.head owners}\" ]; instead of restating the prefix.";
+              };
+          uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
+          checkUplink =
+            uplinkName: uplink:
+            let
+              prefixes = (uplink.ipv4 or [ ]) ++ (uplink.ipv6 or [ ]);
+              nonDefault = builtins.filter (p: p != "0.0.0.0/0" && p != "::/0") prefixes;
+            in
+            lib.all (
+              prefix:
+              let
+                owners = tenantsOwning prefix;
+              in
+              if owners == [ ] then
+                true
+              else if lib.any nodeOwnsTenant owners then
+                true
+              else
+                declareOwnershipFailure {
+                  inherit nodeName prefix;
+                  field = "uplinks.${uplinkName}";
+                  owner = builtins.head owners;
+                  owningItem = "FS-260-HDS-010-SDS-010-SMS-010 Default Site Fabric Chain";
+                  extraHint = "A core/access that federates other scopes declares no uplinks; use selects (FS-322).";
+                }
+            ) nonDefault;
+          _offers = lib.all checkOffers (normalizeOffers nodeName node);
+          _uplinks = lib.all (u: checkUplink u uplinks.${u}) (builtins.attrNames uplinks);
+        in
+        _offers && _uplinks;
+
       normalizeAdvertises =
         nodeName: node:
         let
@@ -396,7 +480,7 @@ in
           // {
             uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
             selects = normalizeSelects nodeName node;
-            offers = normalizeOffers nodeName node;
+            offers = builtins.deepSeq (validatePrefixOwnership nodeName node) (normalizeOffers nodeName node);
             behaviors = builtins.deepSeq (validateBehaviors nodeName node) (allBehaviorsOf node);
             advertises = normalizeAdvertises nodeName node;
           }

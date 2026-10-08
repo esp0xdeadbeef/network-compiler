@@ -15,6 +15,42 @@ let
 
   normalizeTerminateOn = raw: if builtins.isList raw then map toString raw else [ (toString raw) ];
 
+  cidrLooksValid =
+    family: cidr:
+    let
+      bits = if family == "ipv4" then 32 else 128;
+      parts = lib.splitString "/" cidr;
+      base = if builtins.length parts == 2 then builtins.elemAt parts 0 else null;
+      lenStr = if builtins.length parts == 2 then builtins.elemAt parts 1 else null;
+      lenOk = lenStr != null && builtins.match "[0-9]+" lenStr != null && (lib.toInt lenStr) <= bits;
+      v4Ok = base != null && builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" base != null;
+      v6Ok = base != null && lib.hasInfix ":" base;
+    in
+    builtins.length parts == 2
+    && lenOk
+    && (if family == "ipv4" then v4Ok && !(lib.hasInfix ":" base) else v6Ok);
+
+  validateOverlayPrefix =
+    idx: family: cidr:
+    if cidrLooksValid family cidr then
+      cidr
+    else
+      throw (
+        builtins.toJSON {
+          code = "E_OVERLAY_PREFIX_INVALID";
+          site = siteKey;
+          path = [
+            "transport"
+            "overlays"
+            idx
+            "prefixes"
+            family
+          ];
+          message = "overlay prefix '${cidr}' is not a valid ${family} CIDR";
+          hints = [ "Use a valid ${family} CIDR for the declared family." ];
+        }
+      );
+
   resolveTerminateOn =
     idx: ov:
     if ov ? terminateOn then
@@ -91,6 +127,68 @@ let
           [ (toString rawPeerSite) ]
         else
           [ ];
+
+      normalizePrefixFamily =
+        family: raw:
+        let
+          value = raw.${family} or [ ];
+        in
+        if !(builtins.isList value) then
+          throw (
+            builtins.toJSON {
+              code = "E_OVERLAY_PREFIXES_SHAPE";
+              site = siteKey;
+              path = [
+                "transport"
+                "overlays"
+                idx
+                "prefixes"
+                family
+              ];
+              message = "overlay prefixes.${family} must be a list of CIDR strings";
+              hints = [ "Use prefixes.${family} = [ \"<cidr>\" ];" ];
+            }
+          )
+        else
+          map (validateOverlayPrefix idx family) (map toString value);
+
+      rawPrefixes = ov.prefixes or null;
+
+      imported0 = if builtins.isAttrs rawPrefixes then rawPrefixes.imported or { } else { };
+      exported0 = if builtins.isAttrs rawPrefixes then rawPrefixes.exported or { } else { };
+
+      prefixes =
+        if rawPrefixes == null then
+          null
+        else if !(builtins.isAttrs rawPrefixes) then
+          throw (
+            builtins.toJSON {
+              code = "E_OVERLAY_PREFIXES_SHAPE";
+              site = siteKey;
+              path = [
+                "transport"
+                "overlays"
+                idx
+                "prefixes"
+              ];
+              message = "overlay prefixes must be an attrset with imported/exported families";
+              hints = [
+                "Use prefixes = { imported = { ipv4 = [ ... ]; ipv6 = [ ... ]; }; exported = { ipv4 = [ ... ]; ipv6 = [ ... ]; }; };"
+              ];
+            }
+          )
+        else
+          {
+            imported = {
+              ipv4 = normalizePrefixFamily "ipv4" imported0;
+              ipv6 = normalizePrefixFamily "ipv6" imported0;
+            };
+            exported = {
+              ipv4 = normalizePrefixFamily "ipv4" exported0;
+              ipv6 = normalizePrefixFamily "ipv6" exported0;
+            };
+          };
+
       normalized = {
         name = ov.name or "overlay-${toString idx}";
         peerSite = if peerSites == [ ] then null else builtins.head peerSites;
@@ -101,6 +199,9 @@ let
       }
       // lib.optionalAttrs (ov ? underlayAccess) {
         underlayAccess = ov.underlayAccess;
+      }
+      // lib.optionalAttrs (prefixes != null) {
+        inherit prefixes;
       };
     in
     normalized;

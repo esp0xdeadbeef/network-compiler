@@ -43,7 +43,6 @@
             };
             to = {
               kind = "external";
-              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";
@@ -87,6 +86,12 @@
 
           s-router-access-adm = {
             role = "access";
+            # FS-322: reachability is a scope property. The access scope selects
+            # the exit scopes it may reach; the relation no longer names uplinks.
+            selects = [
+              "s-router-core-isp-a"
+              "s-router-core-isp-b"
+            ];
             attachments = [
               {
                 kind = "tenant";
@@ -169,7 +174,6 @@
             };
             to = {
               kind = "external";
-              scope = "uplink0";
             };
             trafficType = "any";
             action = "allow";

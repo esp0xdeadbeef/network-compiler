@@ -43,7 +43,7 @@ cat >"$input_file" <<'NIX'
             id = "allow-client-to-wan";
             priority = 20;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "core"; };
             trafficType = "icmp";
             action = "allow";
           }
@@ -182,7 +182,7 @@ cat >"$ineligible_input" <<'NIX'
             id = "allow-client-to-wan";
             priority = 20;
             from = { kind = "tenant"; name = "client"; };
-            to = { kind = "external"; uplinks = [ "wan" ]; };
+            to = { kind = "external"; scope = "core"; };
             trafficType = "icmp";
             action = "allow";
           }
@@ -247,7 +247,7 @@ cat >"$empty_input" <<'NIX'
           {
             id = "allow-wan-icmp-anywhere";
             priority = 10;
-            from = { kind = "external"; uplinks = [ "wan" ]; };
+            from = { kind = "external"; scope = "core"; };
             to = "any";
             trafficType = "icmp";
             action = "allow";

@@ -116,14 +116,14 @@ cat > "$service_access_input" <<'EOF'
             id = "allow-dmz-dns-to-uplink0";
             priority = 110;
             from = { kind = "service"; name = "dns-dmz"; };
-            to = { kind = "external"; uplinks = [ "uplink0" ]; };
+            to = { kind = "external"; scope = "s-router-core"; };
             trafficType = "any";
             action = "allow";
           }
           {
             id = "allow-uplink0-to-dmz-dns";
             priority = 120;
-            from = { kind = "external"; uplinks = [ "uplink0" ]; };
+            from = { kind = "external"; scope = "s-router-core"; };
             to = { kind = "service"; name = "dns-dmz"; };
             trafficType = "any";
             action = "allow";
@@ -132,7 +132,7 @@ cat > "$service_access_input" <<'EOF'
             id = "allow-client-to-uplink0";
             priority = 130;
             from = { kind = "tenant-set"; members = [ "client" ]; };
-            to = { kind = "external"; uplinks = [ "uplink0" ]; };
+            to = { kind = "external"; scope = "s-router-core"; };
             trafficType = "any";
             action = "allow";
           }

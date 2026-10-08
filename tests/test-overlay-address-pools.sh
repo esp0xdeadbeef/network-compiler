@@ -37,9 +37,9 @@ cat >"$input_file" <<'EOF'
     communicationContract.relations = [
       { id = "allow-lan-east-west"; priority = 100; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; name = "east-west"; }; trafficType = "any"; action = "allow"; }
       { id = "allow-lan-provider-egress"; priority = 101; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; name = "provider-egress"; }; trafficType = "any"; action = "allow"; }
-      { id = "allow-lan-nebula-underlay-to-wan"; priority = 105; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
-      { id = "allow-east-west-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
-      { id = "allow-provider-egress-underlay"; priority = 111; from = { kind = "external"; name = "provider-egress"; }; to = { kind = "external"; uplinks = [ "wan" ]; }; trafficType = "nebula"; action = "allow"; }
+      { id = "allow-lan-nebula-underlay-to-wan"; priority = 105; from = { kind = "tenant"; name = "lan"; }; to = { kind = "external"; scope = "core-wan"; }; trafficType = "nebula"; action = "allow"; }
+      { id = "allow-east-west-underlay"; priority = 110; from = { kind = "external"; name = "east-west"; }; to = { kind = "external"; scope = "core-wan"; }; trafficType = "nebula"; action = "allow"; }
+      { id = "allow-provider-egress-underlay"; priority = 111; from = { kind = "external"; name = "provider-egress"; }; to = { kind = "external"; scope = "core-wan"; }; trafficType = "nebula"; action = "allow"; }
     ];
     transport.overlays = [
       { name = "east-west"; terminateOn = "core-nebula"; underlayAccess = { kind = "tenant"; name = "lan"; }; underlayTrafficTypes = [ "nebula" ]; mustTraverse = [ "policy" ]; }
@@ -52,7 +52,7 @@ cat >"$input_file" <<'EOF'
       upstream.role = "upstream-selector";
       policy.role = "policy";
       downstream.role = "downstream-selector";
-      access = { role = "access"; attachments = [ { kind = "tenant"; name = "lan"; } ]; };
+      access = { role = "access"; selects = [ "core-wan" ]; attachments = [ { kind = "tenant"; name = "lan"; } ]; };
     };
     topology.links = [
       [ "core-wan" "upstream" ]

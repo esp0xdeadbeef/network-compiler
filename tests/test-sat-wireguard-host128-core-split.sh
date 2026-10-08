@@ -137,7 +137,7 @@ cat > "${tmp_dir}/ambiguous-core.nix" <<'AMBIGUOUS'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "core-wan"; };
           trafficType = "any";
           action = "allow";
         }
@@ -145,7 +145,7 @@ cat > "${tmp_dir}/ambiguous-core.nix" <<'AMBIGUOUS'
           id = "allow-wg-underlay";
           priority = 110;
           from = { kind = "external"; name = "wg-host128-egress"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "core-wan"; };
           trafficType = "wireguard";
           action = "allow";
         }
@@ -220,7 +220,7 @@ cat > "${tmp_dir}/unknown-termination.nix" <<'UNKNOWNTERM'
           id = "allow-client-to-wan";
           priority = 100;
           from = { kind = "tenant"; name = "client"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "core"; };
           trafficType = "any";
           action = "allow";
         }
@@ -228,7 +228,7 @@ cat > "${tmp_dir}/unknown-termination.nix" <<'UNKNOWNTERM'
           id = "allow-wg-underlay";
           priority = 110;
           from = { kind = "external"; name = "wg-host128-egress"; };
-          to = { kind = "external"; uplinks = [ "wan" ]; };
+          to = { kind = "external"; scope = "core"; };
           trafficType = "wireguard";
           action = "allow";
         }

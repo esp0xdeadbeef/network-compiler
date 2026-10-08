@@ -48,8 +48,19 @@ let
         || (uplink ? peering)
         || ((uplink.role or null) == "peering")
         || ((uplink.kind or null) == "peering");
+      # FS-350/FS-440/FS-410: an exit scope declares its own address authority.
+      # A host-only exit address (/32 IPv4 or /128 IPv6) plus a delegated
+      # provider prefix is a provider exit surface, not a tenant-prefix list.
+      hostOnlyPrefix =
+        p:
+        builtins.match ".*/32" p != null
+        || builtins.match ".*/128" p != null;
+      isExitSurface =
+        builtins.any hostOnlyPrefix nonDefault
+        || (uplink ? addr4)
+        || (uplink ? addr6);
     in
-    if isPeeringSurface then
+    if isPeeringSurface || isExitSurface then
       true
     else if !hasDefault && builtins.length nonDefault > 1 then
       fail {

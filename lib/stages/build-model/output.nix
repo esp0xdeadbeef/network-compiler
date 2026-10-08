@@ -60,6 +60,13 @@
         transit = semantic.transit or { };
         providerHandoffs = semantic.providerHandoffs or [ ];
         hostManagement = declared.hostManagement or null;
+        # FS-390: emit the modeled endpoint ownership as a destination-ownership
+        # record (separate from routing's site.ownership index) so the
+        # forwarding model can classify locally-owned-routed and provider-owned
+        # public IPv4 destinations before route selection.
+        destinationOwnership = {
+          endpoints = (declared.ownership or { }).endpoints or [ ];
+        };
         topology = {
           nodes = normalizedTopologyNodes;
           links = topo.links or [ ];

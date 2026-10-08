@@ -24,8 +24,14 @@ let
     relation:
     let
       endpoint = relation.to or { };
+      # FS-210/FS-525: a service destination's exit is the node that hosts the
+      # service (`providerNode`), resolved by coresForEndpoint. A service name
+      # is not an exit scope, so it must not be pinned here.
+      isServiceDestination = builtins.isAttrs endpoint && (endpoint.kind or null) == "service";
       pinned =
-        if builtins.isAttrs endpoint && endpoint ? scope then
+        if isServiceDestination then
+          [ ]
+        else if builtins.isAttrs endpoint && endpoint ? scope then
           [ endpoint.scope ]
         else if builtins.isAttrs endpoint && endpoint ? name then
           [ endpoint.name ]
@@ -47,7 +53,9 @@ let
         in
         if matches == [ ] then null else builtins.head matches;
       selections =
-        if pinned != [ ] then
+        if isServiceDestination then
+          [ ]
+        else if pinned != [ ] then
           pinned
         else if fromScope != null then
           selectsOf fromScope

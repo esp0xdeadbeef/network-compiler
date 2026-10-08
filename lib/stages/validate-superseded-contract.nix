@@ -37,8 +37,21 @@ let
       ipv6 = if builtins.isList (uplink.ipv6 or null) then uplink.ipv6 else [ ];
       nonDefault = builtins.filter (p: p != "0.0.0.0/0" && p != "::/0") (ipv4 ++ ipv6);
       hasDefault = builtins.elem "0.0.0.0/0" ipv4 || builtins.elem "::/0" ipv6;
+      # FS-480/FS-440: a route-import / peering provider surface models a peer
+      # adjacency and the provider prefixes it advertises. That is not a tenant
+      # or peer-site reachability list even though it carries more than one
+      # non-default prefix, so it is exempt from the uplink-prefix-list rule.
+      isPeeringSurface =
+        (uplink ? peerAddr4)
+        || (uplink ? peerAddr6)
+        || (uplink ? peerAddr)
+        || (uplink ? peering)
+        || ((uplink.role or null) == "peering")
+        || ((uplink.kind or null) == "peering");
     in
-    if !hasDefault && builtins.length nonDefault > 1 then
+    if isPeeringSurface then
+      true
+    else if !hasDefault && builtins.length nonDefault > 1 then
       fail {
         site = siteKey;
         path = [

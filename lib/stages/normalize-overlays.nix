@@ -86,7 +86,7 @@ let
                 idx
                 "prefixes"
               ];
-              message = "overlay '${ov.name or "overlay-${toString idx}"}' declares explicit prefixes ${builtins.toJSON legacyFlatPrefixes}; model those prefixes as peer tenant ownership or the overlay's imported/exported set before exporting overlay reachability";
+              message = "overlay-source-prefix-unbound: overlay '${ov.name or "overlay-${toString idx}"}' declares explicit prefixes ${builtins.toJSON legacyFlatPrefixes}; model those prefixes as peer tenant ownership or the overlay's imported/exported set before exporting overlay reachability";
               hints = [
                 "Use prefixes = { imported = { ipv4 = [ ... ]; ipv6 = [ ... ]; }; exported = { ipv4 = [ ... ]; ipv6 = [ ... ]; }; }; and model the prefixes as site/peer ownership."
               ];

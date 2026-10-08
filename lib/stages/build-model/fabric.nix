@@ -59,419 +59,48 @@ in
         in
         if owners == [ ] then null else builtins.head owners;
 
+      contractPrefixes = import ./fabric/contract-prefixes.nix {
+        inherit lib siteKey nodes normalizeUplinksForNode;
+      };
+      selectsMod = import ./fabric/contract-selects.nix {
+        inherit
+          lib
+          siteKey
+          nodes
+          coreUplinks
+          coreNodes
+          normalizeUplinksForNode
+          coreUplinkOwner
+          ;
+      };
+
       selectionTarget =
         nodeName: entry:
-        let
-          name =
-            if builtins.isString entry then
-              entry
-            else if builtins.isAttrs entry then
-              (entry.scope or entry.uplink or null)
-            else
-              null;
-          owner = if name != null then coreUplinkOwner name else null;
-          target = if owner != null then owner else name;
-
-          surface = name;
-        in
-        if name == null then
-          throwError {
-            code = "E_CONTRACT_SELECTS";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              nodeName
-              "selects"
-            ];
-            message = "selects entries must name a scope (FS-322 Scope Reachability; owning item: FS-322).";
-            spec = "FS-322 Scope Reachability; owning item: FS-322";
-            hints = [ "Give each selects entry a scope string, for example selects = [ \"<exit-scope>\" ]." ];
-          }
-        else if !(builtins.hasAttr target nodes) then
-          throwError {
-            code = "E_CONTRACT_UNKNOWN_SELECT";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              nodeName
-              "selects"
-            ];
-            message = "topology.nodes.${nodeName}.selects names '${target}', which is not a modeled scope (FS-322 Scope Reachability; owning item: FS-322).";
-            spec = "FS-322 Scope Reachability; owning item: FS-322";
-            hints = [
-              "Declare the scope under topology.nodes.<name>, or name an uplink a modeled scope owns."
-            ];
-          }
-        else
-          { inherit target surface; };
+        selectsMod.selectionTarget nodeName entry;
 
       normalizeSelects =
-        nodeName: node:
-        let
-          raw = node.selects or [ ];
-        in
-        if !(builtins.isList raw) then
-          throwError {
-            code = "E_CONTRACT_SELECTS";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              nodeName
-              "selects"
-            ];
-            message = "topology.nodes.${nodeName}.selects must be a list (FS-322 Scope Reachability; owning item: FS-322).";
-            spec = "FS-322 Scope Reachability; owning item: FS-322";
-            hints = [ "Declare selects as a list of scope names." ];
-          }
-        else
-          map (
-            entry:
-            let
-              resolved = selectionTarget nodeName entry;
-              target = resolved.target;
-              surface = resolved.surface;
-              behaviors =
-                if builtins.isAttrs entry then
-                  if builtins.isList (entry.behaviors or null) then
-                    entry.behaviors
-                  else
-                    throwError {
-                      code = "E_CONTRACT_SELECTS";
-                      site = siteKey;
-                      path = [
-                        "topology"
-                        "nodes"
-                        nodeName
-                        "selects"
-                      ];
-                      message = "topology.nodes.${nodeName}.selects[] behaviors must be a list (FS-481 Routing Behavior Selection).";
-                      spec = "FS-481 Routing Behavior Selection";
-                      hints = [ "Declare behaviors as a list of required behavior names." ];
-                    }
-                else
-                  [ ];
-            in
-            {
-              scope = target;
-              surface = surface;
-              inherit behaviors;
-            }
-          ) raw;
+        selectsMod.normalizeSelects;
 
-      recognizedBehaviors = [
-        "bgp"
-        "liveness"
-        "equal-cost-multipath"
-      ];
-
-      selectedTargetsOf =
-        node:
-        lib.unique (
-          map (
-            entry:
-            let
-              raw =
-                if builtins.isString entry then
-                  entry
-                else if builtins.isAttrs entry then
-                  (entry.surface or entry.scope or entry.uplink or null)
-                else
-                  null;
-              owner = if raw != null then coreUplinkOwner raw else null;
-            in
-            if owner != null then owner else raw
-          ) (node.selects or [ ])
-        );
+      recognizedBehaviors = selectsMod.recognizedBehaviors;
 
       allBehaviorsOf =
-        node:
-        let
-          nodeLevel = if builtins.isList (node.behaviors or null) then node.behaviors else [ ];
-          perEntry = lib.concatMap (
-            entry:
-            if builtins.isAttrs entry && builtins.isList (entry.behaviors or null) then entry.behaviors else [ ]
-          ) (node.selects or [ ]);
-        in
-        lib.unique (nodeLevel ++ perEntry);
-
-      buildCoreUplink4 =
-        nodeName:
-        lib.concatMap (u: u.ipv4 or [ ]) (
-          builtins.attrValues (
-            normalizeUplinksForNode.forNodeAttrs siteKey nodeName (nodes.${nodeName}.uplinks or null)
-          )
-        );
+        selectsMod.allBehaviorsOf;
 
       validateBehaviors =
-        nodeName: node:
-        let
-          behaviors = allBehaviorsOf node;
-          selection = selectedTargetsOf node;
-          unknown = lib.filter (b: !(builtins.elem b recognizedBehaviors)) behaviors;
-
-          offersBySelected = lib.concatMap (
-            t: if builtins.hasAttr t nodes then [ (buildCoreUplink4 t) ] else [ ]
-          ) selection;
-          sharedPrefix =
-            builtins.length (
-              builtins.filter (
-                p: builtins.length (builtins.filter (lst: builtins.elem p lst) offersBySelected) > 1
-              ) (lib.unique (lib.concatLists offersBySelected))
-            ) > 0;
-          _unknown =
-            if unknown == [ ] then
-              true
-            else
-              throwError {
-                code = "E_CONTRACT_BEHAVIOR";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  nodeName
-                  "behaviors"
-                ];
-                message = "topology.nodes.${nodeName} requires unrecognized routing behavior(s) ${builtins.concatStringsSep ", " unknown} (FS-481 Routing Behavior Selection).";
-                spec = "FS-481 Routing Behavior Selection; owning item: FS-481";
-                hints = [ "Use one of: ${builtins.concatStringsSep ", " recognizedBehaviors}." ];
-              };
-          _empty =
-            if behaviors == [ ] || selection != [ ] then
-              true
-            else
-              throwError {
-                code = "E_CONTRACT_BEHAVIOR";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  nodeName
-                  "behaviors"
-                ];
-                message = "topology.nodes.${nodeName} requires routing behavior(s) with an empty selection (FS-481 Routing Behavior Selection).";
-                spec = "FS-481 Routing Behavior Selection; owning item: FS-481";
-                hints = [ "Declare at least one selected scope, or remove the behavior." ];
-              };
-          _ecmpOverlap =
-            if !(builtins.elem "equal-cost-multipath" behaviors) then
-              true
-            else if sharedPrefix then
-              true
-            else
-              throwError {
-                code = "E_CONTRACT_BEHAVIOR";
-                site = siteKey;
-                path = [
-                  "topology"
-                  "nodes"
-                  nodeName
-                  "behaviors"
-                ];
-                message = "topology.nodes.${nodeName} requires equal-cost multipath but the selected scopes share no offered prefix (FS-481 Routing Behavior Selection).";
-                spec = "FS-481 Routing Behavior Selection; owning item: FS-481";
-                hints = [ "Select scopes that offer an overlapping prefix, or remove 'equal-cost-multipath'." ];
-              };
-        in
-        builtins.seq _unknown (builtins.seq _empty (builtins.seq _ecmpOverlap behaviors));
+        selectsMod.validateBehaviors;
 
       ownedPrefixesOf =
-        nodeName:
-        let
-          uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (nodes.${nodeName}.uplinks or null);
-        in
-        lib.sort builtins.lessThan (
-          lib.unique (lib.concatMap (u: (u.ipv4 or [ ]) ++ (u.ipv6 or [ ])) (builtins.attrValues uplinks))
-        );
-
+        contractPrefixes.ownedPrefixesOf;
       normalizeOffers =
-        nodeName: node:
-        let
-          raw = node.offers or null;
-        in
-        if raw == null then
-          ownedPrefixesOf nodeName
-        else if builtins.isList raw && builtins.all builtins.isString raw then
-          raw
-        else
-          throwError {
-            code = "E_CONTRACT_OFFERS";
-            site = siteKey;
-            path = [
-              "topology"
-              "nodes"
-              nodeName
-              "offers"
-            ];
-            message = "topology.nodes.${nodeName}.offers must be a list of prefix strings (FS-322 Scope Reachability; owning item: FS-322).";
-            spec = "FS-322 Scope Reachability; owning item: FS-322";
-            hints = [ "Declare offers as a list of CIDR prefix strings." ];
-          };
-
-      ownershipPrefixes = (declared.ownership or { }).prefixes or [ ];
-      ownershipPrefixesOf =
-        p:
-        lib.filter (x: builtins.isString x && x != "") [
-          (p.ipv4 or null)
-          (p.ipv6 or null)
-        ];
-      declaredOwnershipPrefixStrings = lib.unique (
-        lib.concatMap ownershipPrefixesOf (builtins.filter builtins.isAttrs ownershipPrefixes)
-      );
-      declaredTenantPrefixesByName = builtins.listToAttrs (
-        map
-          (p: {
-            name = p.name;
-            value = ownershipPrefixesOf p;
-          })
-          (
-            builtins.filter (
-              p: builtins.isAttrs p && (p.kind or null) == "tenant" && builtins.isString (p.name or null)
-            ) ownershipPrefixes
-          )
-      );
-
-      declareOwnershipFailure =
-        {
-          nodeName,
-          field,
-          prefix,
-          owner,
-          owningItem,
-          extraHint,
-        }:
-        throwError {
-          code = "E_CONTRACT_PREFIX_OWNERSHIP";
-          site = siteKey;
-          path = [
-            "topology"
-            "nodes"
-            nodeName
-            field
-          ];
-          message = "topology.nodes.${nodeName}.${field} lists prefix '${prefix}', which is owned by scope '${owner}'; a scope may only offer or carry prefixes it owns (owning item: ${owningItem}).";
-          spec = "${owningItem}";
-          hints = [
-            "A scope shall not restate a prefix another scope owns (FS-322); reachability toward it is expressed with 'selects'."
-          ]
-          ++ (if extraHint == null then [ ] else [ extraHint ]);
-        };
-
-      validatePrefixOwnership =
-        nodeName: node:
-        let
-          owned = builtins.attrNames declaredTenantPrefixesByName;
-          tenantsOwning =
-            prefix: lib.filter (t: builtins.elem prefix declaredTenantPrefixesByName.${t}) owned;
-
-          attachedTenants = map (
-            a: if builtins.isAttrs a then (a.name or null) else (if builtins.isString a then a else null)
-          ) (node.attachments or [ ]);
-          nodeOwnsTenant = tenant: tenant == nodeName || builtins.elem tenant attachedTenants;
-          checkOffers =
-            prefix:
-            let
-              owners = tenantsOwning prefix;
-            in
-            if owners == [ ] then
-              true
-            else if lib.any nodeOwnsTenant owners then
-              true
-            else
-              declareOwnershipFailure {
-                inherit nodeName prefix;
-                field = "offers";
-                owner = builtins.head owners;
-                owningItem = "FS-322 Scope Reachability; owning item: FS-322";
-                extraHint = "Declare selects = [ \"${builtins.head owners}\" ]; instead of restating the prefix.";
-              };
-          uplinks = normalizeUplinksForNode.forNodeAttrs siteKey nodeName (node.uplinks or null);
-          checkUplink =
-            uplinkName: uplink:
-            let
-              prefixes = (uplink.ipv4 or [ ]) ++ (uplink.ipv6 or [ ]);
-              nonDefault = builtins.filter (p: p != "0.0.0.0/0" && p != "::/0") prefixes;
-            in
-            lib.all (
-              prefix:
-              let
-                owners = tenantsOwning prefix;
-              in
-              if owners == [ ] then
-                true
-              else if lib.any nodeOwnsTenant owners then
-                true
-              else
-                declareOwnershipFailure {
-                  inherit nodeName prefix;
-                  field = "uplinks.${uplinkName}";
-                  owner = builtins.head owners;
-                  owningItem = "FS-260-HDS-010-SDS-010-SMS-010 Default Site Fabric Chain";
-                  extraHint = "A core/access that federates other scopes declares no uplinks; use selects (FS-322).";
-                }
-            ) nonDefault;
-          _offers = lib.all checkOffers (normalizeOffers nodeName node);
-          _uplinks = lib.all (u: checkUplink u uplinks.${u}) (builtins.attrNames uplinks);
-        in
-        _offers && _uplinks;
-
-      normalizeAdvertises =
-        nodeName: node:
-        let
-          raw = node.advertises or null;
-          path = [
-            "topology"
-            "nodes"
-            nodeName
-            "advertises"
-          ];
-          spec = "FS-470 Remote Egress over WireGuard; owning item: FS-470";
-          fail =
-            reason: hints:
-            throwError {
-              code = "E_CONTRACT_ADVERTISES";
-              site = siteKey;
-              inherit path;
-              message = "topology.nodes.${nodeName}.advertises ${reason} (FS-470 Remote Egress over WireGuard).";
-              inherit spec;
-              inherit hints;
-            };
-          resolveEntry =
-            idx: entry:
-            if builtins.isString entry then
-              if builtins.elem entry declaredOwnershipPrefixStrings then
-                [ entry ]
-              else
-                fail "names prefix '${entry}', which is not a declared ownership prefix" [
-                  "Advertise a declared tenant prefix or a prefix from ownership.prefixes."
-                ]
-            else if builtins.isAttrs entry && (entry.kind or null) == "tenant" then
-              let
-                name = entry.name or null;
-              in
-              if !(builtins.isString name) then
-                fail "entry ${toString idx} of kind 'tenant' must name the tenant" [
-                  "Set { kind = \"tenant\"; name = \"<tenant>\"; }."
-                ]
-              else if !(builtins.hasAttr name declaredTenantPrefixesByName) then
-                fail "entry ${toString idx} names tenant '${name}', which is not a declared ownership tenant" [
-                  "Reference a tenant declared in ownership.prefixes."
-                ]
-              else
-                declaredTenantPrefixesByName.${name}
-            else
-              fail "entry ${toString idx} must be a prefix string or { kind = \"tenant\"; name = ...; }" [
-                "Use a CIDR string or a tenant reference."
-              ];
-        in
-        if raw == null then
-          [ ]
-        else if builtins.isList raw then
-          lib.unique (lib.concatLists (lib.imap0 (idx: entry: resolveEntry idx entry) raw))
-        else
-          fail "must be a list" [ "Declare advertises as a list of prefixes or tenant references." ];
+        contractPrefixes.normalizeOffers;
+      prefixOwnership =
+        contractPrefixes.prepare declared;
+      inherit (prefixOwnership)
+        declaredOwnershipPrefixStrings
+        declaredTenantPrefixesByName
+        validatePrefixOwnership
+        normalizeAdvertises
+        ;
 
       normalizedTopologyNodes = builtins.deepSeq _superseded (
         lib.mapAttrs (

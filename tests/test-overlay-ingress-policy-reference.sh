@@ -73,7 +73,7 @@ cat >"$input_file" <<'EOF'
       hetz-router-downstream.role = "downstream-selector";
       hetz-router-access-client.role = "access";
       hetz-router-access-client.attachments = [ { kind = "tenant"; name = "client"; } ];
-      hetz-router-access-client.selects = [ "wan" ];
+      hetz-router-access-client.selects = [ "hetz-router-core" ];
       hetz-router-access-iot.role = "access";
       hetz-router-access-iot.attachments = [ { kind = "tenant"; name = "iot"; } ];
     };
@@ -96,7 +96,7 @@ if jq -e '
     [.sites.esp.hetz.relations[]
       | select(.source.id == "allow-overlay-ingress-to-wan")
       | select(.from == { kind: "external", name: "east-west" })
-      | select(.to == { kind: "external", name: "wan" })
+      | select(.to == { kind: "external", scope: "hetz-router-core" })
     ] | length == 1
   )
   and (

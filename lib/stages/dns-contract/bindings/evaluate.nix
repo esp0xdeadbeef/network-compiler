@@ -15,6 +15,9 @@ let
     sortedUnique
     warning
     ;
+  warningsMod = import ./warnings.nix {
+    inherit lib warning candidateId services;
+  };
 in
 {
   evaluate =
@@ -95,79 +98,28 @@ in
       invalidEgress = lib.filter (uplink: !(builtins.elem uplink selectedCoreUplinks)) egressUplinks;
       unstableEgress = (binding.egressSelectionMode or null) == "first-listed";
       fallbackInvalid = (binding.directPublicFallback or false) != false;
-      warnings =
-        lib.optional missing (warning {
-          code = "DNS_CORE_BINDING_MISSING";
-          inherit requester;
-          candidateIds = map candidateId services.raw;
-        })
-        ++ lib.optional literal (warning {
-          code = "DNS_CORE_BINDING_LITERAL";
-          inherit requester;
-          resolverService = serviceName;
-          candidateIds = candidateIds;
-          context = "upstream-resolver";
-        })
-        ++ lib.optional ambiguous (warning {
-          code = "DNS_CORE_BINDING_AMBIGUOUS";
-          inherit requester;
-          resolverService = serviceName;
-          candidateIds = candidateIds;
-        })
-        ++ lib.optional invalid (warning {
-          code = "DNS_CORE_BINDING_INVALID";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = requestedNode;
-          candidateIds = candidateIds;
-        })
-        ++ map (
-          family:
-          warning {
-            code = "DNS_CORE_FAMILY_INCOMPLETE";
-            inherit requester family;
-            resolverService = serviceName;
-            resolverNode = selectedNode;
-            candidateIds = candidateIds;
-          }
-        ) invalidFamilies
-        ++ lib.optional missingEgress (warning {
-          code = "DNS_EGRESS_SELECTION_MISSING";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = selectedNode;
-          candidateIds = selectedCoreUplinks;
-        })
-        ++ lib.optional ambiguousEgress (warning {
-          code = "DNS_EGRESS_SELECTION_AMBIGUOUS";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = selectedNode;
-          candidateIds = egressUplinks;
-        })
-        ++ lib.optional (invalidEgress != [ ]) (warning {
-          code = "DNS_EGRESS_SELECTION_MISSING";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = selectedNode;
-          candidateIds = invalidEgress;
-          context = "unknown-provider-uplink";
-        })
-        ++ lib.optional unstableEgress (warning {
-          code = "DNS_EGRESS_SELECTION_UNSTABLE";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = selectedNode;
-          candidateIds = selectedCoreUplinks;
-        })
-        ++ lib.optional fallbackInvalid (warning {
-          code = "DNS_RECURSION_MODE_INVALID";
-          inherit requester;
-          resolverService = serviceName;
-          resolverNode = selectedNode;
-          candidateIds = candidateIds;
-          context = "direct-public-fallback";
-        });
+      warnings = warningsMod.collect {
+        inherit
+          requester
+          serviceName
+          requestedNode
+          selectedNode
+          candidateIds
+          families
+          invalidFamilies
+          egressUplinks
+          selectedCoreUplinks
+          invalidEgress
+          missing
+          literal
+          ambiguous
+          invalid
+          missingEgress
+          ambiguousEgress
+          unstableEgress
+          fallbackInvalid
+          ;
+      };
       active =
         warnings == [ ]
         &&

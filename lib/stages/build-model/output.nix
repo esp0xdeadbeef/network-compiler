@@ -60,10 +60,6 @@
         transit = semantic.transit or { };
         providerHandoffs = semantic.providerHandoffs or [ ];
         hostManagement = declared.hostManagement or null;
-        # FS-390: preserve modeled ownership (tenant prefixes, local and
-        # provider-owned endpoints) so the forwarding model can classify a
-        # public IPv4 destination to its owning record before route selection.
-        ownership = declared.ownership or { };
         topology = {
           nodes = normalizedTopologyNodes;
           links = topo.links or [ ];

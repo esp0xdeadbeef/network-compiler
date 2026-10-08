@@ -86,6 +86,13 @@ check fs081-legacy-uplink-egress-mode.nix \
 check fs081-legacy-uplink-egress-bgp.nix \
   '["topology","nodes","core","uplinks","wan","egress"]' 'FS-481'
 
+# Seeded negative 9: an ordinary node uplink carrying a tenant-prefix list is
+# still rejected as a superseded shape, owned by FS-260/FS-322. This guards the
+# exit/peering exemptions added for FS-440/FS-480 provider surfaces: those
+# exemptions must not swallow a genuine tenant-prefix list.
+check uplink-tenant-prefix-list.nix \
+  '["topology","nodes","s-router-core","uplinks","fabric"]' 'FS-260'
+
 # Seeded negative 9: positive recovery. The current contract (scope offers /
 # selects and a bare external relation) must compile.
 set +e

@@ -67,15 +67,6 @@ let
     // lib.optionalAttrs (p ? ra6Prefixes) {
       ra6Prefixes = p.ra6Prefixes;
     }
-    # FS-390: preserve modeled public IPv4 ownership so the forwarding model can
-    # classify a public IPv4 destination to its owning tenant before any route
-    # selection treats it as generic internet.
-    // lib.optionalAttrs (p ? publicIpv4) {
-      publicIpv4 = p.publicIpv4;
-    }
-    // lib.optionalAttrs (p ? publicIPv4) {
-      publicIpv4 = p.publicIPv4;
-    }
     // lib.optionalAttrs (p ? routedPrefixes) {
       routedPrefixes = p.routedPrefixes;
     }

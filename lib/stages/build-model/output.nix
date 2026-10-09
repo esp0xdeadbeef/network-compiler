@@ -60,6 +60,13 @@
         transit = semantic.transit or { };
         providerHandoffs = semantic.providerHandoffs or [ ];
         hostManagement = declared.hostManagement or null;
+        # Routing-owned index of modeled endpoints and prefixes. The forwarding
+        # model resolves provider tenants, service-route scopes, and NAT source
+        # prefixes from this index, and the control-plane model consumes the
+        # same normalized record. It is the compiler-resolved site ownership and
+        # is a distinct key from FS-390's `destinationOwnership` classification
+        # record below.
+        ownership = declared.ownership or { };
         # FS-390: emit the modeled endpoint ownership as a destination-ownership
         # record (separate from routing's site.ownership index) so the
         # forwarding model can classify locally-owned-routed and provider-owned

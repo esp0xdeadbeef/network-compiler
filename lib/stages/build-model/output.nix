@@ -60,21 +60,6 @@
         transit = semantic.transit or { };
         providerHandoffs = semantic.providerHandoffs or [ ];
         hostManagement = declared.hostManagement or null;
-        # Routing-owned index of modeled endpoints and prefixes, built from the
-        # compiler-normalized tenants and endpoint records (never the raw intent
-        # keys). The forwarding model resolves provider tenants, service-route
-        # scopes, and NAT source prefixes from this index; the control-plane
-        # model consumes the same normalized record.
-        ownership = {
-          prefixes = map (tenant: {
-            kind = "tenant";
-            inherit (tenant) name;
-          } // lib.optionalAttrs ((tenant.ipv4 or null) != null) { inherit (tenant) ipv4; }
-          // lib.optionalAttrs ((tenant.ipv6 or null) != null) { inherit (tenant) ipv6; }) tenants;
-          endpoints = builtins.filter
-            (endpoint: builtins.isAttrs endpoint && endpoint.name != null)
-            ((declared.ownership or { }).endpoints or [ ]);
-        };
         # FS-390: emit the modeled endpoint ownership as a destination-ownership
         # record (separate from routing's site.ownership index) so the
         # forwarding model can classify locally-owned-routed and provider-owned

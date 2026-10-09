@@ -115,6 +115,13 @@ map (
     trafficType = svc.trafficType or "any";
     providers = svc.providers or [ ];
   }
+  // lib.optionalAttrs (builtins.isList (svc.providerTenants or null)) {
+    # FS-210/FS-230: the compiler owns endpoint and service ownership. Each
+    # provider endpoint is resolved to the tenant that owns it, so downstream
+    # layers bind a service to its provider tenant's access without re-reading
+    # raw intent ownership.
+    inherit (svc) providerTenants;
+  }
   // lib.optionalAttrs (svc ? providerNode) {
     inherit (svc) providerNode;
     providerRole = svc.providerRole or "core";

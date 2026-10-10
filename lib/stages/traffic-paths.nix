@@ -72,7 +72,6 @@ let
             exits = exitsForRelation relation;
           in
           if exits != [ ] then exits else coresForEndpoint relation.to;
-      fromOverlayUnderlayAccess = overlayUnderlayAccessFor relation;
       corePairs = buildCorePairs {
         inherit
           siteKey
@@ -117,9 +116,7 @@ let
           else
             corePair.toCore
         else if stage == "access" then
-          if fromOverlayUnderlayAccess != null && idx == 1 then
-            fromOverlayUnderlayAccess
-          else if idx == 0 && fromAccess != null then
+          if idx == 0 && fromAccess != null then
             fromAccess
           else if idx == (builtins.length stages - 1) && toAccess != null then
             toAccess

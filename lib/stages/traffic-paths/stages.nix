@@ -34,27 +34,13 @@ let
     let
       fromStage = endpointStage relation.from;
       toStage = endpointStage relation.to;
-      overlayAccess = overlayUnderlayAccessFor relation;
     in
-    if overlayAccess != null && fromStage == "core" && toStage == "core" then
-      [
-        "core"
-        "access"
-        "downstream-selector"
-        "policy"
-        "upstream-selector"
-        "core"
-      ]
-    else if overlayAccess != null && fromStage == "core" && toStage == "access" then
-      [
-        "core"
-        "access"
-        "downstream-selector"
-        "policy"
-        "downstream-selector"
-        "access"
-      ]
-    else if fromStage == "core" && toStage == "access" then
+    # FS-460: an overlay's underlayAccess is underlay transport used to
+    # establish the overlay; it shall not become a payload transit hop. The
+    # overlay-underlay payload path therefore uses the ordinary canonical
+    # chain for its endpoint stages, and the underlay attachment is modeled
+    # separately as an overlay/underlay virtual link.
+    if fromStage == "core" && toStage == "access" then
       coreToAccess
     else if fromStage == "access" && toStage == "core" then
       accessToCore

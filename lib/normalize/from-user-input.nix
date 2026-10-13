@@ -40,6 +40,36 @@ let
     in
     lib.filter isAccess names;
 
+  # FS-322/FS-171: exit surface names are owned by the topology nodes that
+  # declare `uplinks`.  The forwarding model consumes a canonical
+  # `upstreams.cores` mapping (core node -> its uplinks); emit it here so
+  # downstream layers never have to re-derive it from raw node uplinks.
+  upstreams = {
+    cores = builtins.listToAttrs (
+      lib.filter (e: e.value != { })
+        (
+          map
+            (
+              n:
+              let
+                u = units.${n}.uplinks or { };
+              in
+              {
+                name = n;
+                value =
+                  if builtins.isAttrs u then
+                    builtins.map (un: { name = un; } // (if builtins.isAttrs u.${un} then u.${un} else { })) (
+                      builtins.attrNames u
+                    )
+                  else
+                    [ ];
+              }
+            )
+            (builtins.attrNames units)
+        )
+    );
+  };
+
   ownership = site.ownership or { };
   prefixes = ownership.prefixes or [ ];
   endpoints = ownership.endpoints or [ ];
@@ -153,6 +183,7 @@ in
     hosts
     serviceProviderEndpoints
     ipv6
+    upstreams
     ;
 
   transit = {

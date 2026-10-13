@@ -30,6 +30,51 @@ let
         else
           [ ];
 
+      # URS (Reachability, Routing, and Overlays): "Overlay transport shall model
+      # endpoint identity, permitted peers, bootstrap dependencies, imported and
+      # exported prefixes, ...".  A peer site is not necessarily compiled in
+      # this site's pass, so the peer's overlay participant address (the next hop
+      # for overlay reachability routes toward that peer) is modeled on this
+      # overlay, keyed by peer-site reference.  The forwarding model derives the
+      # route via4/via6 from it and fails closed when a peer that receives routes
+      # has no modeled next hop (an overlay with no peer endpoint is not a valid
+      # inner-communication overlay).
+      normalizePeerNodeAddresses =
+        peerSiteRef: raw:
+        if !(builtins.isAttrs raw) then
+          throw (
+            builtins.toJSON {
+              code = "E_OVERLAY_PEER_NODES_SHAPE";
+              site = siteKey;
+              path = [ "transport" "overlays" idx "peerNodes" peerSiteRef ];
+              message = "overlay peerNodes.${peerSiteRef} must be an attrset with addr4/addr6";
+              hints = [ "Set peerNodes.<peer-site-ref> = { addr4 = \"<cidr>\"; addr6 = \"<cidr>\"; };" ];
+            }
+          )
+        else
+          lib.filterAttrs (_: v: builtins.isString v && v != "") {
+            addr4 = raw.addr4 or null;
+            addr6 = raw.addr6 or null;
+          };
+
+      rawPeerNodes = ov.peerNodes or null;
+
+      peerNodes =
+        if rawPeerNodes == null then
+          { }
+        else if !(builtins.isAttrs rawPeerNodes) then
+          throw (
+            builtins.toJSON {
+              code = "E_OVERLAY_PEER_NODES_SHAPE";
+              site = siteKey;
+              path = [ "transport" "overlays" idx "peerNodes" ];
+              message = "overlay peerNodes must be an attrset keyed by peer-site reference";
+              hints = [ "Set peerNodes.<peer-site-ref> = { addr4 = ...; addr6 = ...; };" ];
+            }
+          )
+        else
+          lib.mapAttrs normalizePeerNodeAddresses rawPeerNodes;
+
       normalizePrefixFamily =
         family: raw:
         let
@@ -135,6 +180,9 @@ let
         terminateOn = validated;
         mustTraverse = ov.mustTraverse or [ ];
         underlayTrafficTypes = ov.underlayTrafficTypes or [ ];
+      }
+      // lib.optionalAttrs (peerNodes != { }) {
+        inherit peerNodes;
       }
       // lib.optionalAttrs (ov ? underlayAccess) {
         underlayAccess = ov.underlayAccess;

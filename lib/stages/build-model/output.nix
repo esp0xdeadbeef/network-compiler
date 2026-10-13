@@ -41,6 +41,7 @@
         isolationDecisions = isolationModel.isolationDecisions;
         accessSpaceDiscovery = accessSpaceDiscovery;
         ipv6 = semantic.ipv6 or { };
+        upstreams = semantic.upstreams or { };
         relations = normalizedRelations;
 
         communicationContract = {

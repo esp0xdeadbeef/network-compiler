@@ -4,6 +4,9 @@ let
   util = import ../correctness/util.nix { inherit lib; };
   inherit (util) ensure;
 
+  selects = import ./overlay-selects.nix { inherit lib; };
+  inherit (selects) endpointTenants tenantScopeSelects;
+
   relationEndpointIsOverlay =
     overlayName: endpoint:
     builtins.isAttrs endpoint
@@ -34,34 +37,6 @@ let
       [ endpoint.name ]
     else
       [ ];
-
-  endpointTenants =
-    endpoint:
-    if !(builtins.isAttrs endpoint) then
-      [ ]
-    else if (endpoint.kind or null) == "tenant" then
-      [ endpoint.name ]
-    else if (endpoint.kind or null) == "tenant-set" then
-      endpoint.members or [ ]
-    else
-      [ ];
-
-  tenantScopeSelects =
-    nodes: tenantName: exitName:
-    let
-      matching = lib.filter (
-        nodeName:
-        builtins.any (a: (a.kind or null) == "tenant" && (a.name or null) == tenantName) (
-          nodes.${nodeName}.attachments or [ ]
-        )
-      ) (builtins.attrNames nodes);
-    in
-    if exitName == null then
-      builtins.any (nodeName: (nodes.${nodeName}.selects or [ ]) != [ ]) matching
-    else
-      builtins.any (
-        nodeName: builtins.any (s: (s.scope or null) == exitName) (nodes.${nodeName}.selects or [ ])
-      ) matching;
 
   trafficCompatible =
     wanted: candidate:

@@ -46,7 +46,14 @@
         name = "east-west";
         peerSite = "default.other";
         terminateOn = "s-router-core";
-        mustTraverse = [ "s-router-upstream-selector" ];
+        underlayAccess = {
+          kind = "tenant";
+          name = "mgmt";
+        };
+        # 's-router-upstream-selector' IS on the canonical path, so name a stage
+        # that never is: the overlay attachment is an assertion and must fail
+        # closed for a stage the derived path cannot traverse.
+        mustTraverse = [ "s-router-access-nonexistent" ];
       }
     ];
 

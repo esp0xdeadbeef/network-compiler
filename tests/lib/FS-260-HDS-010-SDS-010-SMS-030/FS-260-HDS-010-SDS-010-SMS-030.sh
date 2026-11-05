@@ -58,8 +58,7 @@ jq -e '
       "core"
     ]
     and .corePathNodes == [
-      "s-router-core-isp-a",
-      "s-router-core-isp-b"
+      "s-router-core-isp-a"
     ]
     and .forbidsCoreToCoreP2P == true
     and .p2pIsolationKey == "allow-tenants-to-uplinks"
@@ -71,16 +70,14 @@ jq -e '
   | .[0]
   | .stagePath == [
       "core",
-      "access",
-      "downstream-selector",
+      "upstream-selector",
       "policy",
       "downstream-selector",
       "access"
     ]
     and .nodePath == [
       "s-router-core-nebula",
-      "s-router-access-client",
-      "s-router-downstream-selector",
+      "s-router-upstream-selector",
       "s-router-policy-only",
       "s-router-downstream-selector",
       "s-router-access-mgmt"
@@ -115,24 +112,21 @@ jq -e '
   | .[0]
   | .stagePath == [
       "core",
-      "access",
-      "downstream-selector",
+      "upstream-selector",
       "policy",
       "upstream-selector",
       "core"
     ]
     and .nodePath == [
       "s-router-core-nebula",
-      "s-router-access-mgmt",
-      "s-router-downstream-selector",
+      "s-router-upstream-selector",
       "s-router-policy-only",
       "s-router-upstream-selector",
       "s-router-core-isp-a"
     ]
     and .corePathNodes == [
       "s-router-core-nebula",
-      "s-router-core-isp-a",
-      "s-router-core-isp-b"
+      "s-router-core-isp-a"
     ]
 ' "${tmp_dir}/dual-wan.json" >/dev/null
 

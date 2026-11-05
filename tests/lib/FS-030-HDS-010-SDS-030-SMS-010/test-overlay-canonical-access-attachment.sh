@@ -108,10 +108,12 @@ cat > "$input_file" <<'EOF'
             attachments = [
               { kind = "tenant"; name = "client"; }
             ];
-            uplinks.east-west = {
-              ipv4 = [ "100.96.20.0/24" ];
-              ipv6 = [ "fd42:dead:beef:20::/64" ];
-            };
+            # FS-322: reachability is declared as offers/selects on the scope,
+            # not as a tenant-prefix list on an uplink.
+            offers = [
+              "100.96.20.0/24"
+              "fd42:dead:beef:20::/64"
+            ];
           };
           upstream = { role = "upstream-selector"; };
           policy = { role = "policy"; };
@@ -162,12 +164,17 @@ if jq -e '
     | select((.to.kind // null) == "external")
     | select((.to.name // null) == "east-west")
   ] == [])
-  and ([.sites.acme.ams.topology.links[]? | select(.a == "core-overlay" or .b == "core-overlay")] == [])
+  and ([.sites.acme.ams.topology.links[]? | . as $l | select((($l|type) == "array" and ($l|index("core-overlay"))) or (($l|type) == "object" and (($l.a // null) == "core-overlay" or ($l.b // null) == "core-overlay")))] == [])
+  # FS site-fabric traffic flow (GAMP/FS/README.md "Site Fabric Traffic
+  # Flow"): a core boundary reaches the policy point only as
+  # core <-> upstream-selector <-> policy. There is no core <-> access
+  # adjacency, so a core-originated overlay underlay path must not traverse an
+  # access space or the downstream selector.
   and [
     .sites.acme.ams.trafficPaths[]
     | select(.relationId == "allow-east-west-underlay-to-wan")
     | .nodePath
-  ] == [[ "core-overlay", "access-client", "downstream", "policy", "upstream", "core-wan" ]]
+  ] == [[ "core-overlay", "upstream", "policy", "upstream", "core-wan" ]]
 ' "$output_json" >/dev/null; then
   echo "PASS overlay-canonical-access-attachment"
 else
@@ -257,7 +264,10 @@ cat > "$bad_input_file" <<'EOF'
         core-overlay = {
           role = "core";
           attachments = [ { kind = "tenant"; name = "hostile"; } ];
-          uplinks.east-west.ipv4 = [ "100.96.20.0/24" ];
+          # FS-322: reachability is declared as offers/selects on the scope, not
+          # as a tenant-prefix list on an uplink.
+          offers = [ "100.96.20.0/24" ];
+          selects = [ "wan" ];
         };
         upstream = { role = "upstream-selector"; };
         policy = { role = "policy"; };

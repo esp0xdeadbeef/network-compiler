@@ -196,8 +196,7 @@ cat >"${expected_json}" <<'JSON'
     "relationId": "allow-edge-overlay-icmp-anywhere",
     "stagePath": [
       "core",
-      "access",
-      "downstream-selector",
+      "upstream-selector",
       "policy",
       "downstream-selector",
       "access"
@@ -231,8 +230,7 @@ cat >"${expected_json}" <<'JSON'
     "relationId": "allow-site-overlay-icmp-anywhere",
     "stagePath": [
       "core",
-      "access",
-      "downstream-selector",
+      "upstream-selector",
       "policy",
       "downstream-selector",
       "access"
@@ -264,12 +262,6 @@ cat >"${expected_json}" <<'JSON'
       "home-example-router-access-dmz",
       "home-example-router-access-hostile",
       "home-example-router-access-mgmt",
-      "home-example-router-access-streaming",
-      "home-example-router-access-admin",
-      "home-example-router-access-client",
-      "home-example-router-access-dmz",
-      "home-example-router-access-hostile",
-      "home-example-router-access-mgmt",
       "home-example-router-access-streaming"
     ]
   },
@@ -280,8 +272,7 @@ cat >"${expected_json}" <<'JSON'
     "relationId": "allow-lab-overlay-icmp-anywhere",
     "stagePath": [
       "core",
-      "access",
-      "downstream-selector",
+      "upstream-selector",
       "policy",
       "downstream-selector",
       "access"

@@ -85,7 +85,11 @@
         };
         core-overlay = {
           role = "core";
-          uplinks.east-west.ipv4 = [ "100.96.0.0/24" ];
+          # FS-322: reachability is declared as offers/selects on the scope, not
+          # as a tenant-prefix list on an uplink. An uplink is a provider/WAN
+          # or fabric surface only.
+          offers = [ "100.96.0.0/24" ];
+          selects = [ "wan" ];
         };
       };
 

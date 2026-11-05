@@ -77,7 +77,13 @@ in
 siteKey: declared: semantic:
 let
   fabric = fabricMod.prepare siteKey declared semantic;
-  contracts = contractsMod.prepare siteKey declared semantic fabric;
+  # FS-080: a missing or ambiguous upstream fact must fail at its owning
+  # validator, not inside a downstream consumer. Forcing the fabric validations
+  # here keeps the topology validator (E_TOPO_MISSING_* etc.) ahead of any
+  # stage that consumes fabric.coreUplinks, so consumers never emit a generic
+  # downstream diagnostic for an upstream defect they do not own.
+  _fabricValid = builtins.deepSeq fabric.validations true;
+  contracts = builtins.seq _fabricValid (contractsMod.prepare siteKey declared semantic fabric);
   relations = relationsMod.prepare siteKey declared semantic fabric contracts;
   validations = fabric.validations // contracts.validations // relations.validations;
 in

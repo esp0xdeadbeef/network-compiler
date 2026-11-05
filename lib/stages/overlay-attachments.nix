@@ -108,7 +108,29 @@ let
         "overlay:${overlay.name}"
       ];
       mustTraverse = overlay.mustTraverse or [ ];
-      unsupportedMustTraverse = lib.filter (s: !(builtins.elem s canonicalPath)) mustTraverse;
+      # mustTraverse is a STAGE assertion authored in intent, so its entries are
+      # stage roles ("policy"), while canonicalPath carries concrete node names
+      # ("s-router-policy"). Comparing the raw strings made the assertion always
+      # fire on satisfied input, which is why it was never forced. Resolve each
+      # entry to the canonical node that realises the named stage, accepting
+      # either the stage role or the node name of a node with that role.
+      stageRoleOf =
+        name:
+        if builtins.isString name && builtins.isAttrs (nodes.${name} or null) then
+          nodes.${name}.role or null
+        else
+          null;
+      canonicalStages = map stageRoleOf canonicalPath;
+      resolvesToStage =
+        stage:
+        builtins.elem stage canonicalStages
+        || builtins.elem stage canonicalPath
+        || builtins.any (
+          n:
+          builtins.isString n
+          && (if builtins.isAttrs (nodes.${n} or null) then nodes.${n}.role or null else null) == stage
+        ) canonicalPath;
+      unsupportedMustTraverse = lib.filter (s: !(resolvesToStage s)) mustTraverse;
       _mustTraverseSatisfied =
         unsupportedMustTraverse == [ ]
         || throwError {
@@ -129,16 +151,21 @@ let
     in
     {
       name = overlay.name;
-      value = {
-        attachAfterStage = "access";
-        accessNodes = accessNodes;
-        inherit
-          canonicalPath
-          mustTraverse
-          ;
-        site = siteKey;
-        terminatesOn = overlay.terminateOn;
-      };
+      value =
+        # mustTraverse is an assertion, not a path input: a named stage the
+        # derived canonical path does not traverse must fail closed here rather
+        # than being silently ignored. Force it before the attachment is
+        # published so no consumer can observe an unsatisfied assertion.
+        builtins.seq _mustTraverseSatisfied {
+          attachAfterStage = "access";
+          accessNodes = accessNodes;
+          inherit
+            canonicalPath
+            mustTraverse
+            ;
+          site = siteKey;
+          terminatesOn = overlay.terminateOn;
+        };
     };
 
 in

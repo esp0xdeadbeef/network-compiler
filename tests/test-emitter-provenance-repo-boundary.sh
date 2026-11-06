@@ -7,7 +7,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # NETWORK_FOREIGN_CWD must be set to the path of a foreign repository
 # (e.g., network-codex-agent) for the foreign-caller provenance check.
-# Replaces the old hardcoded default /home/deadbeef/github/network-codex-agent.
+# Replaces the old hardcoded default the orchestrator checkout.
 if [[ -z "${NETWORK_FOREIGN_CWD:-}" ]]; then
   echo "SKIP: NETWORK_FOREIGN_CWD not set; foreign-caller provenance check skipped" >&2
   echo "  Set NETWORK_FOREIGN_CWD to a foreign repository path to run the full check." >&2

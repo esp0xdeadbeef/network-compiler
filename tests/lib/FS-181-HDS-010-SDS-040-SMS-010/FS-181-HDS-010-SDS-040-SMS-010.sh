@@ -16,7 +16,7 @@ set -euo pipefail
 #   N3 ✓ trafficPath references non-existent relationId → REJECT (NEW)
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-TMPDIR="${TMPDIR:-/tmp}"
+TMPDIR="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${TMPDIR%/}/fs181-auth-set.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

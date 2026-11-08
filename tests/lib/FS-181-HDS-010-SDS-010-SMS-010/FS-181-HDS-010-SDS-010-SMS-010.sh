@@ -15,7 +15,7 @@ set -euo pipefail
 #   N2 ✓ Eligible alternative omitted (corrupted mapping) → FAIL diagnostic
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-TMPDIR="${TMPDIR:-/tmp}"
+TMPDIR="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${TMPDIR%/}/fs181-graph-path.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

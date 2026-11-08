@@ -4,7 +4,7 @@ set -euo pipefail
 # GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-SCRATCH_ROOT="${TMPDIR:-/tmp}"
+SCRATCH_ROOT="${TMPDIR:-/var/tmp}"
 tmp_dir="$(mktemp -d "${SCRATCH_ROOT%/}/fs030-sds040-platform-independence.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 

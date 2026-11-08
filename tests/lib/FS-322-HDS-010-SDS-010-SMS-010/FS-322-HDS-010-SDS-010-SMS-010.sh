@@ -7,7 +7,7 @@ set -euo pipefail
 # names an uplink is rejected, naming FS-322 as the owning item.
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-scratch_root="${TMPDIR:-/tmp}"
+scratch_root="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${scratch_root%/}/fs322-reachability.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

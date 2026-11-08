@@ -6,7 +6,7 @@ set -euo pipefail
 # modeled selection, or the compiler fails closed (FS-481).
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-scratch_root="${TMPDIR:-/tmp}"
+scratch_root="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${scratch_root%/}/fs481-behavior.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

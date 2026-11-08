@@ -6,7 +6,7 @@ set -euo pipefail
 # owning specification for each (FS-081 Superseded-Contract Rejection).
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-scratch_root="${TMPDIR:-/tmp}"
+scratch_root="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${scratch_root%/}/fs081-superseded.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

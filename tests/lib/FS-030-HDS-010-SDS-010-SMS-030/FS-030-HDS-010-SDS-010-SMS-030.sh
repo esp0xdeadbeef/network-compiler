@@ -4,7 +4,7 @@ set -euo pipefail
 # GAMP-SCOPE: software-module-test
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-SCRATCH_ROOT="${TMPDIR:-/tmp}"
+SCRATCH_ROOT="${TMPDIR:-/var/tmp}"
 work_dir="$(mktemp -d "${SCRATCH_ROOT%/}/compiler-source-audit.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/network-compiler-layer-entry.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/var/tmp}/network-compiler-layer-entry.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 fail() {

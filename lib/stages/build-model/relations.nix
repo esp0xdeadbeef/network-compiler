@@ -49,6 +49,34 @@ in
         || builtins.any (t: (t.name or null) == "bgp") (communicationContractDeclared.trafficTypes or [ ])
         || throw "intent communicationContract.trafficTypes must declare a 'bgp' traffic type (tcp/179) when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
 
+      # FS-482: the declared BGP control-plane traffic type must actually *be*
+      # TCP/179 for both address families. A type merely named 'bgp' that matches
+      # another port, or only one family, does not describe the BGP session the
+      # behavior introduces, so it must not silently stand in for it.
+      bgpTrafficTypes = builtins.filter (
+        t: (t.name or null) == "bgp"
+      ) (communicationContractDeclared.trafficTypes or [ ]);
+      bgpMatchCoversFamily =
+        family: t:
+        builtins.any (
+          m:
+          (m.family or "any") == "any"
+          || (m.family or null) == family
+        ) (builtins.filter (
+          m:
+          (m.proto or null) == "tcp" && builtins.elem 179 (m.dports or [ ])
+        ) (t.match or [ ]));
+      _bgpTrafficTypeShape =
+        bgpBoundaries == [ ]
+        || bgpTrafficTypes == [ ]
+        || builtins.all (
+          t: builtins.all (family: bgpMatchCoversFamily family t) [
+            "ipv4"
+            "ipv6"
+          ]
+        ) bgpTrafficTypes
+        || throw "intent communicationContract.trafficTypes 'bgp' must match tcp/179 for both ipv4 and ipv6 when an uplink egress selects bgp routing (${builtins.concatStringsSep ", " bgpBoundaries})";
+
       livenessBoundaries = lib.concatMap (
         nodeName:
         lib.optional (builtins.elem "liveness" (
@@ -111,6 +139,7 @@ in
       validations = {
         inherit
           _bgpTrafficTypeRequired
+          _bgpTrafficTypeShape
           _livenessTrafficTypeRequired
           _serviceProvidersLocal
           _noConflictingRelations

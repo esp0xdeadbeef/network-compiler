@@ -122,7 +122,7 @@ jq -e '
 [
 .sites.esp0xdeadbeef."site-a".relations[]
 | select(.source.id == "allow-uplink0-to-jump-host")
-| select(.from == { kind: "external", uplinks: [ "uplink0" ] })
+| select(.from == { kind: "external", scope: "uplink0" })
 | select(.to == { kind: "service", name: "jump-host" })
 ] | length == 1
 ' "$single_wan_json" > /dev/null
@@ -131,7 +131,7 @@ jq -e '
 [
 .sites.esp0xdeadbeef."site-a".relations[]
 | select(.source.id == "allow-uplink0-to-admin-web")
-| select(.from == { kind: "external", uplinks: [ "uplink0" ] })
+| select(.from == { kind: "external", scope: "uplink0" })
 | select(.to == { kind: "service", name: "admin-web" })
 ] | length == 1
 ' "$single_wan_json" > /dev/null
@@ -140,7 +140,7 @@ jq -e '
 [
 .sites.esp0xdeadbeef."site-a".relations[]
 | select(.source.id == "allow-uplink0-to-mgmt-icmp")
-| select(.from == { kind: "external", uplinks: [ "uplink0" ] })
+| select(.from == { kind: "external", scope: "uplink0" })
 | select(.to == { kind: "tenant", name: "mgmt" })
 ] | length == 1
 ' "$single_wan_json" > /dev/null
@@ -224,7 +224,7 @@ base
                     };
                     to = {
                       kind = "external";
-                      uplinks = [ "uplink0" ];
+                      scope = "uplink0";
                     };
                     trafficType = "any";
                     action = "allow";
@@ -245,7 +245,7 @@ jq -e '
 .sites.esp0xdeadbeef."site-a".relations[]
 | select(.source.id == "allow-jump-host-to-uplink0")
 | select(.from == { kind: "service", name: "jump-host" })
-| select(.to == { kind: "external", uplinks: [ "uplink0" ] })
+| select(.to == { kind: "external", scope: "uplink0" })
 ] | length == 1
 ' "$service_subject_json" > /dev/null
 

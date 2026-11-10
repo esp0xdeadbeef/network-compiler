@@ -144,6 +144,25 @@ let
       overlayInfo = overlayInfoForRelation relation;
     in
     {
+      # FS-030-HDS-010-SDS-030-SMS-020: `nodePath` is synthesised from the
+      # canonical stage list (`stages.nix`: accessToCore) with each node filled
+      # by `firstRole <stage>`. The compiler emits no routes, so it cannot prove
+      # the hops are traversable, and must not present the path as realized.
+      #
+      # Measured 2026-11-10 on cobalt: a tenant holding
+      # `allow-cobalt-clients-to-wan` was given this five-hop path, the realized
+      # site had no route from downstream-selector toward the policy point, and
+      # the tenant was answered network-unreachable one hop in. Because the path
+      # claimed to be realized, every downstream layer treated routability as
+      # settled: the NFM validates only relation evidence and action agreement,
+      # the CPM attached the routes it was given, and the renderer emitted them.
+      #
+      # `declared` says what this actually is: a plan derived from the modeled
+      # reachability and permission facts, which the layer that resolves routing
+      # turns into an observed path. The URS requires the forwarding fabric to
+      # be derived, not declared as wiring; until this is derived from the
+      # resolved route graph, it is labelled honestly rather than overclaimed.
+      pathRealization = "declared";
       relationId = relation.source.id;
       source = relation.from;
       destination = relation.to;

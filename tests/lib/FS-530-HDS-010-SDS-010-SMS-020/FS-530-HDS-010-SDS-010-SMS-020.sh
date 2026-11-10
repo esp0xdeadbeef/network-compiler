@@ -47,16 +47,16 @@ inventory_path="${example_root}/inventory-nixos.nix"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
+# The compiler consumes the intent; the inventory is a renderer input and is not
+# part of the compiled model. `compilePath` is the flake's real compile entry
+# point, so the case compiles the intent through it.
 compile_paths() {
   local intent="$1"
   nix eval --no-write-lock-file --impure --json --expr '
     let
       flake = builtins.getFlake "'"path:${repo_root}"'";
     in
-      flake.libBySystem."'"${system}"'".compileAndBuildFromPaths {
-        inputPath = "'"${intent}"'";
-        inventoryPath = "'"${inventory_path}"'";
-      }
+      flake.libBySystem."'"${system}"'".compilePath "'"${intent}"'"
   '
 }
 
@@ -111,15 +111,22 @@ fi
 
 # The run succeeded: it may omit the domain for that tenant, but it must not
 # invent one. A defaulted domain for the client tenant is the defect.
+# The defect is a domain the model *invented for the client tenant*. Read the
+# tenant entry rather than the whole site: other tenants legitimately model their
+# own dnsDomain, and a whole-site text match cannot distinguish them (and, using
+# `builtins.match`, silently cannot span the JSON at all).
 if ! NO_DNS_JSON="${tmp_dir}/no-dns.out" nix eval --no-write-lock-file --impure --expr '
   let
     d = builtins.fromJSON (builtins.readFile (builtins.getEnv "NO_DNS_JSON"));
-    site = d.control_plane_model.data.esp0xdeadbeef."site-a";
-    text = builtins.toJSON site;
+    site = d.sites.esp0xdeadbeef."site-a";
+    client = builtins.head (
+      builtins.filter (t: (t.name or null) == "client") (site.tenants or [ ])
+    );
   in
-    !(builtins.match ".*\"dnsDomain\":\"lan\\..*\"" text != null)
+    # A surviving domain means one was defaulted rather than required.
+    (client.dnsDomain or null) == null
 ' | grep -qx true; then
-  fail "SN1 removing the modeled dnsDomain still produced a domain in the model, so a DNS policy was defaulted rather than required"
+  fail "SN1 removing the modeled dnsDomain still produced a domain for the client tenant, so a DNS policy was defaulted rather than required"
 fi
 
 echo "PASS dns-policy-requirement"

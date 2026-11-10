@@ -36,8 +36,11 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 fail() { echo "FAIL derivation-rule-registry: $*" >&2; exit 1; }
 
 # P1: the registry must exist as source in this repository.
-mapfile -t registries < <(find "${repo_root}/lib" "${repo_root}/src" -maxdepth 3 \
-  \( -name 'derivation-registry*' -o -name '*derivation*rules*' \) 2>/dev/null | LC_ALL=C sort)
+# Registry *source*: a directory can never carry rule identities, so select the
+# Nix files only. A registry split across a directory (data + refusal logic) is
+# therefore found through its `.nix` members, not through the directory itself.
+mapfile -t registries < <(find "${repo_root}/lib" "${repo_root}/src" -maxdepth 4 -type f -name '*.nix' \
+  \( -name 'derivation-registry*' -o -name '*derivation*rules*' -o -path '*/derivation-registry/*' \) 2>/dev/null | LC_ALL=C sort)
 
 if ((${#registries[@]} == 0)); then
   fail "P1 no derivation-rule registry source exists (expected lib/derivation-registry.nix or equivalent under ${repo_root})"

@@ -43,7 +43,11 @@ fi
 # message says which one is missing rather than only that the test failed.
 missing=""
 for field in 'field' 'scope' 'determining' 'rule' 'derived'; do
-  grep -rqiE "duplicate.?writer[^\\n]*${field}|${field}[^\\n]*duplicate.?writer" \
+  # Same-line check: the diagnostic must name every fact on one line. `[^\\n]`
+  # is not "any character except newline" in POSIX ERE; it is a bracket
+  # expression excluding the literal characters `\\` and `n`, which no word
+  # containing an `n` can satisfy. Match the whole line instead.
+  grep -rqiE "^.*duplicate.?writer.*${field}.*$|^.*${field}.*duplicate.?writer.*$" \
     "${repo_root}/lib" --include=*.nix 2>/dev/null \
     || missing="${missing} ${field}"
 done

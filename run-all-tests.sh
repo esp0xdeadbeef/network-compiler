@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # run-all-tests.sh — Auto-discover and run all network-compiler tests
-# Auto-discovers tests/test-*.sh, runs them concurrently with
+# Entrypoints come from the shared scripts/lib/discover-tests.sh contract, so a
+# newly added test is picked up with no list edit. Runs concurrently with
 # configurable parallelism via TEST_ASYNC_JOBS env var.
 # GAMP-SCOPE: runner-only; not SMT acceptance evidence.
 set -uo pipefail
@@ -20,9 +21,14 @@ esac
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-mapfile -d '' tests < <(
-  find "${repo_root}/tests" -maxdepth 1 -type f -name 'test-*.sh' -print0 | sort -z
-)
+# shellcheck source=scripts/lib/discover-tests.sh
+source "${repo_root}/scripts/lib/discover-tests.sh"
+mapfile -t test_names < <(discover_tests "${repo_root}")
+
+tests=()
+for test_name in "${test_names[@]}"; do
+  tests+=("${repo_root}/tests/${test_name}")
+done
 
 if ((${#tests[@]} == 0)); then
   echo "error: no tests found under ${repo_root}/tests" >&2
@@ -60,7 +66,7 @@ for test_path in "${tests[@]}"; do
   name="$(basename "${test_path}")"
   log_file="${tmp_dir}/${name}.log"
 
-  NETWORK_COMPILER_ROOT="${repo_root}" bash "${test_path}" >"${log_file}" 2>&1 &
+  NETWORK_COMPILER_ROOT="${repo_root}" "$(discover_test_runner "${test_path}")" "${test_path}" >"${log_file}" 2>&1 &
   pid=$!
   pid_to_name["${pid}"]="${name}"
   pid_to_log["${pid}"]="${log_file}"

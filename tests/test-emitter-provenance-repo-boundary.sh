@@ -27,6 +27,33 @@ archive_json="$(mktemp)"
 tmp_dir="$(mktemp -d)"
 repo_default_output="${repo_root}/output-compiler-signed.json"
 repo_default_backup=""
+
+# The suites run concurrently (run-all-tests.sh dispatches several entrypoints at
+# once, and FS-100-SMS-020/030 both reach this file). `repo_default_output` is a
+# single path in the emitter repository, so two instances moving and restoring it
+# at the same time race: one restores the other's backup, and the "not written
+# into the emitter repository" check reads a file the other test just created.
+#
+# Serialise the section that touches that path. A directory lock keeps the
+# serialisation off the emitter repository, so the check itself stays honest:
+# nothing is written into the repo to coordinate.
+lock_dir="${TMPDIR:-/tmp}/network-compiler-provenance.lock"
+lock_acquired=""
+acquire_lock() {
+  local waited=0
+  until mkdir "${lock_dir}" 2>/dev/null; do
+    # Reclaim a lock left behind by a killed run.
+    if [[ -d "${lock_dir}" ]] && (( waited >= 600 )); then
+      rm -rf "${lock_dir}"
+      waited=0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  lock_acquired=1
+}
+
+acquire_lock
 if [[ -e "${repo_default_output}" ]]; then
   repo_default_backup="${tmp_dir}/preexisting-output-compiler-signed.json"
   mv "${repo_default_output}" "${repo_default_backup}"
@@ -39,6 +66,7 @@ cleanup() {
   else
     rm -f "${repo_default_output}"
   fi
+  [[ -z "${lock_acquired}" ]] || rm -rf "${lock_dir}"
   rm -f "${archive_json}"
   rm -rf "${tmp_dir}"
 }

@@ -18,6 +18,7 @@ let
   buildCompiledServices = import ../compiled-services.nix { inherit lib; };
   buildIsolationDecisions = import ../isolation-decisions.nix { inherit lib; };
   buildAccessSpaceDiscovery = import ../access-space-discovery { inherit lib; };
+  buildLearnedRouteClassification = import ../learned-route-classification.nix { inherit lib; };
   sourceAudit = import ../source-audit.nix { inherit lib; };
   buildDnsContract = import ../dns-contract { inherit lib; };
   buildCoreUplinks = import ../core-uplinks.nix {
@@ -85,7 +86,15 @@ let
   _fabricValid = builtins.deepSeq fabric.validations true;
   contracts = builtins.seq _fabricValid (contractsMod.prepare siteKey declared semantic fabric);
   relations = relationsMod.prepare siteKey declared semantic fabric contracts;
-  validations = fabric.validations // contracts.validations // relations.validations;
+  # FS-482-HDS-010-SDS-010-SMS-030: learned routes are classified before any
+  # prefix authority is decided, so a route can never be promoted to owned.
+  learnedRouteClassification = buildLearnedRouteClassification.build (
+    declared // { key = siteKey; }
+  );
+  validations = fabric.validations
+    // contracts.validations
+    // relations.validations
+    // { inherit (learnedRouteClassification) _validate; };
 in
 outputMod.build {
   inherit
@@ -114,5 +123,6 @@ outputMod.build {
     isolationModel
     accessSpaceDiscovery
     ;
+  inherit (learnedRouteClassification) conditionalAvailability;
   inherit validations;
 }

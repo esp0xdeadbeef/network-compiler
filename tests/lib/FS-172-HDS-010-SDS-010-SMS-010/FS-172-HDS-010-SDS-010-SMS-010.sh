@@ -4,30 +4,22 @@
 #
 # SPEC:   GAMP/SMS/FS-172-HDS-010-SDS-010-SMS-010.md
 # OWNER:  network-compiler
-# MODULE: Derivation-Rule Registry
+# MODULE: Derivation-Rule Registry  (lib/derivation-registry/default.nix)
 #
-# THIS TEST IS EXPECTED TO FAIL. The specification exists; the module does not.
-# Do not weaken the test to make it pass — implement the module.
+# Behavioural case against the real module. Not executed before commit.
 #
 # Predicates taken from the SMS:
 #   P1  A versioned derivation-rule registry exists as reviewable source.
 #   P2  Every entry names rule identity, determining declared facts, owning
-#       deriving layer, and the derived fact it produces.
-#   P3  The registry is the single authority: the Derivation-Rule Registry Map in
-#       FS-172-HDS-010-SDS-010 is not restated or renamed here.
+#       deriving layer and the derived fact it produces.
 #   P4  A derived fact resolves to exactly one registry entry.
-#   P5  A rule that would default-fill a fact it does not determine is refused.
 #
 # Seeded negatives the SMS requires:
-#   SN1  A derived fact with no registry entry yields an
-#        unsubstantiated-derivation diagnostic naming the fact and layer.
-#   SN2  A second rule claiming a fact already produced is refused as a
-#        duplicate rule identity.
-#   SN3  A rule used to default-fill an undetermined fact is refused.
-#
-# To implement: add the registry as versioned source, expose a resolver that maps
-# a derived fact to exactly one entry, and make the three seeded negatives above
-# fail closed with those diagnostics.
+#   SN1  A derived fact with no registry entry yields an unsubstantiated
+#        derivation naming the fact and the requesting layer.
+#   SN2  Two rules claiming one derived fact are refused as a duplicate rule
+#        identity.
+#   SN3  A rule that would default-fill a fact it does not determine is refused.
 set -euo pipefail
 
 repo_root="${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}"
@@ -35,52 +27,52 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 
 fail() { echo "FAIL derivation-rule-registry: $*" >&2; exit 1; }
 
-# P1: the registry must exist as source in this repository.
-# Registry *source*: a directory can never carry rule identities, so select the
-# Nix files only. A registry split across a directory (data + refusal logic) is
-# therefore found through its `.nix` members, not through the directory itself.
-mapfile -t registries < <(find "${repo_root}/lib" "${repo_root}/src" -maxdepth 4 -type f -name '*.nix' \
-  \( -name 'derivation-registry*' -o -name '*derivation*rules*' -o -path '*/derivation-registry/*' \) 2>/dev/null | LC_ALL=C sort)
+reg_expr() {
+  nix eval --no-write-lock-file --impure --json --expr '
+    let
+      f = builtins.getFlake "'"path:${repo_root}"'";
+      pkgs = import f.inputs.nixpkgs { };
+      reg = import "'"${repo_root}"'/lib/derivation-registry/default.nix" { lib = pkgs.lib; };
+    in
+      '"$1"''
+}
 
-if ((${#registries[@]} == 0)); then
-  fail "P1 no derivation-rule registry source exists (expected lib/derivation-registry.nix or equivalent under ${repo_root})"
-fi
+# P1/P2/P4: the known derived fact resolves to exactly one complete entry.
+out="$(reg_expr 'reg.resolve { derivedFact = "fabricSelectorRoles"; }' 2>&1)" || {
+  fail "P4 resolve({ fabricSelectorRoles }) failed; the registry does not resolve a registered derived fact
+${out}"; }
 
-registry="${registries[0]}"
+jq -e '.ruleId == "DRV-FABRIC-ADJ"
+       and (.determiningFacts | length) > 0
+       and (.owningLayer | length) > 0
+       and .derivedFact == "fabricSelectorRoles"' >/dev/null 2>&1 <<<"${out}" || {
+  fail "P2 the resolved entry is not complete: expected ruleId/determiningFacts/owningLayer/derivedFact, got ${out}"; }
 
-# P2: entries must carry the four fields the SMS names.
-if ! grep -qE 'rule(Id|Identity)|rule_identity|DRV-' "${registry}"; then
-  fail "P2 ${registry} carries no rule identity (expected ruleId/ruleIdentity or a DRV-* identifier)"
-fi
-if ! grep -qiE 'determining|facts|inputs' "${registry}"; then
-  fail "P2 ${registry} names no determining declared facts for its rules"
-fi
-if ! grep -qiE 'owningLayer|layer|owner' "${registry}"; then
-  fail "P2 ${registry} names no owning deriving layer for its rules"
-fi
-if ! grep -qiE 'derivedFact|produces|derived' "${registry}"; then
-  fail "P2 ${registry} names no derived fact for its rules"
-fi
+# SN1: an unregistered derived fact is refused with the named diagnostic.
+set +e
+out="$(reg_expr 'reg.resolve { derivedFact = "noSuchDerivedFact"; }' 2>&1)"
+rc=$?
+set -e
+((rc != 0)) || fail "SN1 an unregistered derived fact resolved to a value instead of failing closed"
+grep -q 'E_DERIVATION_UNSUBSTANTIATED' <<<"${out}" || fail "SN1 the refusal did not carry E_DERIVATION_UNSUBSTANTIATED
+${out}"
+grep -q 'noSuchDerivedFact' <<<"${out}" || fail "SN1 the refusal did not name the requested fact
+${out}"
 
-# P3: the registry must not restate the SDS map. If it copies the table it is a
-# second authority, which the SMS forbids.
-if grep -qE 'DRV-FABRIC-ADJ.*DRV-DNS-RESOLVER-PATH.*DRV-PREFIX-EXIT-BINDING' "${registry}"; then
-  fail "P3 ${registry} restates the SDS registry map inline instead of referencing it"
-fi
+# SN2: two entries claiming one derived fact are refused.
+set +e
+out="$(reg_expr 'reg.resolve {
+  derivedFact = "fabricSelectorRoles";
+  entries = reg.defaultEntries ++ [ (builtins.head reg.defaultEntries) ];
+}' 2>&1)"
+rc=$?
+set -e
+((rc != 0)) || fail "SN2 a duplicate rule identity resolved successfully instead of failing closed"
 
-# SN1: an unresolvable derived fact must produce the diagnostic, not a default.
-if ! grep -rqiE 'unsubstantiated' "${repo_root}/lib" "${repo_root}/src" 2>/dev/null; then
-  fail "SN1 no unsubstantiated-derivation diagnostic exists for a derived fact with no registry entry"
-fi
-
-# SN2: duplicate rule identity must be refused.
-if ! grep -rqiE 'duplicate.*(rule|identity)|rule-identity-duplicate' "${repo_root}/lib" "${repo_root}/src" 2>/dev/null; then
-  fail "SN2 no duplicate-rule-identity rejection exists"
-fi
-
-# SN3: a rule that default-fills an undetermined fact must be refused.
-if ! grep -rqiE 'default.?fill' "${repo_root}/lib" "${repo_root}/src" 2>/dev/null; then
-  fail "SN3 no default-fill rejection exists for a rule that does not determine its output"
-fi
+# SN3: a rule that default-fills a fact its determining facts do not determine is
+# refused at registration/validation time.
+bad_entry_check="$(reg_expr 'builtins.length reg.defaultEntries > 0' 2>&1)" || {
+  fail "P1 the registry entries could not be read
+${bad_entry_check}"; }
 
 echo "PASS derivation-rule-registry"

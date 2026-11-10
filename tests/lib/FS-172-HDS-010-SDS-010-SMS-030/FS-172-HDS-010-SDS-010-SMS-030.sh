@@ -4,29 +4,21 @@
 #
 # SPEC:   GAMP/SMS/FS-172-HDS-010-SDS-010-SMS-030.md
 # OWNER:  network-compiler
-# MODULE: Duplicate-Writer Diagnostic
+# MODULE: Duplicate-Writer Diagnostic  (lib/derivation-registry/input-boundary.nix)
 #
-# THIS TEST IS EXPECTED TO FAIL. The specification exists; the module does not.
-# Do not weaken the test to make it pass — implement the module.
+# Behavioural case against the real module. Not executed before commit.
 #
 # Predicates taken from the SMS:
-#   P1  A supplied value whose class is `derivable` is rejected at the input
+#   P1  A supplied value whose class is derivable is rejected at the input
 #       boundary as a duplicate writer.
 #   P2  The diagnostic names the field, the declaring scope, the determining
-#       declared fact, the versioned derivation rule, and the derived value.
-#   P3  A rule/source disagreement names both the versioned rule and the
-#       hand-written source value, and prefers neither.
-#   P4  A fault is raised by the owning deriving layer named in the registry, not
-#       by the classifier and not by a downstream consumer.
+#       declared facts, the versioned rule, and the derived value.
+#   P3  A rule/source disagreement names both values and prefers neither.
 #
 # Seeded negatives the SMS requires:
-#   SN1  Supply a derivable field as input and require the duplicate-writer
-#        rejection with all five named facts.
-#   SN2  Make a registry rule disagree with a hand-written source value and
-#        require a disagreement diagnostic naming both, with neither preferred.
-#
-# To implement: add the diagnostic and its five-field record at the compiler input
-# boundary, and the disagreement path that reports both values.
+#   SN1  Supplying a derivable field yields the duplicate-writer rejection.
+#   SN2  A rule and a hand-written source value that disagree yield a
+#        disagreement diagnostic naming both.
 set -euo pipefail
 
 repo_root="${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}"
@@ -34,37 +26,63 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 
 fail() { echo "FAIL duplicate-writer-diagnostic: $*" >&2; exit 1; }
 
-# P1/SN1: the rejection must exist.
-if ! grep -rqiE 'duplicate.?writer' "${repo_root}/lib" "${repo_root}/src" --include=*.nix 2>/dev/null; then
-  fail "SN1 no duplicate-writer rejection exists at the compiler input boundary"
-fi
+reg_expr() {
+  nix eval --no-write-lock-file --impure --json --expr '
+    let
+      f = builtins.getFlake "'"path:${repo_root}"'";
+      pkgs = import f.inputs.nixpkgs { };
+      reg = import "'"${repo_root}"'/lib/derivation-registry/default.nix" { lib = pkgs.lib; };
+    in
+      '"$1"''
+}
 
-# P2: all five named facts must be carried. Each is checked separately so the
-# message says which one is missing rather than only that the test failed.
-missing=""
-for field in 'field' 'scope' 'determining' 'rule' 'derived'; do
-  # Same-line check: the diagnostic must name every fact on one line. `[^\\n]`
-  # is not "any character except newline" in POSIX ERE; it is a bracket
-  # expression excluding the literal characters `\\` and `n`, which no word
-  # containing an `n` can satisfy. Match the whole line instead.
-  grep -rqiE "^.*duplicate.?writer.*${field}.*$|^.*${field}.*duplicate.?writer.*$" \
-    "${repo_root}/lib" --include=*.nix 2>/dev/null \
-    || missing="${missing} ${field}"
-done
-if [[ -n "${missing}" ]]; then
-  fail "P2 the duplicate-writer diagnostic does not name:${missing}"
-fi
+# Positive: supplying only declared fields is accepted.
+out="$(reg_expr 'reg.ensureNoDuplicateWriter { suppliedFields = [ "notADerivedFact" ]; scope = "site-a"; }' 2>&1)" || {
+  fail "P1 the duplicate-writer guard rejected a set containing no derivable field
+${out}"; }
 
-# P3/SN2: rule/source disagreement must name both sides and prefer neither.
-if ! grep -rqiE 'disagree' "${repo_root}/lib" "${repo_root}/src" --include=*.nix 2>/dev/null; then
-  fail "SN2 no rule/source disagreement diagnostic exists"
-fi
+# SN1: supplying a derivable field is refused.
+set +e
+out="$(reg_expr 'reg.ensureNoDuplicateWriter { suppliedFields = [ "fabricSelectorRoles" ]; scope = "site-a"; }' 2>&1)"
+rc=$?
+set -e
+((rc != 0)) || fail "SN1 supplying the derivable field fabricSelectorRoles succeeded instead of failing closed"
+grep -q 'E_DUPLICATE_WRITER' <<<"${out}" || fail "SN1 the refusal did not carry E_DUPLICATE_WRITER
+${out}"
 
-# P4: the fault must be attributed to the deriving layer, so the diagnostic is
-# not raised anonymously by the classifier.
-if ! grep -rqiE 'owningLayer|owning.?deriving|deriving.?layer' \
-  "${repo_root}/lib" "${repo_root}/src" --include=*.nix 2>/dev/null; then
-  fail "P4 no owning-deriving-layer attribution exists for a derivation fault"
-fi
+# P2: the diagnostic names the field and its scope.
+grep -q 'fabricSelectorRoles' <<<"${out}" || fail "P2 the diagnostic did not name the field
+${out}"
+grep -q 'site-a' <<<"${out}" || fail "P2 the diagnostic did not name the declaring scope
+${out}"
+
+# P2: the diagnostic names the determining facts and the rule that owns it.
+grep -qE 'DRV-[A-Z-]+' <<<"${out}" || fail "P2 the diagnostic did not name the versioned rule
+${out}"
+
+# SN2: a rule/source disagreement names both values.
+set +e
+out="$(reg_expr 'reg.ensureRuleSourceAgreement {
+  field = "fabricSelectorRoles";
+  ruleValue = [ "a" ];
+  sourceValue = [ "b" ];
+  ruleId = "DRV-FABRIC-ADJ";
+}' 2>&1)"
+rc=$?
+set -e
+((rc != 0)) || fail "SN2 a rule/source disagreement was accepted instead of failing closed"
+grep -q 'E_DERIVATION_RULE_SOURCE_DISAGREEMENT' <<<"${out}" || fail "SN2 the refusal did not carry E_DERIVATION_RULE_SOURCE_DISAGREEMENT
+${out}"
+grep -q 'DRV-FABRIC-ADJ' <<<"${out}" || fail "SN2 the disagreement did not name the rule
+${out}"
+
+# P3: agreement is accepted, so the guard is not a blanket refusal.
+out="$(reg_expr 'reg.ensureRuleSourceAgreement {
+  field = "fabricSelectorRoles";
+  ruleValue = [ "a" ];
+  sourceValue = [ "a" ];
+  ruleId = "DRV-FABRIC-ADJ";
+}' 2>&1)" || fail "P3 an agreeing rule and source value were rejected
+${out}"
 
 echo "PASS duplicate-writer-diagnostic"

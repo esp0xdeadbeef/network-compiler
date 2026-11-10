@@ -349,6 +349,64 @@ The important invariant is:
 
 This is what allows a small deployment to grow into a larger one without changing the compiler model.
 
+## Implementation status
+
+Model intent and validator acceptance differ here, and this is the only place
+that says so.
+
+The **model** allows co-location. Stage identity and traversal order are
+independent of realized device count, so `stagePath` is the same whether a
+stage chain is served by one node or by five.
+
+The **validator** does not accept it yet:
+
+* `lib/correctness/topology.nix` requires one node per stage
+  (`E_TOPO_MISSING_CORE`, `E_TOPO_MISSING_POLICY`, `E_TOPO_MISSING_ACCESS`,
+  `E_TOPO_MISSING_DOWNSTREAM_SELECTOR`, `E_TOPO_MISSING_UPSTREAM_SELECTOR`)
+* every node declares a single `role` string; there is no stage-occupancy
+  contract
+* `lib/correctness/topology/stage-links.nix` requires linked stages to be
+  adjacent (`E_TOPO_NON_CANONICAL_STAGE_LINK`)
+
+A site with fewer than five stage nodes therefore fails to compile. That is a
+defect in this repository, not a property of the architecture: it contradicts
+the user requirement that a site manifest declares allowed role co-location
+(`../network-codex-agent/GAMP/URS`, FS-650, SDS-650) and the layout
+preservation requirement in FS-320 / SDS-320.
+
+No test in this repository compiles a co-located site, so the contradiction is
+currently undetectable from the test suite. See `TODO.md`. Do not cite this
+section as evidence that a co-located site compiles.
+
+---
+
+# Profile manifest
+
+`lib/stages/access-space-discovery/` accepts an optional
+`profileManifest` (`../network-codex-agent/GAMP/FS` FS-650, SDS-650).
+
+Presence is optional: `profileManifest == null` disables discovery decisions
+and yields empty `confined` / `exported`. When a manifest is present, it is
+validated fail-closed.
+
+Fields this compiler reads:
+
+| Field | Use |
+| --- | --- |
+| `accessSpaces` | required when a manifest is present (`E_ACCESS_SPACE_DISCOVERY_ACCESS_SPACES_REQUIRED`) |
+| `tenantAccessMatrix` | per-scope discovery confinement |
+| `sharedServiceMatrix` | shared-service discovery exports |
+
+Fields the manifest may carry that this compiler does **not** read include
+`profileIdentity`, `surfaces`, `internetProviderProfile`, and
+`roleColocation`. In particular, `roleColocation` is not consumed by
+`lib/correctness/topology.nix`, so declaring role co-location has no effect on
+compilation today. Its current vocabulary (`provider-edge`, `public-ingress`)
+is also distinct from the canonical stage roles.
+
+No example under `../network-labs/examples/` declares a `profileManifest`; the
+only populated instances are in `../network-labs/GAMP/SAT/intent.nix`.
+
 ---
 
 # Why the staged model is enforced

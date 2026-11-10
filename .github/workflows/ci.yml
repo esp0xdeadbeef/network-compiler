@@ -124,6 +124,19 @@ jobs:
             printf 'NETWORK_RENDERER_ACCESS_ENDPOINT_NIXOS_PATH=%s\n' "${workspace}/network-renderer-access-endpoint-nixos"
           } >> "$GITHUB_ENV"
 
+          # The provenance suite (tests/test-emitter-provenance-repo-boundary.sh,
+          # reached through FS-100-HDS-010-SDS-010-SMS-020/030) needs a *foreign*
+          # git repository whose HEAD differs from this one, to prove compiler
+          # provenance is taken from the emitter repository rather than the
+          # caller's. It does not need any particular repository to exist, so
+          # synthesise one instead of depending on an unpinned checkout.
+          foreign_dir="${workspace}/foreign-caller-repo"
+          rm -rf "${foreign_dir}"
+          git init --quiet "${foreign_dir}"
+          git -C "${foreign_dir}" -c user.name=ci -c user.email=ci@example.invalid \
+            -c commit.gpgsign=false commit --quiet --allow-empty -m "foreign caller"
+          printf 'NETWORK_FOREIGN_CWD=%s\n' "${foreign_dir}" >> "$GITHUB_ENV"
+
       - name: "Run repository test suite"
         env:
           NETWORK_REPO_DIRECT_TEST_OK: "1"

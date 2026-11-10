@@ -73,6 +73,7 @@ jq -e '
   || fail "intent-source boundary should not warn or skip upstream compiler coverage"
 
 [[ ! -s "${tmp_dir}/intent-source.err" ]] \
+  || ! grep -Fq "WARNING: " "${tmp_dir}/intent-source.err" \
   || fail "intent-source boundary unexpectedly emitted warnings"
 
 echo "PASS layer-entry-warning-contract"

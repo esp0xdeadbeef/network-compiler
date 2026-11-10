@@ -23,7 +23,7 @@
 # comes from*, never whether the value is allowed.
 
 let
-  util = import ./correctness/util.nix { inherit lib; };
+  util = import ../correctness/util.nix { inherit lib; };
   inherit (util) ensure;
 
   isNonEmptyString = value: builtins.isString value && value != "";

@@ -14,6 +14,7 @@
       compiledServices,
       isolationModel,
       accessSpaceDiscovery,
+      conditionalAvailability,
       normalizedRelations,
       overlayAttachments,
       overlayAddressPools,
@@ -40,6 +41,7 @@
         consumedInterfaces = isolationModel.consumedInterfaces;
         isolationDecisions = isolationModel.isolationDecisions;
         accessSpaceDiscovery = accessSpaceDiscovery;
+        conditionalAvailability = conditionalAvailability;
         ipv6 = semantic.ipv6 or { };
         upstreams = semantic.upstreams or { };
         relations = normalizedRelations;
@@ -98,6 +100,7 @@
           tenants = model0.tenants;
           services = model0.services;
           accessSpaceDiscovery = model0.accessSpaceDiscovery;
+          conditionalAvailability = model0.conditionalAvailability;
           ipv6 = model0.ipv6;
           relations = model0.relations;
           communicationContract = model0.communicationContract;

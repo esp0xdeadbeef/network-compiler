@@ -188,7 +188,7 @@ let
       trafficType = relation.trafficType;
       stagePath = stages;
       corePathNodes = pathCores;
-      nodePath = builtins.head nodePathAlternatives;
+      nodePath = if nodePathAlternatives == [ ] then [ ] else builtins.head nodePathAlternatives;
       nodePathAlternatives = nodePathAlternatives;
       requiresPolicy = builtins.elem "policy" stages;
       forbidsCoreToCoreP2P = true;

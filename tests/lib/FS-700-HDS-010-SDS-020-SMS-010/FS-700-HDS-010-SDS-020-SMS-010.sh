@@ -35,14 +35,18 @@ intent="${example_dir}/intent.nix"
 inventory="${example_dir}/inventory-nixos.nix"
 tmp_dir="$(mktemp -d)"; trap 'rm -rf "${tmp_dir}"' EXIT
 
+# `compilePath` takes the intent path as a single string and runs the whole
+# pipeline on it (flake.nix:163: `compilePath = valueOrPath: compile (readValue
+# valueOrPath)`). It was called here as `compileAndBuildFromPaths { inputPath;
+# inventoryPath; }`, which is the *control-plane model's* API -- this repository
+# exposes neither that name nor an inventory parameter, so the case failed with
+#   error: attribute 'compileAndBuildFromPaths' missing
+# before compiling anything. The sibling case FS-482 uses the form below.
 compile() {
   nix eval --no-write-lock-file --impure --json --expr '
     let
       f = builtins.getFlake "'"path:${repo_root}"'";
-    in f.libBySystem."x86_64-linux".compileAndBuildFromPaths {
-      inputPath = "'"$1"'";
-      inventoryPath = "'"${inventory}"'";
-    }
+    in f.libBySystem."x86_64-linux".compilePath "'"$1"'"
   '
 }
 

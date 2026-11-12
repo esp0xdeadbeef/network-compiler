@@ -71,7 +71,25 @@ let
           let
             exits = exitsForRelation relation;
           in
-          if exits != [ ] then exits else coresForEndpoint relation.to;
+          # FS-322 resolves an exit FROM the selecting scope's `selects`, and
+          # FS-323-HDS-010-SDS-010 says a reachability fact is accepted "only
+          # from scope `offers` and `selects`" while permission is a separate
+          # input. Falling back to `coresForEndpoint relation.to` when there are
+          # no exits derived reachability from the permit relation alone: with
+          # every `selects` stripped from the topology the `single-wan` fixture
+          # still produced two multi-hop allow paths
+          # (allow-tenants-to-site-dns, allow-tenants-to-wan), which is exactly
+          # the reachability-and-permission conflation the source SDS names.
+          #
+          # A service destination legitimately has no selects -- its exit is the
+          # node hosting the service -- and that is resolved before this point by
+          # `coresForEndpoint`, so it is kept here rather than dropped.
+          if exits != [ ] then
+            exits
+          else if (relation.to.kind or null) == "service" then
+            coresForEndpoint relation.to
+          else
+            [ ];
       corePairs = buildCorePairs {
         inherit
           siteKey

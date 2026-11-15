@@ -4,8 +4,8 @@ let
   util = import ../util.nix { inherit lib; };
   inherit (util) ensure throwError;
 
-  normalizeExternalSelector =
-    siteKey: path: overlayNames: scopeNames: ext:
+  normalizeExternalSelectorWith =
+    siteKey: path: overlayNames: scopeNames: ext: requireModeledScope:
     let
       hasName = ext ? name;
       hasScope = ext ? scope;
@@ -66,17 +66,24 @@ let
                 hints = [ "Name a modeled exit scope, for example scope = \"onyx\"." ];
               };
 
-              _exists = ensure (builtins.elem scope scopeNames) {
-                code = "E_CONTRACT_UNKNOWN_EXTERNAL_SCOPE";
-                spec = "FS-381-HDS-010-SDS-010-SMS-040 Permitted Exit Path Completeness";
-                site = siteKey;
-                path = path ++ [ "scope" ];
-                message = "relation references exit scope '${scope}', which is not a modeled hop, so the permitted exit path has no next hop and cannot be completed";
-                hints = [
-                  "Declare the scope under topology.nodes.<scope>, or use a bare { kind = \"external\"; }."
-                  "Name the modeled node that owns the missing next hop, or remove the pinned exit scope."
-                ];
-              };
+              # Only a target exit scope has to name a locally modeled hop.
+              # An external source scope may name a remote site's node; it is
+              # a policy subject, not an exit this site can complete.
+              _exists =
+                if requireModeledScope then
+                  ensure (builtins.elem scope scopeNames) {
+                    code = "E_CONTRACT_UNKNOWN_EXTERNAL_SCOPE";
+                    spec = "FS-381-HDS-010-SDS-010-SMS-040 Permitted Exit Path Completeness";
+                    site = siteKey;
+                    path = path ++ [ "scope" ];
+                    message = "relation references exit scope '${scope}', which is not a modeled hop, so the permitted exit path has no next hop and cannot be completed";
+                    hints = [
+                      "Declare the scope under topology.nodes.<scope>, or use a bare { kind = \"external\"; }."
+                      "Name the modeled node that owns the missing next hop, or remove the pinned exit scope."
+                    ];
+                  }
+                else
+                  true;
             in
             builtins.seq _shape (
               builtins.seq _exists {
@@ -119,7 +126,10 @@ let
         )
       )
     );
+  normalizeExternalSelector =
+    siteKey: path: overlayNames: scopeNames: ext:
+    normalizeExternalSelectorWith siteKey path overlayNames scopeNames ext true;
 in
 {
-  inherit normalizeExternalSelector;
+  inherit normalizeExternalSelector normalizeExternalSelectorWith;
 }

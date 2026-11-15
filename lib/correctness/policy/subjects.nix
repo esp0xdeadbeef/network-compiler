@@ -4,7 +4,7 @@ let
   util = import ../util.nix { inherit lib; };
   external = import ./external-selector.nix { inherit lib; };
   inherit (util) ensure;
-  inherit (external) normalizeExternalSelector;
+  inherit (external) normalizeExternalSelectorWith;
 
   normalizeSubject =
     siteKey: idx: path: tenantNames: serviceIndex: overlayNames: uplinkNames: scopeNames: subj:
@@ -123,9 +123,9 @@ let
         inherit name;
       }
     else
-      # An external subject may name a modeled node or a declared uplink as
-      # the scope that owns it.
-      normalizeExternalSelector siteKey path overlayNames (scopeNames ++ uplinkNames) subj;
+      # An external source may name a remote site's node. Only a target exit
+      # scope has to be a locally modeled hop (FS-381).
+      normalizeExternalSelectorWith siteKey path overlayNames (scopeNames ++ uplinkNames) subj false;
 in
 {
   inherit normalizeSubject;

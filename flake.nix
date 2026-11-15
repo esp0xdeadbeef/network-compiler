@@ -78,6 +78,11 @@
         rec {
           inherit compile controlledSkip;
 
+          # FS-165-HDS-010-SDS-010: source-form minimality applied to the intent
+          # source itself. Exposed so a caller can report the shape of a file
+          # without compiling it.
+          sourceForm = import ./lib/source-form/minimality.nix { lib = pkgs.lib; };
+
           controlledSkipAcknowledgement = controlledSkip.acknowledge;
 
           readInput = readValue;
@@ -160,7 +165,30 @@
 
           compileValue = value: compile value;
 
-          compilePath = valueOrPath: compile (readValue valueOrPath);
+          # A source that grows by rewriting one block per scope is refused before
+          # it is evaluated, because after evaluation a hand-written record and a
+          # helper-produced record are indistinguishable. Size alone never refuses:
+          # a large intent that declares each fact once has no repeated shape.
+          gateSource =
+            valueOrPath:
+            let
+              isNixPath =
+                builtins.isPath valueOrPath
+                || (
+                  builtins.isString valueOrPath && builtins.match ".*\\.nix$" valueOrPath != null
+                );
+            in
+            if isNixPath then
+              sourceForm.assertMinimal {
+                text = builtins.readFile valueOrPath;
+                path = [ "intent" ];
+              }
+            else
+              true;
+
+          compilePath =
+            valueOrPath:
+            builtins.seq (gateSource valueOrPath) (compile (readValue valueOrPath));
 
           writeJSON =
             {

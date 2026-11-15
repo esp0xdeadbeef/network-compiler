@@ -135,6 +135,11 @@ in
         _addrSafe = addressSafety.validateSite siteKey declared;
         _topoValid = topoC.validateTopology siteKey topo overlays;
         inherit _superseded;
+        # FS-080/FS-322: force node normalization here so the owning validators
+        # (selects shape, offers, behaviors) run before any consumer iterates
+        # `selects`. Otherwise a non-list selects shape reaches an earlier
+        # consumer as a generic Nix type error instead of E_CONTRACT_SELECTS.
+        _nodesValid = builtins.deepSeq normalizedTopologyNodes true;
       };
     };
 }

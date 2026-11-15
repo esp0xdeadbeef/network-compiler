@@ -51,8 +51,8 @@ base
                 allowedPrefixes = [ "203.0.113.48/32" ];
                 sourcePeerOrProvider = "uplink0";
                 allowedSources = [ "uplink0" ];
-                routePurpose = "provider-prefix";
-                allowedPurposes = [ "provider-prefix" ];
+                routePurpose = "exit-prefix";
+                allowedPurposes = [ "exit-prefix" ];
                 destinationOwner = "provider-uplink0";
                 allowedDestinationOwners = [ "provider-uplink0" ];
                 maximumScope = "provider";
@@ -83,7 +83,7 @@ jq -e '
     and ($constraints[1].id == "missing-authority-runtime-route")
     and ($constraints[1].gampId == "FS-480-HDS-010-SDS-010-SMS-040")
     and ($constraints[1].authorityId == "prefix-authority::missing::4|203.0.113.48/32")
-    and ($constraints[1].routePurpose == "provider-prefix")
+    and ($constraints[1].routePurpose == "exit-prefix")
     and ([
       $site.sourceAudit.behavior[]
       | select(

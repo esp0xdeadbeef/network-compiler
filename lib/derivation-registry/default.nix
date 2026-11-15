@@ -172,6 +172,7 @@ in
   # distinct contract. Re-exported so callers depend on one module.
   inherit (import ./input-boundary.nix { inherit lib; })
     ensureNoDuplicateWriter
+    ensurePermissionShapeNotRestated
     ensureRuleSourceAgreement
     ;
 }

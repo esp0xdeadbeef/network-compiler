@@ -53,6 +53,66 @@ in
         "A field classified derivable shall not be supplied as input; remove it and let ${toString offender.ruleId} derive it."
       ];
 
+  # FS-172 DRV-SERVICE-PERMISSION-SHAPE: a relation's traffic class is derived from
+  # the declaration of the service it targets. A relation that restates that class
+  # duplicates the writer the registry names, so the restatement is refused rather
+  # than accepted as an independent statement of the same meaning.
+  #
+  # The diagnostic carries the five elements FS-172-HDS-010-SDS-010-SMS-030
+  # requires: field, declaring scope, determining declared fact, rule identity, and
+  # derived value.
+  ensurePermissionShapeNotRestated =
+    {
+      site ? null,
+      relations ? [ ],
+      serviceTrafficType ? { },
+      entries ? defaultEntries,
+    }:
+    let
+      rule = lib.findFirst (entry: entry.ruleId == "DRV-SERVICE-PERMISSION-SHAPE") null entries;
+
+      targetServiceOf =
+        relation:
+        let
+          to = relation.to or { };
+        in
+        if (to.kind or null) == "service" then to.name or null else null;
+
+      restingOn =
+        relation:
+        let
+          service = targetServiceOf relation;
+          supplied = relation.trafficType or null;
+          declared = if service == null then null else serviceTrafficType.${service} or null;
+        in
+        service != null && supplied != null && declared == supplied;
+
+      offenders = lib.filter restingOn relations;
+      offender = builtins.head offenders;
+      offenderService = targetServiceOf offender;
+      offenderScope = offender.id or offender.name or null;
+      offenderSupplied = offender.trafficType or null;
+      offenderDeclared = serviceTrafficType.${offenderService} or null;
+      ruleId = if rule == null then "DRV-SERVICE-PERMISSION-SHAPE" else rule.ruleId;
+    in
+    require (offenders == [ ])
+      "E_DUPLICATE_WRITER"
+      [
+        "relations"
+        offenderScope
+        "trafficType"
+      ]
+      site
+      (
+        if offenders == [ ] then
+          "no permission-shape restatement"
+        else
+          "duplicate writer: relation '${toString offenderScope}' in scope '${toString site}' supplies trafficType ${builtins.toJSON offenderSupplied}, which rule ${ruleId} already derives from the declared service '${offenderService}' (serviceDeclaration.trafficType ${builtins.toJSON offenderDeclared}); supplying it restates the derived permissionShape"
+      )
+      [
+        "Drop trafficType from the relation and let ${ruleId} derive the permission shape from the target service declaration."
+      ];
+
   # A rule and a hand-written source value that disagree fail closed naming both;
   # the source value is not an override.
   ensureRuleSourceAgreement =

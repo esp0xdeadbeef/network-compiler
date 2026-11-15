@@ -109,7 +109,11 @@ let
               inherit ipv4;
             }
           else
-            normalizeExternalSelector siteKey basePath overlayNames scopeNames target
+            # An exit scope is either a modeled node or a declared uplink. The
+            # relation names the scope that owns the exit, and both forms are
+            # modeled; checking nodes alone rejected `scope = "uplink0"` only
+            # because the check used to be unforced.
+            normalizeExternalSelector siteKey basePath overlayNames (scopeNames ++ uplinkNames) target
         )
       );
 in

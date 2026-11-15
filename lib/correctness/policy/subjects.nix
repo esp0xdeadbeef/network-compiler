@@ -123,7 +123,9 @@ let
         inherit name;
       }
     else
-      normalizeExternalSelector siteKey path overlayNames scopeNames subj;
+      # An external subject may name a modeled node or a declared uplink as
+      # the scope that owns it.
+      normalizeExternalSelector siteKey path overlayNames (scopeNames ++ uplinkNames) subj;
 in
 {
   inherit normalizeSubject;

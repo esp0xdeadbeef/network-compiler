@@ -68,18 +68,22 @@ let
 
               _exists = ensure (builtins.elem scope scopeNames) {
                 code = "E_CONTRACT_UNKNOWN_EXTERNAL_SCOPE";
+                spec = "FS-381-HDS-010-SDS-010-SMS-040 Permitted Exit Path Completeness";
                 site = siteKey;
                 path = path ++ [ "scope" ];
-                message = "relation references exit scope '${scope}', which is not a modeled scope";
+                message = "relation references exit scope '${scope}', which is not a modeled hop, so the permitted exit path has no next hop and cannot be completed";
                 hints = [
                   "Declare the scope under topology.nodes.<scope>, or use a bare { kind = \"external\"; }."
+                  "Name the modeled node that owns the missing next hop, or remove the pinned exit scope."
                 ];
               };
             in
-            {
-              kind = "external";
-              inherit scope;
-            }
+            builtins.seq _shape (
+              builtins.seq _exists {
+                kind = "external";
+                inherit scope;
+              }
+            )
           else if hasName then
             let
               name = ext.name;
@@ -92,22 +96,24 @@ let
                 hints = [ "Use name = \"east-west\" for an overlay." ];
               };
             in
-            if builtins.elem name overlayNames then
-              {
-                kind = "external";
-                inherit name;
-              }
-            else
-              throwError {
-                code = "E_CONTRACT_UNKNOWN_EXTERNAL";
-                site = siteKey;
-                path = path ++ [ "name" ];
-                message = "relation references unknown overlay '${name}'";
-                hints = [
-                  "Declare the overlay under transport.overlays[].name."
-                  "For an exit scope use { kind = \"external\"; scope = \"${name}\"; }."
-                ];
-              }
+            builtins.seq _name (
+              if builtins.elem name overlayNames then
+                {
+                  kind = "external";
+                  inherit name;
+                }
+              else
+                throwError {
+                  code = "E_CONTRACT_UNKNOWN_EXTERNAL";
+                  site = siteKey;
+                  path = path ++ [ "name" ];
+                  message = "relation references unknown overlay '${name}'";
+                  hints = [
+                    "Declare the overlay under transport.overlays[].name."
+                    "For an exit scope use { kind = \"external\"; scope = \"${name}\"; }."
+                  ];
+                }
+            )
           else
             { kind = "external"; }
         )

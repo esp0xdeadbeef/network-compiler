@@ -6,7 +6,19 @@ set -euo pipefail
 repo_root="${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}"
 trace_id="FS-100-HDS-010-SDS-010-SMS-030"
 shared_test="${repo_root}/tests/test-emitter-provenance-repo-boundary.sh"
-foreign_cwd="${NETWORK_FOREIGN_CWD:-${repo_root}/../canonical-gamp}"
+# The provenance check needs a *foreign* revision, not a specific repository.
+# Build a throwaway git fixture so the check is self-contained and never
+# depends on another checkout being present.
+foreign_cwd="${NETWORK_FOREIGN_CWD:-}"
+foreign_fixture=""
+if [[ -z "${foreign_cwd}" ]]; then
+  foreign_fixture="$(mktemp -d)"
+  git -C "${foreign_fixture}" init -q
+  git -C "${foreign_fixture}" -c user.email=fixture@example.invalid -c user.name=fixture \
+    commit -q --allow-empty -m provenance-fixture
+  foreign_cwd="${foreign_fixture}"
+fi
+trap '[[ -n "${foreign_fixture:-}" ]] && rm -rf "${foreign_fixture}"' EXIT
 
 fail() {
   echo "FAIL ${trace_id}: $*" >&2

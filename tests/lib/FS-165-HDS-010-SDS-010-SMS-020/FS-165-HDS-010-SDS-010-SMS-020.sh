@@ -7,7 +7,7 @@
 # MODULE: Repetitive Source-Form Refusal  (lib/source-form/minimality.nix)
 #
 # Behavioural case against the real module. The qualifier suffix keeps this case
-# distinct from the network-codex-agent case that holds the manifest-side contract
+# distinct from the canonical-gamp case that holds the manifest-side contract
 # for the same row: this case owns the intent-source consequence, where the
 # compiler refuses a source that grows by rewriting one record per scope.
 #

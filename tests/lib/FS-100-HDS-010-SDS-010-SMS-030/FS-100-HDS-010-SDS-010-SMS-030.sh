@@ -6,7 +6,7 @@ set -euo pipefail
 repo_root="${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}"
 trace_id="FS-100-HDS-010-SDS-010-SMS-030"
 shared_test="${repo_root}/tests/test-emitter-provenance-repo-boundary.sh"
-foreign_cwd="${NETWORK_FOREIGN_CWD:-${repo_root}/../network-codex-agent}"
+foreign_cwd="${NETWORK_FOREIGN_CWD:-${repo_root}/../canonical-gamp}"
 
 fail() {
   echo "FAIL ${trace_id}: $*" >&2

@@ -371,7 +371,7 @@ The **validator** does not accept it yet:
 A site with fewer than five stage nodes therefore fails to compile. That is a
 defect in this repository, not a property of the architecture: it contradicts
 the user requirement that a site manifest declares allowed role co-location
-(`../canonical-gamp/GAMP/URS`, FS-650, SDS-650) and the layout
+(the platform URS, FS-650, SDS-650) and the layout
 preservation requirement in FS-320 / SDS-320.
 
 No test in this repository compiles a co-located site, so the contradiction is
@@ -383,7 +383,7 @@ section as evidence that a co-located site compiles.
 # Profile manifest
 
 `lib/stages/access-space-discovery/` accepts an optional
-`profileManifest` (`../canonical-gamp/GAMP/FS` FS-650, SDS-650).
+`profileManifest` (the platform FS, FS-650, SDS-650).
 
 Presence is optional: `profileManifest == null` disables discovery decisions
 and yields empty `confined` / `exported`. When a manifest is present, it is

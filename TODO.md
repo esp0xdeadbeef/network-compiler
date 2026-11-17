@@ -29,9 +29,9 @@ every stage must exist as its own node, so no site with fewer than five stage
 nodes can compile.
 
 Trace handles: URS site manifest (`allowed role co-location`) and practical
-deployment profiles; `../canonical-gamp/GAMP/FS` FS-650 (profile manifest,
-`roleColocation`); FS-320 / `../canonical-gamp/GAMP/SDS`
-FS-320-HDS-010-SDS-010 (layout preservation); `../canonical-gamp/GAMP/SMS`
+deployment profiles; the platform FS, FS-650 (profile manifest,
+`roleColocation`); FS-320 / platform SDS
+FS-320-HDS-010-SDS-010 (layout preservation); platform SMS
 FS-650-HDS-010-SDS-010-SMS-010..040.
 
 Owning code:

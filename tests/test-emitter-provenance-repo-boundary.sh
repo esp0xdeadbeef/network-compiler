@@ -6,7 +6,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # NETWORK_FOREIGN_CWD must be set to the path of a foreign repository
-# (e.g., canonical-gamp) for the foreign-caller provenance check.
+# (any other checkout) for the foreign-caller provenance check.
 # Replaces the old hardcoded default the orchestrator checkout.
 if [[ -z "${NETWORK_FOREIGN_CWD:-}" ]]; then
   echo "SKIP: NETWORK_FOREIGN_CWD not set; foreign-caller provenance check skipped" >&2

@@ -80,7 +80,13 @@ jobs:
 
           # flake.lock is gitignored in this repository, so generate it first to
           # learn the pinned revisions of the sibling inputs.
-          if [ ! -f flake.lock ]; then
+          #
+          # `-s`, not `-f`: a gitignored path can arrive as a ZERO-BYTE file, and
+          # `-f` is true for that. The lock was then read as empty JSON and the
+          # eval below died with
+          #   parse error at line 1, column 1: attempting to parse an empty input
+          # which is a runner-state bug reported as a test failure.
+          if [ ! -s flake.lock ]; then
             nix flake lock
           fi
 

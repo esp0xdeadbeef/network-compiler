@@ -47,7 +47,9 @@ in
           );
 
       coreUplinks = builtins.deepSeq _superseded (
-        buildCoreUplinks siteKey nodes coreNodes { inherit overlayEndpointNodes; }
+        buildCoreUplinks siteKey nodes coreNodes {
+          inherit overlayEndpointNodes overlays;
+        }
       );
 
       coreUplinkOwner =

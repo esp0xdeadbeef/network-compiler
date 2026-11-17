@@ -72,7 +72,7 @@ result="$("$NIX" eval --impure --json --expr "
           id = \"allow-clients-to-wan-https\";
           priority = 100;
           from = { kind = \"tenant\"; name = \"clients\"; };
-          to = { kind = \"external\"; uplinks = [ \"wan-vlan4\" ]; };
+          to = { kind = \"external\"; scope = \"core-primary\"; };
           trafficType = \"https\";
           action = \"allow\";
           returnBehavior = \"symmetric\";
@@ -81,7 +81,7 @@ result="$("$NIX" eval --impure --json --expr "
           id = \"allow-clients-to-wan-icmp\";
           priority = 110;
           from = { kind = \"tenant\"; name = \"clients\"; };
-          to = { kind = \"external\"; uplinks = [ \"wan-vlan4\" ]; };
+          to = { kind = \"external\"; scope = \"core-primary\"; };
           trafficType = \"icmp\";
           action = \"allow\";
           returnBehavior = \"symmetric\";
@@ -154,11 +154,18 @@ result="$("$NIX" eval --impure --json --expr "
     noDnsOut = compile noDns;
     withDnsPermutedOut = compile withDnsPermuted;
 
-    # Strip DNS-provenance fields — non-interference boundary
-    stripDns = site: builtins.removeAttrs site [
+    # Strip DNS-provenance fields — non-interference boundary. The compiler
+    # injects the core-dns service and its relations into communicationContract
+    # (asserted separately by dnsServiceAdded), so the contract is compared with
+    # those two DNS-derived collections removed; its traffic types and interface
+    # tags still have to be byte-equal.
+    stripDnsContract = contract: contract // { services = [ ]; relations = [ ]; };
+    stripDns = site: (builtins.removeAttrs site [
       \"dns\" \"relations\" \"trafficPaths\" \"services\"
       \"consumedInterfaces\" \"sourceAudit\"
-    ];
+    ]) // {
+      communicationContract = stripDnsContract (site.communicationContract or { });
+    };
 
     nonDnsWithDns = stripDns withDnsOut;
     nonDnsNoDns = stripDns noDnsOut;

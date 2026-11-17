@@ -66,7 +66,14 @@ builtins.listToAttrs (
         tenants = tenantAttachmentsOf name;
         realizedCarriage = builtins.filter (carriage: attached { inherit carriage tenants; }) carriers;
         missingCarriage = carriers != [ ] && realizedCarriage == [ ];
-        required = ensure (builtins.length uplinks > 0 || realizedCarriage != [ ]) (
+        # An overlay endpoint whose overlay declares no tenant carriage is not
+        # this stage's diagnostic: the overlay model reports the missing
+        # underlayAccess (E_OVERLAY_UNDERLAY_ACCESS_REQUIRED) with the overlay
+        # named, and two codes for one defect send the reader to the wrong one.
+        carriageUnowned = isOverlayEndpoint && carriers == [ ];
+        required = ensure (
+          builtins.length uplinks > 0 || realizedCarriage != [ ] || carriageUnowned
+        ) (
           if isOverlayEndpoint && missingCarriage then
             let
               carriage = builtins.head carriers;

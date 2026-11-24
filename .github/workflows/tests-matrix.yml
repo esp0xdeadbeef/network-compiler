@@ -329,10 +329,14 @@ jobs:
           # successor died with "ripgrep is missing from the runner image"). The musl
           # binary is 2.5 MB and static, so it needs no apt and no store closure.
           if ! command -v rg >/dev/null; then
+            # The archive has no "./" prefix on its members; asking tar for
+            # "./ripgrep-.../rg" fails with "Not found in archive".
+            rg_unpack="$(mktemp -d)"
             curl -fsSL --retry 3 \
               https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz \
-              | tar -xz -C /tmp ./ripgrep-14.1.1-x86_64-unknown-linux-musl/rg
-            sudo install -m 0755 /tmp/ripgrep-14.1.1-x86_64-unknown-linux-musl/rg /usr/local/bin/rg
+              | tar -xz -C "${rg_unpack}" --strip-components=1 \
+                  "ripgrep-14.1.1-x86_64-unknown-linux-musl/rg"
+            sudo install -m 0755 "${rg_unpack}/rg" /usr/local/bin/rg
           fi
           rg --version | head -1
 

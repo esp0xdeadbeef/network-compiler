@@ -4,7 +4,7 @@ set -euo pipefail
 # GAMP-SCOPE: software-module-test
 # Construction test: compiler overlay-underlay separation.
 #
-# SMS-010: Overlay underlay/control and payload must have separate
+# FS-030-HDS-010-SDS-030-SMS-010: Overlay underlay/control and payload must have separate
 # p2pIsolationKeys, transportKind classification, overlayIdentity,
 # peerSiteIdentity emission, and explicit underlayAccess validation.
 #

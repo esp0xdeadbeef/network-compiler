@@ -16,7 +16,7 @@
 #
 # Seeded negatives the SMS requires:
 #   SN1  A derivable field is identified as derivable, so supplying it can be
-#        refused by the input boundary (see SMS-030).
+#        refused by the input boundary (see FS-172-HDS-010-SDS-010-SMS-030).
 #   SN2  A field no rule produces is classified `declared`, not defaulted.
 set -euo pipefail
 

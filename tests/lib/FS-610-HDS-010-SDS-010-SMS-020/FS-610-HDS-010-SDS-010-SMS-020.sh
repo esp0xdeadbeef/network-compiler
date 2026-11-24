@@ -2,7 +2,7 @@
 set -euo pipefail
 # GAMP-ID: FS-610-HDS-010-SDS-010-SMS-020
 # GAMP-SCOPE: software-module-test
-# SMS-020: Discovery Boundary Decision Separation
+# FS-610-HDS-010-SDS-010-SMS-020: Discovery Boundary Decision Separation
 # Tests seeded negatives: DISCOVERY_PAYLOAD_AUTHORIZATION_LEAK, DISCOVERY_MANAGEMENT_AUTHORIZATION_LEAK, DISCOVERY_REVERSE_DISCOVERY_AUTHORIZATION_LEAK
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"

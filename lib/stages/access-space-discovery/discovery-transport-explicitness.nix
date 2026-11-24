@@ -26,7 +26,8 @@ let
   protocol = discovery.protocol or null;
 
   # Service classes for which discovery transport must be explicitly declared.
-  # Per SMS-030, these classes imply discovery capability and must not leave
+  # Per FS-590-HDS-010-SDS-010-SMS-030, these classes imply discovery
+  # capability and must not leave
   # transport to renderer defaults or service-class inference.
   discoveryTransportClasses = [
     "printer"

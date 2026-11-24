@@ -77,7 +77,7 @@ let
         require (builtins.elem scope [ "intra-access" "intra-tenant" ])
           "E_ISOLATION_DECISION_SCOPE" idx [ "scope" ]
           "isolation decision scope must be intra-access or intra-tenant"
-          [ "Classify only the FS-620 SMS-010 isolation scopes at the compiler layer." ];
+          [ "Classify only the FS-620-HDS-010-SDS-010-SMS-010 isolation scopes at the compiler layer." ];
       _classification =
         require (builtins.elem classification [ "allowed" "denied" "service-limited" ])
           "E_ISOLATION_DECISION_CLASSIFICATION" idx [ "classification" ]

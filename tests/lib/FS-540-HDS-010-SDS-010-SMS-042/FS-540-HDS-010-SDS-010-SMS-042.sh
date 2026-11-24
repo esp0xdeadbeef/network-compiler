@@ -11,7 +11,7 @@ set -euo pipefail
 # selected path.  Unrelated records (tenants, IPv6 policy units, isolation
 # decisions, access-space discovery, overlay attachments) remain byte-equivalent.
 #
-# Seeded negatives per SMS-042:
+# Seeded negatives per FS-540-HDS-010-SDS-010-SMS-042:
 #   SN1: VLAN 2 + VLAN 7 + delegated-prefix IPv6 + non-DNS services — replace
 #        DNS-to-WAN with no-DNS; every unrelated record byte-equivalent.
 #   SN2: Permute DNS services/relations; emitted DNS delta and preserved set

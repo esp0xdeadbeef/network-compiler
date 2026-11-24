@@ -174,7 +174,7 @@ fi
 
 # ============================================================
 # Seeded Negative 1b: Core-to-access link WITH shared attachment
-# SMS-050 requires UNCONDITIONAL rejection of any core-to-access link.
+# FS-030-HDS-010-SDS-050-SMS-010 requires UNCONDITIONAL rejection of any core-to-access link.
 # Previously a KNOWN_GAP (stage-links.nix allowed shared-attachment
 # core<->access); now fixed — core-to-access is always non-canonical.
 # ============================================================

@@ -29,7 +29,8 @@ repo_default_output="${repo_root}/output-compiler-signed.json"
 repo_default_backup=""
 
 # The suites run concurrently (run-all-tests.sh dispatches several entrypoints at
-# once, and FS-100-SMS-020/030 both reach this file). `repo_default_output` is a
+# once, and FS-100-HDS-010-SDS-010-SMS-020 and
+# FS-100-HDS-010-SDS-010-SMS-030 both reach this file). `repo_default_output` is a
 # single path in the emitter repository, so two instances moving and restoring it
 # at the same time race: one restores the other's backup, and the "not written
 # into the emitter repository" check reads a file the other test just created.

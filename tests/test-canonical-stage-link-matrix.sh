@@ -142,7 +142,7 @@ else if !(baseResult.success && baseResult.value) then
 else if !(reverseBaseResult.success && reverseBaseResult.value) then
   builtins.throw "canonical base scheme failed when links were listed in reverse endpoint order"
 else if sharedAttachmentResult.success then
-  builtins.throw "shared core/access attachment should be rejected; SMS-050 forbids direct core-to-access links"
+  builtins.throw "shared core/access attachment should be rejected; FS-030-HDS-010-SDS-050-SMS-010 forbids direct core-to-access links"
 else if mismatchedAttachmentResult.success then
   builtins.throw "mismatched core/access attachment should not be accepted"
 else

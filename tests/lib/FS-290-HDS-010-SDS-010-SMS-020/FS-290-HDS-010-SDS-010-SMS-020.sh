@@ -239,14 +239,14 @@ expect_failure \
   "protocol = \"mdns-ssdp\"; grantsPayloadReachability = true;" \
   "E_ACCESS_SPACE_DISCOVERY_PAYLOAD_INFERENCE"
 
-# SMS-020 SN1: missing service identity (service type absent)
+# FS-290-HDS-010-SDS-010-SMS-020 SN1: missing service identity (service type absent)
 expect_failure \
   "missing-service-identity" \
   "serviceClass = \"media-receiver\";" \
   "serviceClass = null;" \
   "E_ACCESS_SPACE_DISCOVERY_SERVICE_CLASS"
 
-# SMS-020 SN2: export scope exceeds requester scope (guest is not a requester for cast-discovery)
+# FS-290-HDS-010-SDS-010-SMS-020 SN2: export scope exceeds requester scope (guest is not a requester for cast-discovery)
 sn2_label="export-scope-exceeded"
 sn2_input="${tmp_dir}/${sn2_label}.nix"
 sn2_err="${tmp_dir}/${sn2_label}.err"

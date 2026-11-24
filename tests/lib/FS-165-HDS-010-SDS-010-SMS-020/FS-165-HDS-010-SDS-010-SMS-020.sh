@@ -11,7 +11,7 @@
 # for the same row: this case owns the intent-source consequence, where the
 # compiler refuses a source that grows by rewriting one record per scope.
 #
-# Predicates from SMS-020 module responsibilities:
+# Predicates from FS-165-HDS-010-SDS-010-SMS-020 module responsibilities:
 #   P1  Duplicated classification is detected: the same record rewritten per
 #       scope is refused rather than accepted as N independent declarations.
 #   P2  A field a downstream layer can derive is not source truth. A source that

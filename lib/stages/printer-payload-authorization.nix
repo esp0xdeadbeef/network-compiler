@@ -36,7 +36,7 @@ let
       hints = [
         "Model printer payload protocol, ports, direction, returnBehavior, and exposure class explicitly."
         "Printer discovery visibility and printer payload authorization are separate authority classes."
-        "The SMS-020 printer payload authorization module requires complete payload tuple fields."
+        "The FS-630-HDS-010-SDS-010-SMS-020 printer payload authorization module requires complete payload tuple fields."
       ];
     };
 
@@ -57,7 +57,7 @@ let
       hints = [
         "Set payload.direction to an explicit value (e.g. 'requester-to-responder')."
         "Defaulting to bidirectional is not allowed for printer payload authorization."
-        "The SMS-020 printer payload authorization module requires explicit payload direction."
+        "The FS-630-HDS-010-SDS-010-SMS-020 printer payload authorization module requires explicit payload direction."
       ];
     };
 in

@@ -2,7 +2,7 @@
 set -euo pipefail
 # GAMP-ID: FS-610-HDS-010-SDS-010-SMS-040
 # GAMP-SCOPE: software-module-test
-# SMS-040: Broad Discovery Flooding Denial
+# FS-610-HDS-010-SDS-010-SMS-040: Broad Discovery Flooding Denial
 # Tests seeded negatives: BROAD_FLOODING_DENIED, REVERSE_DISCOVERY_DENIED
 
 ROOT="${NETWORK_COMPILER_ROOT:-${SMS_TEST_REPO_ROOT:-$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)}}"

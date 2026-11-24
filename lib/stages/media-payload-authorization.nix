@@ -38,7 +38,7 @@ let
       hints = [
         "Model media payload protocol, ports, direction, returnBehavior, and exposure class explicitly."
         "Discovery visibility and payload authorization are separate authority classes."
-        "The SMS-020 media payload authorization module requires complete payload tuple fields."
+        "The FS-640-HDS-010-SDS-010-SMS-020 media payload authorization module requires complete payload tuple fields."
       ];
     };
 
@@ -61,7 +61,7 @@ let
       hints = [
         "Add cloudDependency classification (none, optional, or required) to the service policy."
         "Add payload.returnBehavior (established-only, static, or na) to the payload record."
-        "The SMS-020 media payload authorization module requires complete payload tuple fields."
+        "The FS-640-HDS-010-SDS-010-SMS-020 media payload authorization module requires complete payload tuple fields."
       ];
     };
 in

@@ -154,12 +154,14 @@ let
     ]
     true;
 
-  # Validate exported contracts for broad flooding and reverse discovery (SMS-040)
+  # Validate exported contracts for broad flooding and reverse discovery
+  # (FS-610-HDS-010-SDS-010-SMS-040)
   _broadFloodingDenial = builtins.deepSeq
     (map (contract: requireBroadFloodingDenial siteKey contract) exported)
     true; 
 
-  # Validate shared services for discovery transport explicitness (SMS-030)
+  # Validate shared services for discovery transport explicitness
+  # (FS-590-HDS-010-SDS-010-SMS-030)
   _discoveryTransportExplicitness = builtins.deepSeq
     (map (service: requireDiscoveryTransportExplicitness siteKey service) sharedServices)
     true;

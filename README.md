@@ -371,8 +371,9 @@ The **validator** does not accept it yet:
 A site with fewer than five stage nodes therefore fails to compile. That is a
 defect in this repository, not a property of the architecture: it contradicts
 the user requirement that a site manifest declares allowed role co-location
-(the platform URS, FS-650, SDS-650) and the layout
-preservation requirement in FS-320 / SDS-320.
+(the platform URS FS-650, and its SDS layer FS-650-HDS-010-SDS-010) and the
+layout preservation requirement in FS-320 and its SDS layer
+FS-320-HDS-010-SDS-010.
 
 No test in this repository compiles a co-located site, so the contradiction is
 currently undetectable from the test suite. See `TODO.md`. Do not cite this
@@ -383,7 +384,7 @@ section as evidence that a co-located site compiles.
 # Profile manifest
 
 `lib/stages/access-space-discovery/` accepts an optional
-`profileManifest` (the platform FS, FS-650, SDS-650).
+`profileManifest` (the platform FS FS-650 and its SDS layer FS-650-HDS-010-SDS-010).
 
 Presence is optional: `profileManifest == null` disables discovery decisions
 and yields empty `confined` / `exported`. When a manifest is present, it is

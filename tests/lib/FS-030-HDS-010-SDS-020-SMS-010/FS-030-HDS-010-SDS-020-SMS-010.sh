@@ -18,7 +18,7 @@ set -euo pipefail
 #   - Shared-selector fanout for multiple cores/access nodes remains valid topology
 #     and does not create extra traffic-path authority by itself.
 #
-# Two active seeded negatives required by SMS-010:
+# Two active seeded negatives required by FS-030-HDS-010-SDS-020-SMS-010:
 #   Negative 1 — Direct core-to-core bypass
 #   Negative 2 — Access-to-policy stage skip
 
@@ -719,7 +719,7 @@ else
   all_passed=false
 fi
 
-# SMS-010 requires active seeded negatives (not dormant).
+# FS-030-HDS-010-SDS-020-SMS-010 requires active seeded negatives (not dormant).
 # This test actually invokes the compiler on bad input — it is not
 # a static fixture-only check.
 # ============================================================

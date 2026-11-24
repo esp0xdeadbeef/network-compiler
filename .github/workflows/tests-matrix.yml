@@ -210,7 +210,8 @@ jobs:
   # every push -- the alternative is a nightly bumper discovering it a day later --
   # but it must not stop 288 test jobs that test the commit under review.
   flake-drift:
-    name: "nix flake check (today's pins)"
+    # Named so it cannot be mistaken for the gate: this one is a report.
+    name: "flake drift (today's pins, report only)"
     needs: workflow-structure
     continue-on-error: true
     runs-on: ubuntu-latest

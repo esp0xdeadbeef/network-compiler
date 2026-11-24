@@ -6,4 +6,3 @@ clab-fabric/*
 vib.sh
 output-*.json
 output-*-signed.json
-flake.lock

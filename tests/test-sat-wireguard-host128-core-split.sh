@@ -14,7 +14,7 @@ set -euo pipefail
 #   Negative 2 — Ambiguous core (multiple cores, no terminateOn) (E_OVERLAY_AMBIGUOUS_CORE)
 #   Negative 3 — Overlay terminateOn unknown node (E_OVERLAY_UNKNOWN_TERMINATION)
 
-ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 

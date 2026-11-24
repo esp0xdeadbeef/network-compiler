@@ -3,7 +3,7 @@ set -euo pipefail
 # GAMP-ID: SMT-COMP-WILDCARD-TARGET-001
 # GAMP-SCOPE: software-module-test
 
-ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 

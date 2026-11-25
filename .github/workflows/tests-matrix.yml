@@ -526,11 +526,19 @@ jobs:
             }
             drv="$(cat "${RUNNER_TEMP}/app-drv.txt")"
             echo "${app} -> ${drv}"
-            nix build --no-link "${drv}" || {
+            # --print-out-paths is not decoration. `nix-store -qR <drv>` lists the .drv
+            # files and NOT their outputs, so exporting from drvs alone shipped a store
+            # with every derivation and almost none of the things they produce: measured
+            # in run 45527750114, where the test jobs were handed 1896 paths and then
+            # tried to build bash-5.3 and Nix 2.31.3 from source. The output paths are
+            # what the tests execute, and they are what has to travel.
+            nix build --no-link --print-out-paths "${drv}" > "${RUNNER_TEMP}/app-out.txt" || {
               echo "::error::${app} (${drv}) failed to build; the test jobs would substitute it"
               exit 1
             }
+            echo "  outputs: $(tr '\n' ' ' < "${RUNNER_TEMP}/app-out.txt")"
             printf '%s\n' "${drv}" >> "${RUNNER_TEMP}/app-drvs.txt"
+            cat "${RUNNER_TEMP}/app-out.txt" >> "${RUNNER_TEMP}/app-outs.txt"
             echo "::endgroup::"
           done
 
@@ -548,9 +556,30 @@ jobs:
           fi
           mapfile -t drvs < "${RUNNER_TEMP}/app-drvs.txt"
           : > /tmp/store-paths.txt
+          # THE DERIVATIONS AND THEIR OUTPUTS, BOTH.
+          #
+          # `nix-store -qR <drv>` walks a derivation's references, which is other .drv
+          # files and the inputs they name -- not the path the derivation PRODUCES. So
+          # this loop shipped 1896 paths that were mostly derivations, and a test that
+          # ran `nix run .#compile` found no compiler: it went on to build bash-5.3 and
+          # Nix 2.31.3 from source and died on `bash-5.3.tar.gz` from ftpmirror.gnu.org,
+          # which the closed store then refused (run 45527750114).
+          #
+          # The real outputs are recorded by the warm step. Their runtime closure is what
+          # an executed binary needs, and `-qR` on an output does include it.
           for drv in "${drvs[@]}"; do
             nix-store -qR "${drv}" >> /tmp/store-paths.txt
           done
+          if [[ -s "${RUNNER_TEMP}/app-outs.txt" ]]; then
+            mapfile -t outs < "${RUNNER_TEMP}/app-outs.txt"
+            for out in "${outs[@]}"; do
+              nix-store -qR "${out}" >> /tmp/store-paths.txt
+            done
+            echo "app outputs: ${#outs[@]}"
+          else
+            echo "::error::no app output paths recorded; the export would carry derivations only"
+            exit 1
+          fi
           sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
           # Zero paths exported is the exact failure that shipped: the artifact step
           # then finds no file, warns, and 98 jobs download nothing. Fail here, where

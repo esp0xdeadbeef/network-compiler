@@ -182,7 +182,20 @@ jobs:
       # or directory") and the job downloads everything anyway.
 
       - uses: DeterminateSystems/nix-installer-action@main
+      # use-flakehub: false -- the README documents `use-flakehub` as "no-preference" by
+      # default, which tries FlakeHub first and falls back to the GitHub Actions cache.
+      # In this repository it tried FlakeHub and failed, and the fallback never happened:
+      #
+      #   unable to authenticate to FlakeHub. Individuals must register at FlakeHub.com
+      #   151 derivations will be built: ... bootstrap-tools, gcc-15.2.0
+      #
+      # so nothing was cached and every job bootstrapped a toolchain. It is pinned off
+      # here: the GitHub Actions cache needs no account, and that is the cache this
+      # workflow is meant to use.
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: "false"
+          use-gha-cache: "true"
 
       # On a hit there was no installer to run, so `nix` is on disk but neither on
       # PATH nor reachable through the profile symlink the installer creates in
@@ -239,7 +252,20 @@ jobs:
       # or directory") and the job downloads everything anyway.
 
       - uses: DeterminateSystems/nix-installer-action@main
+      # use-flakehub: false -- the README documents `use-flakehub` as "no-preference" by
+      # default, which tries FlakeHub first and falls back to the GitHub Actions cache.
+      # In this repository it tried FlakeHub and failed, and the fallback never happened:
+      #
+      #   unable to authenticate to FlakeHub. Individuals must register at FlakeHub.com
+      #   151 derivations will be built: ... bootstrap-tools, gcc-15.2.0
+      #
+      # so nothing was cached and every job bootstrapped a toolchain. It is pinned off
+      # here: the GitHub Actions cache needs no account, and that is the cache this
+      # workflow is meant to use.
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: "false"
+          use-gha-cache: "true"
 
       # On a hit there was no installer to run, so `nix` is on disk but neither on
       # PATH nor reachable through the profile symlink the installer creates in
@@ -296,7 +322,20 @@ jobs:
       # gate saved first, `list`'s save was skipped, and every test job fetched git's
       # 15 MiB doc output again.
       - uses: DeterminateSystems/nix-installer-action@main
+      # use-flakehub: false -- the README documents `use-flakehub` as "no-preference" by
+      # default, which tries FlakeHub first and falls back to the GitHub Actions cache.
+      # In this repository it tried FlakeHub and failed, and the fallback never happened:
+      #
+      #   unable to authenticate to FlakeHub. Individuals must register at FlakeHub.com
+      #   151 derivations will be built: ... bootstrap-tools, gcc-15.2.0
+      #
+      # so nothing was cached and every job bootstrapped a toolchain. It is pinned off
+      # here: the GitHub Actions cache needs no account, and that is the cache this
+      # workflow is meant to use.
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: "false"
+          use-gha-cache: "true"
       - name: "Nix is available"
         shell: bash
         run: |
@@ -388,7 +427,20 @@ jobs:
       #   - uses: DeterminateSystems/nix-installer-action@main
       #   - uses: DeterminateSystems/magic-nix-cache-action@main
       - uses: DeterminateSystems/nix-installer-action@main
+      # use-flakehub: false -- the README documents `use-flakehub` as "no-preference" by
+      # default, which tries FlakeHub first and falls back to the GitHub Actions cache.
+      # In this repository it tried FlakeHub and failed, and the fallback never happened:
+      #
+      #   unable to authenticate to FlakeHub. Individuals must register at FlakeHub.com
+      #   151 derivations will be built: ... bootstrap-tools, gcc-15.2.0
+      #
+      # so nothing was cached and every job bootstrapped a toolchain. It is pinned off
+      # here: the GitHub Actions cache needs no account, and that is the cache this
+      # workflow is meant to use.
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: "false"
+          use-gha-cache: "true"
       # /nix is created by the installer; nothing has to be prepared for a cache any more.
 
       - name: "Nix is available"

@@ -512,15 +512,19 @@ jobs:
           : > "${RUNNER_TEMP}/app-drvs.txt"
           for app in "${apps[@]}"; do
             echo "::group::warm app ${app}"
-            APP="${app}" REPO="${PWD}" nix eval --impure --raw --expr '
-              let
-                flake = builtins.getFlake ("path:" + builtins.getEnv "REPO");
-                program = flake.apps.${builtins.currentSystem}.${builtins.getEnv "APP"}.program;
-              in
-              builtins.head (builtins.filter
-                (n: builtins.match ".*\.drv" n != null)
-                (builtins.attrNames (builtins.getContext program)))
-            ' > "${RUNNER_TEMP}/app-drv.txt" || {
+            # `builtins.getFlake "path:$PWD"` reads the files as a plain directory and
+            # sets no revision, while the tests run `nix run "$ROOT#compile"` on a git
+            # checkout. `mkEvalApp` bakes `self.sourceInfo` into the app, so the two
+            # spellings produce DIFFERENT derivations -- measured: the warm job built
+            # q98iidds...-app.drv and the test then tried to build x0miqdjk...-app.drv
+            # from source (run 45529713443). Warming the wrong derivation is the same
+            # outcome as not warming: the test substitutes the whole toolchain.
+            #
+            # So the warm step asks for the app the same way a test does: through the
+            # flake reference `.#<app>`, from the repository root.
+            nix eval --raw "${PWD}#apps.${system}.${app}.program" \
+              --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' \
+              > "${RUNNER_TEMP}/app-drv.txt" || {
               echo "::error::${app}: its program is not produced by a derivation"
               exit 1
             }

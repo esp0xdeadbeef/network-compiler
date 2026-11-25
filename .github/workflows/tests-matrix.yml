@@ -188,13 +188,13 @@ jobs:
 
       # The tools this job installs, cached apart from /nix: ripgrep is 2.5 MB and
       # identical for every job, and a cache hit turns its download into a no-op.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: toolcache
         with:
           path: /home/runner/.local/bin
           key: tools-${{ runner.os }}-rg-14.1.1
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: nixcache
         with:
           path: |
@@ -297,7 +297,7 @@ jobs:
           sudo mkdir -p /nix
           sudo chown -R "$(id -u):$(id -g)" /nix
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: nixcache
         with:
           path: |
@@ -400,7 +400,7 @@ jobs:
         run: |
           sudo mkdir -p /nix
           sudo chown -R "$(id -u):$(id -g)" /nix
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: nixcache
         with:
           path: |
@@ -566,7 +566,7 @@ jobs:
           sudo mkdir -p /nix
           sudo chown -R "$(id -u):$(id -g)" /nix
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: nixcache
         with:
           path: |

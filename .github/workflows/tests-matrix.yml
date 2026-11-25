@@ -445,6 +445,82 @@ jobs:
           command -v nix >/dev/null || { echo "nix not on PATH" >&2; ls -la /nix/var/nix/profiles 2>&1 | sed 's/^/  /' >&2; exit 1; }
           nix --version
 
+      - id: discover
+        name: "Discover entrypoints"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/lib/discover-tests.sh ]]; then
+            # shellcheck source=/dev/null
+            source scripts/lib/discover-tests.sh
+            mapfile -t names < <(discover_tests "$PWD")
+          else
+            # A repository without the contract falls back to the naming rule the
+            # contract encodes, so this workflow still works during a migration.
+            mapfile -t names < <(
+              find tests -maxdepth 1 -type f \
+                \( -name 'test-*.sh' -o -name 'test_*.py' \
+                   -o -regex '.*/FS-[0-9]+-HDS-[0-9]+-SDS-[0-9]+-\(SMS\|SIT\)-[0-9a-z][a-z0-9-]*\(-[a-z0-9-]+\)?\.\(sh\|py\)' \) \
+                ! -name 'test.sh' -printf '%f\n' | LC_ALL=C sort
+            )
+          fi
+          count="${#names[@]}"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          if ((count == 0)); then
+            echo 'matrix={"test":[]}' >> "$GITHUB_OUTPUT"
+            echo "no entrypoints discovered; the matrix will be empty"
+            exit 0
+          fi
+          json="$(printf '%s\n' "${names[@]}" | python3 -c 'import json,sys; print(json.dumps({"test":[l.strip() for l in sys.stdin if l.strip()]}))')"
+          echo "matrix=${json}" >> "$GITHUB_OUTPUT"
+          echo "discovered ${count} entrypoint(s)"
+
+
+      # Warm the BUILD closure, not just the evaluation inputs, then hand it to the
+      # test jobs as an artifact: a cache entry is immutable and per-lock, so it can
+      # never be extended, and a test that builds its own derivation still fetched 145
+      # paths / 111 MiB even with the warmed cache restored.
+      - name: "Warm the build closure"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          apps_json="$(nix eval --json ".#apps.${system}" 2>/dev/null || echo '{}')"
+          mapfile -t apps < <(jq -r 'keys[]?' <<<"${apps_json}")
+          for app in "${apps[@]}"; do
+            echo "::group::warm app ${app}"
+            nix build --no-link ".#apps.${system}.${app}" || echo "warm ${app} failed (tests build it themselves)"
+            echo "::endgroup::"
+          done
+
+      - name: "Export the store closure for the test jobs"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          mapfile -t apps < <(nix eval --json ".#apps.${system}" 2>/dev/null | jq -r 'keys[]?')
+          : > /tmp/store-paths.txt
+          for app in "${apps[@]}"; do
+            program="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
+            deriver="$(nix-store -q --deriver "${program}" 2>/dev/null)" || continue
+            [[ "${deriver}" == "unknown-deriver" ]] && continue
+            nix-store -qR "${deriver}" >> /tmp/store-paths.txt || true
+          done
+          sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
+          echo "exporting $(wc -l < /tmp/store-paths.txt) store paths"
+          if [[ -s /tmp/store-paths.txt ]]; then
+            mapfile -t paths < /tmp/store-paths.txt
+            nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
+            ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nix-store
+          path: "${{ runner.temp }}/nix-store.nar.zst"
+          retention-days: 1
+          if-no-files-found: warn
+
   test:
     name: "${{ matrix.test || format('shard {0}', matrix.shard) }}"
     needs: list

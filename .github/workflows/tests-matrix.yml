@@ -214,6 +214,13 @@ jobs:
           set -euo pipefail
           mkdir -p "/nix/var/nix/profiles/per-user"
           ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
+          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
+          # Without it every nix command dies with "experimental Nix feature
+          # 'nix-command' is disabled", which is what a restored cache produced.
+          if [[ ! -f /etc/nix/nix.conf ]]; then
+            sudo mkdir -p /etc/nix
+            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
+          fi
           for candidate in "${HOME}/.nix-profile/bin" \
                            "/nix/var/nix/profiles/default/bin" \
                            "/nix/var/nix/profiles/per-user/${USER}/bin"; do
@@ -310,6 +317,13 @@ jobs:
           set -euo pipefail
           mkdir -p "/nix/var/nix/profiles/per-user"
           ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
+          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
+          # Without it every nix command dies with "experimental Nix feature
+          # 'nix-command' is disabled", which is what a restored cache produced.
+          if [[ ! -f /etc/nix/nix.conf ]]; then
+            sudo mkdir -p /etc/nix
+            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
+          fi
           for candidate in "${HOME}/.nix-profile/bin" \
                            "/nix/var/nix/profiles/default/bin" \
                            "/nix/var/nix/profiles/per-user/${USER}/bin"; do
@@ -344,6 +358,8 @@ jobs:
 
   list:
     name: "list tests"
+    env:
+      NIX_CONFIG: "experimental-features = nix-command flakes"
     # Discovery is seconds; the build-closure warm is not. 60 keeps a cold cache from
     # turning discovery into a timeout.
     # BOTH flake jobs, in order, before a single test is scheduled: the gate that
@@ -394,6 +410,13 @@ jobs:
           set -euo pipefail
           mkdir -p "/nix/var/nix/profiles/per-user"
           ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
+          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
+          # Without it every nix command dies with "experimental Nix feature
+          # 'nix-command' is disabled", which is what a restored cache produced.
+          if [[ ! -f /etc/nix/nix.conf ]]; then
+            sudo mkdir -p /etc/nix
+            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
+          fi
           for candidate in "${HOME}/.nix-profile/bin" \
                            "/nix/var/nix/profiles/default/bin" \
                            "/nix/var/nix/profiles/per-user/${USER}/bin"; do
@@ -559,6 +582,13 @@ jobs:
           set -euo pipefail
           mkdir -p "/nix/var/nix/profiles/per-user"
           ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
+          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
+          # Without it every nix command dies with "experimental Nix feature
+          # 'nix-command' is disabled", which is what a restored cache produced.
+          if [[ ! -f /etc/nix/nix.conf ]]; then
+            sudo mkdir -p /etc/nix
+            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
+          fi
           for candidate in "${HOME}/.nix-profile/bin" \
                            "/nix/var/nix/profiles/default/bin" \
                            "/nix/var/nix/profiles/per-user/${USER}/bin"; do

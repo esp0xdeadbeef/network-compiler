@@ -319,6 +319,43 @@
 
       libBySystem = forAllSystems mkSystemLib;
 
+      # THE ENVIRONMENT THE TESTS NEED, DECLARED ONCE.
+      #
+      # Every suite in this fleet shells out to `nix`, `jq` and `git`, and a few use
+      # `rg`. Until now those came from the runner image plus ad-hoc `curl` downloads
+      # in the workflow (ripgrep 2.5 MB, sops 45 MB, yq 10 MB), which meant the tools
+      # were neither declared nor cacheable: `nix flake check` does not build them, so
+      # nothing warmed them, and a job that used one fetched it every time.
+      #
+      # That is also what made warming the tests hard to get right -- the environment
+      # was implicit, so no single derivation described it and no single build could
+      # cache it. This output is that derivation:
+      #
+      #   nix develop                     a shell with the tools on PATH
+      #   nix build .#devShells.<sys>.default  builds and realises the closure
+      #
+      # CI uses it directly: one warmed derivation replaces the curls, and anything a
+      # test adds later is declared here rather than downloaded in the workflow.
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = mkPkgs system;
+        in
+        {
+          default = pkgs.mkShell {
+            name = "network-tests";
+            packages = [
+              pkgs.coreutils
+              pkgs.git
+              pkgs.jq
+              pkgs.nix
+              pkgs.ripgrep
+              pkgs.zstd
+            ];
+          };
+        }
+      );
+
       apps = forAllSystems (
         system:
         let

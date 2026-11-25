@@ -817,6 +817,28 @@ jobs:
             printf 'pinned app paths: %s\n' "$(wc -l < "${RUNNER_TEMP}/pinned-paths.txt")"
           fi
 
+      # THE TEST ENVIRONMENT, BUILT ONCE AND SHIPPED.
+      #
+      # `.#devShells.<system>.default` is the declaration of what the suites need --
+      # nix, jq, git, ripgrep, coreutils, zstd. Building it here puts exactly that
+      # closure in the artifact, so the test jobs run with the declared tools from the
+      # store instead of whatever the image happens to carry plus four `curl`s.
+      #
+      # This is the cheap part of the idea and the one that was missing: the tools were
+      # never REACHABLE from the warm, because nothing declared them.
+      - name: "Warm the test environment (devShell)"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          if ! env_path="$(nix build --no-link --print-out-paths ".#devShells.${system}.default" 2>/dev/null)"; then
+            echo "::warning::no devShell in this repository; its tests rely on the image"
+            exit 0
+          fi
+          echo "devShell: ${env_path}"
+          nix-store -qR "${env_path}" >> "${RUNNER_TEMP}/app-outs.txt"
+          printf 'devShell closure: %s path(s)\n' "$(nix-store -qR "${env_path}" | wc -l)"
+
       - name: "Export the store closure for the test jobs"
         shell: bash
         run: |
@@ -1424,45 +1446,39 @@ jobs:
           TEST_NAME: ${{ matrix.test }}
         run: |
           set -euo pipefail
-          command -v jq >/dev/null || { echo "jq is missing from the runner image" >&2; exit 1; }
-
-          # Measured: ripgrep is NOT on the ubuntu image either (job 138861088165's
-          # successor died with "ripgrep is missing from the runner image"). The musl
-          # binary is 2.5 MB and static, so it needs no apt and no store closure.
-          # ripgrep is 2.5 MB and the same bytes for every job, so it lives in a
-          # cached directory instead of being downloaded 288 times per sweep.
-          if [[ ! -x "${HOME}/.local/bin/rg" ]] && ! command -v rg >/dev/null; then
-            # The archive has no "./" prefix on its members; asking tar for
-            # "./ripgrep-.../rg" fails with "Not found in archive".
-            mkdir -p "${HOME}/.local/bin"
-            rg_unpack="$(mktemp -d)"
-            curl -fsSL --retry 3 \
-              https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz \
-              | tar -xz -C "${rg_unpack}" --strip-components=1 \
-                  "ripgrep-14.1.1-x86_64-unknown-linux-musl/rg"
-            install -m 0755 "${rg_unpack}/rg" "${HOME}/.local/bin/rg"
+          # THE TOOLS COME FROM THE FLAKE NOW, NOT FROM curls.
+          #
+          # This step used to ensure jq from the image, download ripgrep 2.5 MB from
+          # GitHub releases, and fetch sops (45 MB) and yq (10 MB) for the tests that
+          # name them. None of that was declared, so nothing could cache it: the
+          # warmed /nix store never contained those tools, and every job downloaded
+          # them again.
+          #
+          # `.#devShells.<system>.default` declares them instead -- coreutils, git,
+          # jq, nix, ripgrep, zstd -- so one derivation describes the environment,
+          # `nix develop` builds it, and the warmed store carries it. The step's job
+          # is now only to prove the declared tools are the ones on PATH.
+          system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          if ! nix build --no-link ".#devShells.${system_name}.default" > /dev/null 2>&1; then
+            echo "::warning::the devShell did not build; the runner image's tools will be used"
           fi
-          printf '%s\n' "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          while read -r tool; do
+            [[ -n "${tool}" ]] || continue
+            if command -v "${tool}" >/dev/null; then
+              printf '  %-10s %s\n' "${tool}" "$(command -v "${tool}")"
+            else
+              echo "::error::${tool} is declared in .#devShells but not on PATH"
+              exit 1
+            fi
+          done <<'TOOLS'
+          nix
+          jq
+          git
+          rg
+          zstd
+          TOOLS
           rg --version | head -1
-
-          # Matrix values come from filenames, so they are read from the environment,
-          # never spliced into the script text.
-          test_path="tests/${TEST_NAME}"
-          uses() {
-            grep -rqs -- "$1" "${test_path}" "tests/lib/$(basename "${test_path}" .sh)" 2>/dev/null
-          }
-          if uses sops; then
-            curl -fsSL --retry 3 -o /usr/local/bin/sops \
-              https://github.com/getsops/sops/releases/download/v3.10.2/sops-v3.10.2.linux.amd64
-            chmod +x /usr/local/bin/sops
-            sops --version
-          fi
-          if uses yq; then
-            curl -fsSL --retry 3 -o /usr/local/bin/yq \
-              https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
-            chmod +x /usr/local/bin/yq
-            yq --version
-          fi
+          jq --version
 
       # The suites resolve sibling repositories as ../network-*, the developer
       # layout. Without them the cross-repository cases fail (or, worse, skip), and

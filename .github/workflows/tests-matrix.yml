@@ -532,7 +532,12 @@ jobs:
             # in run 45527750114, where the test jobs were handed 1896 paths and then
             # tried to build bash-5.3 and Nix 2.31.3 from source. The output paths are
             # what the tests execute, and they are what has to travel.
-            nix build --no-link --print-out-paths "${drv}" > "${RUNNER_TEMP}/app-out.txt" || {
+            # `nix build --print-out-paths <drv>` is NOT the tool: given a .drv it prints
+            # the .drv back (measured), so app-outs.txt filled with derivations again and
+            # the test jobs rebuilt bash from source a second time. `nix-store -r` builds
+            # the derivation and prints the paths it produces, which is what has to travel.
+            nix-store -r "${drv}" > "${RUNNER_TEMP}/app-out.txt" 2>"${RUNNER_TEMP}/app-err.txt" || {
+              cat "${RUNNER_TEMP}/app-err.txt" >&2
               echo "::error::${app} (${drv}) failed to build; the test jobs would substitute it"
               exit 1
             }

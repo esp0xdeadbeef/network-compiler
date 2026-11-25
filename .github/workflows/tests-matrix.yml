@@ -624,25 +624,6 @@ jobs:
             echo "::endgroup::"
           done < "${RUNNER_TEMP}/sibling-github-refs.txt"
 
-      # THE TEST ENVIRONMENT, BUILT ONCE AND SHIPPED.
-      #
-      # `.#devShells.<system>.default` declares what the suites need -- nix, jq, git,
-      # ripgrep, coreutils, zstd -- and building it puts exactly that closure in the
-      # artifact, so the test jobs use the declared tools from the store instead of the
-      # image plus four `curl`s. Two seconds locally; the cheapest step in this job.
-      - name: "Warm the test environment (devShell)"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          if ! env_path="$(nix build --no-link --print-out-paths ".#devShells.${system}.default" 2>/dev/null)"; then
-            echo "::warning::no devShell in this repository; its tests rely on the image"
-            exit 0
-          fi
-          echo "devShell: ${env_path}"
-          nix-store -qR "${env_path}" >> "${RUNNER_TEMP}/app-outs.txt"
-          printf 'devShell closure: %s path(s)\n' "$(nix-store -qR "${env_path}" | wc -l)"
-
       - name: "Export the store closure for the test jobs"
         shell: bash
         run: |
@@ -706,7 +687,15 @@ jobs:
             exit 1
           fi
           mapfile -t paths < /tmp/store-paths.txt
-          nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
+          # -3, NOT -19. Measured on a real 1.49 GiB export: -19 took 58 s on 24 cores
+          # (and far longer on a 4-core runner) to save 9 MB against -3's 1 s, on an
+          # artifact kept for one day. 7z -mx=1 was 3 s and 43 MB against zstd -3's 1 s
+          # and 42 MB, so it is not the better tool here; zstd at its default level is.
+          #
+          # The stream is piped, so the size is diagnostics only: the artifact is what
+          # the next job imports, and a compression level that stalls or OOMs the
+          # exporter costs the whole sweep.
+          nix-store --export "${paths[@]}" | zstd -3 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
           ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
 
       - uses: actions/upload-artifact@v4
@@ -1244,64 +1233,50 @@ jobs:
       # Nix store copies the binary but not its closure, and the copied jq failed with
       # "cannot execute: required file not found" (it loads libjq.so.1 from a store
       # path the next job does not have). A store path is not a portable binary.
-      - name: "Install the tools this test uses"
+      - name: "Put the declared tools on PATH"
         shell: bash
         env:
           TEST_NAME: ${{ matrix.test }}
         run: |
           set -euo pipefail
-          # THE TOOLS COME FROM THE FLAKE NOW, NOT FROM curls.
+          # THE DECLARATION IS THE FLAKE'S; THIS STEP ONLY WIRES IT UP.
           #
-          # This step used to ensure jq from the image, download ripgrep 2.5 MB from
-          # GitHub releases, and fetch sops (45 MB) and yq (10 MB) for the tests that
-          # name them. None of that was declared, so nothing could cache it: the
-          # warmed /nix store never contained those tools, and every job downloaded
-          # them again.
+          # The tools used to be the runner image plus four curls in this workflow
+          # (ripgrep 2.5 MB, sops 45 MB, yq 10 MB), which meant nothing was declared and
+          # nothing could be cached. `.#devShells.<system>.default` now names them.
           #
-          # `.#devShells.<system>.default` declares them instead -- coreutils, git,
-          # jq, nix, ripgrep, zstd -- so one derivation describes the environment,
-          # `nix develop` builds it, and the warmed store carries it. The step's job
-          # is now only to prove the declared tools are the ones on PATH.
+          # Two things this step must get right, both measured the hard way:
+          #
+          #   * `nix build` of a mkShell produces a marker derivation, not a bin/; only
+          #     `nix develop` assembles PATH. A workflow step needs the tools for LATER
+          #     steps, so each package's bin/ is appended to GITHUB_PATH.
+          #   * the attribute to read is nativeBuildInputs -- a mkShell exposes no
+          #     `.packages` (the log said "devShell packages: 0"), and the flake asks for
+          #     `lib.getBin` because jq and zstd are split-output packages whose binaries
+          #     live in `-bin`, not in `.out` or `.dev`.
           system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          # BUILDING A DEV SHELL DOES NOT PUT ITS TOOLS ON PATH.
-          #
-          # `pkgs.mkShell`'s output is a marker derivation, not a bin/. Only
-          # `nix develop` assembles PATH, and a workflow step needs the tools visible to
-          # later steps, so the packages themselves are resolved and their bin/ dirs are
-          # added to GITHUB_PATH. Measured the wrong way first (run 45645903550): every
-          # test job failed with "rg is declared in .#devShells but not on PATH".
-          if ! nix eval --raw --impure ".#devShells.${system_name}.default.name" > /dev/null 2>&1; then
-            echo "::warning::no devShell in this repository; the image's tools will be used"
-          else
-            # The packages are read from the flake's own declaration, not from
-            # nativeBuildInputs: that list resolves to `-dev` outputs for jq, nix and
-            # zstd, which carry headers and no bin/. The declaration in `packages` is
-            # what a `nix develop` puts on PATH, so it is what is read here.
+          extra_path=""
+          if nix eval --raw --impure ".#devShells.${system_name}.default.name" >/dev/null 2>&1; then
             nix eval --json --impure \
-              --expr "let f = builtins.getFlake \"path:${PWD}\"; in map toString (f.devShells.\"${system_name}\".default.packages or [])" \
+              --expr "let f = builtins.getFlake \"path:${PWD}\"; in map toString (f.devShells.\"${system_name}\".default.nativeBuildInputs or [])" \
               > "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || echo '[]' > "${RUNNER_TEMP}/shell-pkgs.json"
-            jq -r '.[]' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null | while read -r pkg; do
-              [[ -d "${pkg}/bin" ]] && printf '%s\n' "${pkg}/bin" >> "$GITHUB_PATH"
-            done || true
-            echo "devShell packages: $(jq -r 'length' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || echo 0)"
+            while read -r pkg; do
+              [[ -n "${pkg}" && -d "${pkg}/bin" ]] || continue
+              printf '%s\n' "${pkg}/bin" >> "$GITHUB_PATH"
+              extra_path="${extra_path}${pkg}/bin:"
+            done < <(jq -r '.[]' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || true)
           fi
-          while read -r tool; do
-            [[ -n "${tool}" ]] || continue
-            if command -v "${tool}" >/dev/null; then
-              printf '  %-10s %s\n' "${tool}" "$(command -v "${tool}")"
-            else
-              echo "::error::${tool} is declared in .#devShells but not on PATH"
+          # Report against the image plus what was just declared, since GITHUB_PATH only
+          # affects later steps. A tool missing from both is a real defect: the suites
+          # call these by name.
+          for tool in nix jq git rg zstd; do
+            found="$(PATH="${extra_path}${PATH}" command -v "${tool}" 2>/dev/null || true)"
+            if [[ -z "${found}" ]]; then
+              echo "::error::${tool} is needed by the suites and is neither declared nor on the image"
               exit 1
             fi
-          done <<'TOOLS'
-          nix
-          jq
-          git
-          rg
-          zstd
-          TOOLS
-          rg --version | head -1
-          jq --version
+            printf '  %-6s %s\n' "${tool}" "${found}"
+          done
 
       # The suites resolve sibling repositories as ../network-*, the developer
       # layout. Without them the cross-repository cases fail (or, worse, skip), and

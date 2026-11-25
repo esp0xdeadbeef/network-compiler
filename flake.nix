@@ -342,30 +342,29 @@
           pkgs = mkPkgs system;
         in
         {
-          # `packages` is what a developer gets from `nix develop`. It is also what CI
-          # reads to build PATH, via nativeBuildInputs -- and that list resolves jq, nix
-          # and zstd to their `-dev` outputs, which carry headers and no bin/. Naming the
-          # binary-bearing outputs explicitly keeps both consumers correct, which is
-          # what makes this declaration usable rather than merely descriptive.
+          # `packages` is what a developer gets from `nix develop`.
+          #
+          # DELIBERATELY MINIMAL, and kept out of the CI store artifact. mkShell's own
+          # closure always carries a C toolchain -- measured: gcc 264 MB, python3 107 MB,
+          # perl 55 MB, 684 MB and 133 paths for the four tools listed here -- because
+          # that is what mkShell is: a shell for BUILDING. Shipping it to test jobs cost
+          # 62% of a 1.49 GiB artifact to deliver a 2.5 MB rg.
+          #
+          # What the tests actually lack on a hosted runner is `rg` alone: the image has
+          # git and jq, and CI is already running nix. This output stays as the honest
+          # declaration of the environment for a developer (`nix develop`), and CI reads
+          # it for PATH but no longer exports its closure.
           default = pkgs.mkShell {
             name = "network-tests";
             packages = [
-              pkgs.coreutils
               pkgs.git
               pkgs.jq
-              pkgs.nix
               pkgs.ripgrep
               pkgs.zstd
             ];
-            # `lib.getBin`, not `.out` or `.dev`: jq is a split-output package whose
-            # binary lives in `-bin`, and mkShell rewrites nativeBuildInputs to dev
-            # outputs, which have neither. getBin gives the output that actually holds
-            # the executable, which is the only thing CI can put on PATH.
             nativeBuildInputs = [
-              (pkgs.lib.getBin pkgs.coreutils)
               (pkgs.lib.getBin pkgs.git)
               (pkgs.lib.getBin pkgs.jq)
-              (pkgs.lib.getBin pkgs.nix)
               (pkgs.lib.getBin pkgs.ripgrep)
               (pkgs.lib.getBin pkgs.zstd)
             ];

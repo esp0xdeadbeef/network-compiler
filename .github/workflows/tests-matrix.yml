@@ -445,84 +445,6 @@ jobs:
           command -v nix >/dev/null || { echo "nix not on PATH" >&2; ls -la /nix/var/nix/profiles 2>&1 | sed 's/^/  /' >&2; exit 1; }
           nix --version
 
-      - id: discover
-        name: "Discover entrypoints"
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f scripts/lib/discover-tests.sh ]]; then
-            # shellcheck source=/dev/null
-            source scripts/lib/discover-tests.sh
-            mapfile -t names < <(discover_tests "$PWD")
-          else
-            # A repository without the contract falls back to the naming rule the
-            # contract encodes, so this workflow still works during a migration.
-            mapfile -t names < <(
-              find tests -maxdepth 1 -type f \
-                \( -name 'test-*.sh' -o -name 'test_*.py' \
-                   -o -regex '.*/FS-[0-9]+-HDS-[0-9]+-SDS-[0-9]+-\(SMS\|SIT\)-[0-9a-z][a-z0-9-]*\(-[a-z0-9-]+\)?\.\(sh\|py\)' \) \
-                ! -name 'test.sh' -printf '%f\n' | LC_ALL=C sort
-            )
-          fi
-          count="${#names[@]}"
-          echo "count=${count}" >> "$GITHUB_OUTPUT"
-          if ((count == 0)); then
-            echo 'matrix={"shard":[]}' >> "$GITHUB_OUTPUT"
-            echo "no entrypoints discovered; the matrix will be empty"
-            exit 0
-          fi
-          # GitHub runs up to 256 matrix jobs; the cap is on the MATRIX, not on the
-          # parallelism within it. So the default is one job per test -- every test in
-          # its own runner, in parallel, named after itself -- and sharding is only a
-          # fallback for a repository whose discovery exceeds the cap. Measured:
-          # 124 entrypoints here, 287 in the control-plane model, 486 in network-labs.
-          # Sharding 124 into 16 jobs of 8 was strictly worse: same wall clock, less
-          # parallelism, and a failure named "shard 7" instead of the test.
-          max_jobs=250
-          if (( count <= max_jobs )); then
-            json="$(printf '%s\n' "${names[@]}" | python3 -c 'import json,sys; print(json.dumps({"test":[l.strip() for l in sys.stdin if l.strip()]}))')"
-            echo "shards=0" >> "$GITHUB_OUTPUT"
-            echo "shard_size=1" >> "$GITHUB_OUTPUT"
-            echo "matrix=${json}" >> "$GITHUB_OUTPUT"
-            echo "discovered ${count} entrypoint(s): one job per test, in parallel"
-          else
-            shard_size="${TEST_SHARD_SIZE:-$(( (count + max_jobs - 1) / max_jobs ))}"
-            shards=$(( (count + shard_size - 1) / shard_size ))
-            echo "shards=${shards}" >> "$GITHUB_OUTPUT"
-            echo "shard_size=${shard_size}" >> "$GITHUB_OUTPUT"
-            json="$(python3 -c "import json;print(json.dumps({'shard':list(range(${shards}))}))")"
-            echo "matrix=${json}" >> "$GITHUB_OUTPUT"
-            echo "discovered ${count} entrypoint(s): ${shards} shard(s) of ${shard_size}, because ${count} exceeds the ${max_jobs}-job matrix cap"
-          fi
-
-      # Warm the BUILD closure, not just the evaluation inputs.
-      #
-      # `flake-check` runs `nix flake check --no-build`, so its store has every flake
-      # input and nothing that a test builds. Every test job then pays for the same
-      # closure: measured on FS-030-HDS-010-SDS-040-SMS-010, 144 paths / 111 MiB,
-      # including git (2.52.0) whose `out` references its own 15.1 MiB `-doc` output.
-      # Those derivations are identical for every test in a repository, so they are
-      # built once here and cached; `test` restores this cache because it needs `list`.
-      #
-      # Failures are tolerated: a repository whose app does not build must still run
-      # its tests, which is what the matrix is for.
-      - name: "Warm the build closure"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          apps_json="$(nix eval --json ".#apps.${system}" 2>/dev/null || echo '{}')"
-          mapfile -t apps < <(jq -r 'keys[]?' <<<"${apps_json}")
-          if [[ ${#apps[@]} -eq 0 ]]; then
-            echo "no apps to warm"
-          fi
-          for app in "${apps[@]}"; do
-            echo "::group::warm app ${app}"
-            nix build --no-link ".#apps.${system}.${app}.program" || echo "warm ${app} failed (tests build it themselves)"
-            echo "::endgroup::"
-          done
-
-
   test:
     name: "${{ matrix.test || format('shard {0}', matrix.shard) }}"
     needs: list
@@ -624,6 +546,134 @@ jobs:
             exit 1
           fi
           nix --version
+
+      # The store the warm job exported, imported into this runner: the tests build
+      # their own derivations, and with the closure present they substitute nothing.
+      - uses: actions/download-artifact@v4
+        with:
+          name: nix-store
+          path: "${{ runner.temp }}"
+      - name: "Import the passed nix store"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s "${RUNNER_TEMP}/nix-store.nar.zst" ]]; then
+            zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >/dev/null
+            echo "imported $(wc -l < /dev/null 2>/dev/null || true)"
+          else
+            echo "no store artifact (warm job did not produce one)"
+          fi
+
+      - id: discover
+        name: "Discover entrypoints"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/lib/discover-tests.sh ]]; then
+            # shellcheck source=/dev/null
+            source scripts/lib/discover-tests.sh
+            mapfile -t names < <(discover_tests "$PWD")
+          else
+            # A repository without the contract falls back to the naming rule the
+            # contract encodes, so this workflow still works during a migration.
+            mapfile -t names < <(
+              find tests -maxdepth 1 -type f \
+                \( -name 'test-*.sh' -o -name 'test_*.py' \
+                   -o -regex '.*/FS-[0-9]+-HDS-[0-9]+-SDS-[0-9]+-\(SMS\|SIT\)-[0-9a-z][a-z0-9-]*\(-[a-z0-9-]+\)?\.\(sh\|py\)' \) \
+                ! -name 'test.sh' -printf '%f\n' | LC_ALL=C sort
+            )
+          fi
+          count="${#names[@]}"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          if ((count == 0)); then
+            echo 'matrix={"shard":[]}' >> "$GITHUB_OUTPUT"
+            echo "no entrypoints discovered; the matrix will be empty"
+            exit 0
+          fi
+          # GitHub runs up to 256 matrix jobs; the cap is on the MATRIX, not on the
+          # parallelism within it. So the default is one job per test -- every test in
+          # its own runner, in parallel, named after itself -- and sharding is only a
+          # fallback for a repository whose discovery exceeds the cap. Measured:
+          # 124 entrypoints here, 287 in the control-plane model, 486 in network-labs.
+          # Sharding 124 into 16 jobs of 8 was strictly worse: same wall clock, less
+          # parallelism, and a failure named "shard 7" instead of the test.
+          max_jobs=250
+          if (( count <= max_jobs )); then
+            json="$(printf '%s\n' "${names[@]}" | python3 -c 'import json,sys; print(json.dumps({"test":[l.strip() for l in sys.stdin if l.strip()]}))')"
+            echo "shards=0" >> "$GITHUB_OUTPUT"
+            echo "shard_size=1" >> "$GITHUB_OUTPUT"
+            echo "matrix=${json}" >> "$GITHUB_OUTPUT"
+            echo "discovered ${count} entrypoint(s): one job per test, in parallel"
+          else
+            shard_size="${TEST_SHARD_SIZE:-$(( (count + max_jobs - 1) / max_jobs ))}"
+            shards=$(( (count + shard_size - 1) / shard_size ))
+            echo "shards=${shards}" >> "$GITHUB_OUTPUT"
+            echo "shard_size=${shard_size}" >> "$GITHUB_OUTPUT"
+            json="$(python3 -c "import json;print(json.dumps({'shard':list(range(${shards}))}))")"
+            echo "matrix=${json}" >> "$GITHUB_OUTPUT"
+            echo "discovered ${count} entrypoint(s): ${shards} shard(s) of ${shard_size}, because ${count} exceeds the ${max_jobs}-job matrix cap"
+          fi
+
+      # Warm the BUILD closure, not just the evaluation inputs.
+      #
+      # `flake-check` runs `nix flake check --no-build`, so its store has every flake
+      # input and nothing that a test builds. Every test job then pays for the same
+      # closure: measured on FS-030-HDS-010-SDS-040-SMS-010, 144 paths / 111 MiB,
+      # including git (2.52.0) whose `out` references its own 15.1 MiB `-doc` output.
+      # Those derivations are identical for every test in a repository, so they are
+      # built once here and cached; `test` restores this cache because it needs `list`.
+      #
+      # Failures are tolerated: a repository whose app does not build must still run
+      # its tests, which is what the matrix is for.
+      - name: "Warm the build closure"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          apps_json="$(nix eval --json ".#apps.${system}" 2>/dev/null || echo '{}')"
+          mapfile -t apps < <(jq -r 'keys[]?' <<<"${apps_json}")
+          if [[ ${#apps[@]} -eq 0 ]]; then
+            echo "no apps to warm"
+          fi
+          for app in "${apps[@]}"; do
+            echo "::group::warm app ${app}"
+            nix build --no-link ".#apps.${system}.${app}" || echo "warm ${app} failed (tests build it themselves)"
+            echo "::endgroup::"
+          done
+
+      # PASS THE STORE TO THE DOWNSTREAM RUNNERS.
+      #
+      # The warmed /nix cache is immutable and per-lock, so a job cannot add to it, and
+      # a test that builds its own derivation (`app.drv` is built inside the test) still
+      # fetched 145 paths / 111 MiB even on a cache hit. An artifact has no such limit:
+      # export the closure of every app derivation once, and each test job imports it
+      # before running, so nothing is substituted.
+      - name: "Export the store closure for the test jobs"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          mapfile -t apps < <(nix eval --json ".#apps.${system}" 2>/dev/null | jq -r 'keys[]?')
+          : > /tmp/store-paths.txt
+          for app in "${apps[@]}"; do
+            program="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
+            deriver="$(nix-store -q --deriver "${program}" 2>/dev/null)" || continue
+            [[ "${deriver}" == "unknown-deriver" ]] && continue
+            nix-store -qR "${deriver}" >> /tmp/store-paths.txt || true
+          done
+          sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
+          echo "exporting $(wc -l < /tmp/store-paths.txt) store paths"
+          if [[ -s /tmp/store-paths.txt ]]; then
+            mapfile -t paths < /tmp/store-paths.txt
+            nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
+            ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nix-store
+          path: "${{ runner.temp }}/nix-store.nar.zst"
+          retention-days: 1
+          if-no-files-found: warn
 
       # jq and ripgrep ship with the runner image. sops is 45 MB and yq is 10 MB,
       # and 47 of 1689 test files name sops while 2 name yq -- so they are fetched

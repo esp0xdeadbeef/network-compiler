@@ -553,268 +553,32 @@ jobs:
             echo "::endgroup::"
           done
 
-      # THE FLAKE INPUTS THE TESTS THEMSELVES FETCH.
+      # WARM THIS REPOSITORY'S OWN FLAKE INPUTS. NOBODY ELSE'S.
       #
-      # tests/test-emitter-provenance-repo-boundary.sh runs
-      #   nix flake archive --json "path:${repo_root}"
-      # which materialises every flake input into the store -- including the
-      # `github:esp0xdeadbeef/...` pins in flake.lock. With the store closed, an input
-      # that was never materialised here cannot be fetched there, and the test dies on
-      #   error: unable to download 'https://github.com/.../archive/<rev>.tar.gz'
-      # (run 45530546670). Running the same command once, here, is what makes the
-      # input closure part of the cache instead of part of the run.
-      - name: "Warm the flake inputs the provenance tests archive"
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -f tests/test-emitter-provenance-repo-boundary.sh ]]; then
-            echo "no provenance test in this repository; nothing to archive"
-            exit 0
-          fi
-          # The inputs of THIS lock are not enough. A sibling pins this repository:
-          # network-labs' flake.lock names `network-compiler` at rev 5a8682f..., and the
-          # provenance test runs a compiler from a labs intent, which materialises THAT
-          # revision -- so the closed store refused it with
-          #   unable to download 'https://github.com/.../archive/5a8682fe....tar.gz'
-          # (run 45532698895, the three remaining failures).
-          #
-          # So every `github:esp0xdeadbeef/*` pin named by a sibling lock is materialised
-          # too. This is a fixed, lock-defined set, read from the sibling checkouts the
-          # job already has.
-          # Rather than run the sibling lock parser here, ask jq: every github pin owned
-          # by this account, from every sibling lock that is present.
-          for sibling_lock in ../*/flake.lock; do
-            [[ -f "${sibling_lock}" ]] || continue
-            # EVERY github pin, not just this account's. Measured: after limiting the
-            # scan to esp0xdeadbeef, three jobs still failed on a THIRD-PARTY pin --
-            #   unable to download 'https://github.com/openconfig/public/archive/f3443...'
-            # (run 45539512049) -- because openconfig/public is an input of every lock in
-            # this fleet. A pin is a pin; the owner says nothing about whether the tests
-            # will materialise it.
-            jq -r '.nodes[] | (.locked // {}) | select(.type == "github" and .rev != null) | "github:\(.owner)/\(.repo)/\(.rev)"' \
-              "${sibling_lock}" 2>/dev/null || true
-          done | sort -u | grep -v '^$' > "${RUNNER_TEMP}/sibling-github-refs.txt" || true
-          printf 'sibling github pins: %s\n' "$(wc -l < "${RUNNER_TEMP}/sibling-github-refs.txt")"
-          while read -r ref; do
-            [[ -n "${ref}" ]] || continue
-            echo "::group::materialise ${ref}"
-            # `flake prefetch`, NOT `flake archive`.
-            #
-            # `archive` walks the pin's OWN inputs and therefore wants to update the
-            # pin's lock file, which fails for an older revision whose lock no longer
-            # matches:
-            #   error: … while updating the lock file of flake 'github:.../5a8682f'
-            # -- and --no-update-lock-file does not avoid it (measured in run 45536566784).
-            #
-            # `prefetch` materialises exactly the revision named, into a store path, and
-            # walks no inputs. The tests fetch these refs the same way, so this is the
-            # matching primitive: same revision in, same store path out.
-            nix flake prefetch --json "${ref}" \
-              > "${RUNNER_TEMP}/prefetch.json" || {
-              echo "::error::a sibling pins ${ref} and it could not be materialised"
-              exit 1
-            }
-            store_path="$(jq -r '.storePath' "${RUNNER_TEMP}/prefetch.json")"
-            # Recorded PER REF. The apps loop below is a separate loop, so reading
-            # prefetch.json there returned the LAST ref's path for every iteration and
-            # every revision reported "no apps" (run 45549346309).
-            printf '%s\t%s\n' "${ref}" "${store_path}" >> "${RUNNER_TEMP}/ref-paths.tsv"
-            printf '%s\n' "${store_path}" >> "${RUNNER_TEMP}/app-outs.txt"
-            echo "  ${store_path}"
-            echo "::endgroup::"
-          done < "${RUNNER_TEMP}/sibling-github-refs.txt"
-
-          # THE APPS OF THE PINNED REVISIONS, TOO.
-          #
-          # A provenance test compiles through a sibling's pinned compiler, and that
-          # revision's apps are its own derivations -- different from this repository's.
-          # Measured in run 45540528886: the warm job built z6acyg8v...-app.drv and the
-          # test then tried to build g1fbnn7v...-app.drv from source, which needs
-          # binutils-with-gold from ftpmirror.gnu.org. Seeing the source is not enough;
-          # the app the test executes has to be in the store.
-          #
-          # Every fleet-owned pin is warmed. That is up to 16 extra app builds, which is
-          # the price of a warm that is actually warm: the alternative measured out at
-          # a test building binutils from source at run time (run 45540528886). A
-          # revision without apps is not an error, and an app that fails to build is a
-          # warning here -- the test that needs it will fail and name the path, which is
-          # the signal this change exists to provide.
-          if [[ -s "${RUNNER_TEMP}/sibling-github-refs.txt" ]]; then
-            while read -r ref; do
-              [[ -n "${ref}" ]] || continue
-              [[ "${ref}" == github:esp0xdeadbeef/* ]] || continue
-              echo "::group::warm apps of ${ref}"
-              system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
-              # A PINNED REVISION CAN HAVE NO flake.lock.
-              #
-              # Measured on network-compiler@5a8682f: three repositories gitignore
-              # flake.lock, so that revision ships none, and evaluating it fails while
-              # "updating the lock file" -- which needs the network, which the closed
-              # store refuses. That is why this step reported "no apps at ..." while the
-              # test that uses the same revision succeeded (run 45545298522).
-              #
-              # The source is copied out of the store, made writable, and given THIS
-              # repository's lock, so the pinned source evaluates with pins that already
-              # exist. Nix refuses to write into a store path, hence the copy.
-              sib_src="$(awk -F'\t' -v r="${ref}" '$1 == r { print $2 }' "${RUNNER_TEMP}/ref-paths.tsv")"
-              if [[ -z "${sib_src}" ]]; then
-                echo "::warning::no prefetched source recorded for ${ref}"
-                echo "::endgroup::"
-                continue
-              fi
-              sib_dir="${RUNNER_TEMP}/sib-src/$(echo "${ref}" | tr '/:' '__')"
-              rm -rf "${sib_dir}"
-              mkdir -p "$(dirname "${sib_dir}")"
-              cp -r "${sib_src}" "${sib_dir}"
-              chmod -R u+w "${sib_dir}"
-              if [[ ! -f "${sib_dir}/flake.lock" && -f flake.lock ]]; then
-                cp flake.lock "${sib_dir}/flake.lock"
-                echo "supplied this repository's lock: ${ref} ships none"
-              fi
-              if nix eval --json "path:${sib_dir}#apps.${system_name}" > "${RUNNER_TEMP}/sib-apps.json" 2>/dev/null; then
-                while read -r sib_app; do
-                  [[ -n "${sib_app}" ]] || continue
-                  sib_drv="$(nix eval --raw "path:${sib_dir}#apps.${system_name}.${sib_app}.program" \
-                    --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || continue
-                  nix-store -r --add-root "${RUNNER_TEMP}/sib-roots/${sib_app}" "${sib_drv}" > /dev/null 2>&1 || {
-                    echo "::warning::${ref} app ${sib_app} did not build; if a test needs it, that test will say so"
-                    continue
-                  }
-                  nix-store -qR "${sib_drv}" >> "${RUNNER_TEMP}/sib-paths.txt"
-                  nix-store -q --outputs "${sib_drv}" 2>/dev/null | while read -r o; do
-                    nix-store -qR "${o}" >> "${RUNNER_TEMP}/sib-paths.txt"
-                  done
-                done < <(jq -r 'keys[]?' "${RUNNER_TEMP}/sib-apps.json")
-              else
-                echo "no apps at ${ref}"
-              fi
-              echo "::endgroup::"
-            done < "${RUNNER_TEMP}/sibling-github-refs.txt"
-            if [[ -s "${RUNNER_TEMP}/sib-paths.txt" ]]; then
-              sort -u -o "${RUNNER_TEMP}/sib-paths.txt" "${RUNNER_TEMP}/sib-paths.txt"
-              cat "${RUNNER_TEMP}/sib-paths.txt" >> "${RUNNER_TEMP}/app-outs.txt"
-              printf 'sibling app paths: %s\n' "$(wc -l < "${RUNNER_TEMP}/sib-paths.txt")"
-            fi
-          fi
-
-          nix flake archive --json "path:${PWD}" > "${RUNNER_TEMP}/flake-archive.json"
-          jq -r '.path, (.inputs | to_entries[] | .value.path)' "${RUNNER_TEMP}/flake-archive.json" \
-            >> /tmp/flake-input-paths.txt
-          cat /tmp/flake-input-paths.txt >> "${RUNNER_TEMP}/app-outs.txt"
-          printf 'flake inputs archived: %s\n' "$(wc -l < /tmp/flake-input-paths.txt)"
-
-          # THE FLAKE INPUTS' OWN APPS, NOT JUST THEIR SOURCES.
-          #
-          # `nix run "path:$PWD#compile"` evaluates this flake, which materialises the
-          # build closures of its inputs. Archiving those inputs fetched their SOURCES
-          # only, so a test that runs the compiler pulled network-labs' closure --
-          # ghc-9.10.3, binutils-with-gold -- and the closed store refused it
-          # (run 45563403679).
-          #
-          # network-labs does have apps of its own; building them here is what makes
-          # that closure part of the cache instead of part of the run.
-          labs_src="$(jq -r '.inputs["network-labs"].path // empty' "${RUNNER_TEMP}/flake-archive.json" 2>/dev/null || true)"
-          if [[ -n "${labs_src}" && -d "${labs_src}" ]]; then
-            echo "::group::warm network-labs apps from ${labs_src}"
-            labs_system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-            if nix eval --json "path:${labs_src}#apps.${labs_system}" > "${RUNNER_TEMP}/labs-apps.json" 2>/dev/null; then
-              while read -r labs_app; do
-                [[ -n "${labs_app}" ]] || continue
-                labs_drv="$(nix eval --raw "path:${labs_src}#apps.${labs_system}.${labs_app}.program" \
-                  --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || continue
-                if nix-store -r "${labs_drv}" > /dev/null 2>&1; then
-                  echo "  ${labs_app}: ${labs_drv}"
-                  nix-store -qR "${labs_drv}" >> "${RUNNER_TEMP}/labs-paths.txt"
-                  nix-store -q --outputs "${labs_drv}" 2>/dev/null | while read -r o; do
-                    nix-store -qR "${o}" >> "${RUNNER_TEMP}/labs-paths.txt"
-                  done
-                else
-                  echo "::warning::network-labs app ${labs_app} did not build"
-                fi
-              done < <(jq -r 'keys[]?' "${RUNNER_TEMP}/labs-apps.json")
-            else
-              echo "no apps at network-labs"
-            fi
-            echo "::endgroup::"
-            if [[ -s "${RUNNER_TEMP}/labs-paths.txt" ]]; then
-              sort -u -o "${RUNNER_TEMP}/labs-paths.txt" "${RUNNER_TEMP}/labs-paths.txt"
-              cat "${RUNNER_TEMP}/labs-paths.txt" >> "${RUNNER_TEMP}/app-outs.txt"
-              printf 'network-labs paths: %s\n' "$(wc -l < "${RUNNER_TEMP}/labs-paths.txt")"
-            fi
-          fi
-
-      # THE PICNED INPUT'S OWN APP, BUILT.
+      # This step used to scan `../*/flake.lock` -- every sibling repository's lock --
+      # and then prefetch and BUILD every github pin found across the whole fleet. So a
+      # run of network-compiler warmed network-labs, the renderers, the forwarding and
+      # control-plane models and the schema: minutes of building other repositories'
+      # closures, for a test that only ever evaluates THIS one.
       #
-      # The provenance test runs `nix flake archive "path:${repo_root}"`, whose
-      # `network-labs` entry pins ITS OWN network-compiler at 5a8682f. Archiving labs'
-      # sources is not enough: evaluating through that revision needs that revision's
-      # closure, and the build that failed was 8plxzydy...-app.drv, which matches none
-      # of this repository's apps.
+      # That was mine, added while chasing a single provenance case, and never scoped.
       #
-      # Measured locally: the pinned revision's compile app resolves to
-      # mx20bd9g...-app.drv -- a genuinely different derivation from this
-      # repository's. So each pinned revision is warmed for the app the tests run,
-      # with a lock supplied when the revision ships none.
-      - name: "Warm the pinned compilers the tests evaluate through"
+      # `nix flake archive "path:$PWD"` is the honest bound: it materialises the inputs
+      # THIS repository's lock names, which is exactly what evaluating this flake can
+      # reach when the store is closed. If a particular test needs an input this lock
+      # does not pin, that is a fact about the test and it will say so by name.
+      - name: "Warm this repository's own flake inputs"
         shell: bash
         run: |
           set -uo pipefail
-          if [[ ! -s "${RUNNER_TEMP}/ref-paths.tsv" ]]; then
-            echo "no prefetched refs recorded; nothing to warm"
-            exit 0
-          fi
-          system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          : > "${RUNNER_TEMP}/pinned-paths.txt"
-          while IFS=$'\t' read -r ref src_path; do
-            [[ -n "${ref}" && -n "${src_path}" ]] || continue
-            [[ "${ref}" == github:esp0xdeadbeef/network-compiler/* ]] || continue
-            echo "::group::pinned compiler app ${ref}"
-            work="${RUNNER_TEMP}/pinned/$(echo "${ref}" | tr '/:' '__')"
-            rm -rf "${work}"
-            mkdir -p "$(dirname "${work}")"
-            cp -r "${src_path}" "${work}"
-            chmod -R u+w "${work}"
-            # THE PINNED REVISION SHIPS NO LOCK, SO ITS APP IDENTITY IS NOT STABLE.
-            #
-            # Three repositories gitignore flake.lock, so the pinned source has none.
-            # Evaluating it creates one from whatever resolves AT THAT MOMENT, so the
-            # app derivation differs between the warm and the test even in the same job
-            # -- measured: the warm built 0sk992zv...-app, and the test then wanted
-            # 0p9fvblx...-app (run 45597803973), with an empty aeson/ShellCheck closure
-            # behind it.
-            #
-            # A lock taken from the SIBLING's own flake.lock for this repository is
-            # stable: it is the same file on every run. That is what is copied here.
-            if [[ ! -f "${work}/flake.lock" ]]; then
-              supplied=""
-              for cand in ../network-labs/flake.lock ../network-compiler/flake.lock flake.lock; do
-                [[ -f "${cand}" ]] || continue
-                supplied="${cand}"
-                break
-              done
-              if [[ -n "${supplied}" ]]; then
-                cp "${supplied}" "${work}/flake.lock"
-                echo "supplied ${supplied} as the lock for ${ref}"
-              fi
-            fi
-            # Resolve the app EXACTLY as the test does: `path:` + `--impure`, and through
-          # `nix run`'s own installable, so no flag difference can produce a different
-          # derivation. The test invokes
-          #   nix run --no-warn-dirty --no-write-lock-file "path:${repo_root}#compile"
-          # so that is what is resolved and built here.
-          pinned_prog="$(nix eval --raw --impure "path:${work}#apps.${system_name}.compile.program" 2>/dev/null)" || pinned_prog=""
-            if [[ -n "${pinned_prog}" ]] && nix build --no-link "${pinned_prog}" > /dev/null 2>&1; then
-              echo "PASS WARM-PINNED-APP: ${ref} -> ${pinned_prog}"
-              nix-store -qR "${pinned_prog}" >> "${RUNNER_TEMP}/pinned-paths.txt" 2>/dev/null || true
-            else
-              echo "::warning::pinned compiler app for ${ref} could not be built"
-            fi
-            echo "::endgroup::"
-          done < "${RUNNER_TEMP}/ref-paths.tsv"
-          if [[ -s "${RUNNER_TEMP}/pinned-paths.txt" ]]; then
-            sort -u -o "${RUNNER_TEMP}/pinned-paths.txt" "${RUNNER_TEMP}/pinned-paths.txt"
-            cat "${RUNNER_TEMP}/pinned-paths.txt" >> "${RUNNER_TEMP}/app-outs.txt"
-            printf 'pinned app paths: %s\n' "$(wc -l < "${RUNNER_TEMP}/pinned-paths.txt")"
+          if nix flake archive --json "path:${PWD}" > "${RUNNER_TEMP}/flake-archive.json" 2>"${RUNNER_TEMP}/archive.err"; then
+            count="$(jq -r '[.. | .path? // empty] | unique | length' "${RUNNER_TEMP}/flake-archive.json" 2>/dev/null || echo 0)"
+            echo "PASS WARM-INPUTS: ${count} input source(s) from this repository's lock"
+            jq -r '[.. | .path? // empty] | unique | .[]' "${RUNNER_TEMP}/flake-archive.json" \
+              >> "${RUNNER_TEMP}/app-outs.txt" 2>/dev/null || true
+          else
+            echo "::warning::this repository's inputs could not be archived"
+            sed 's/^/  /' "${RUNNER_TEMP}/archive.err" >&2 || true
           fi
 
       # PREPARE THE CACHE: THE TEST ENVIRONMENT, DECLARED IN flake.nix.
@@ -888,13 +652,6 @@ jobs:
               nix-store -qR "${fin}" >> /tmp/store-paths.txt
             done
             echo "flake inputs: ${#finputs[@]}"
-          fi
-          if [[ -s "${RUNNER_TEMP}/labs-paths.txt" ]]; then
-            mapfile -t lp < "${RUNNER_TEMP}/labs-paths.txt"
-            for lp_one in "${lp[@]}"; do
-              nix-store -qR "${lp_one}" >> /tmp/store-paths.txt
-            done
-            echo "network-labs closure: ${#lp[@]}"
           fi
           if [[ -s "${RUNNER_TEMP}/app-outs.txt" ]]; then
             mapfile -t outs < "${RUNNER_TEMP}/app-outs.txt"

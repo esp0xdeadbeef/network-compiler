@@ -26,13 +26,19 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 fail() { echo "FAIL declared-versus-derived-classifier: $*" >&2; exit 1; }
 
 reg_expr() {
-  nix eval --no-write-lock-file --impure --json --expr '
+  # QUIET-WARNINGS: this helper returns a JSON VALUE, and callers add 2>&1
+  # so a real error reaches their failure text. With the store closed, every
+  # nix command prints "warning: you don't have Internet access; ...", which
+  # joined the value and made jq reject a correct answer (runs 45540528886,
+  # 45541876475). Warnings are dropped; errors are not.
+  { nix eval --no-write-lock-file --impure --json --expr '
     let
       f = builtins.getFlake "'"path:${repo_root}"'";
       pkgs = import f.inputs.nixpkgs { };
       reg = import "'"${repo_root}"'/lib/derivation-registry/default.nix" { lib = pkgs.lib; };
     in
       '"$1"''
+  } 2>&1 | grep -v '^warning:' || true
 }
 
 # SN1: a fact a rule produces is derivable.

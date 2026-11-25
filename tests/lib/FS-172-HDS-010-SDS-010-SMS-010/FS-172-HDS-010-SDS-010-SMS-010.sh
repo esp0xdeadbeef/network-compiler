@@ -28,13 +28,19 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 fail() { echo "FAIL derivation-rule-registry: $*" >&2; exit 1; }
 
 reg_expr() {
-  nix eval --no-write-lock-file --impure --json --expr '
+  # QUIET-WARNINGS: this helper returns a JSON VALUE, and callers add 2>&1
+  # so a real error reaches their failure text. With the store closed, every
+  # nix command prints "warning: you don't have Internet access; ...", which
+  # joined the value and made jq reject a correct answer (runs 45540528886,
+  # 45541876475). Warnings are dropped; errors are not.
+  { nix eval --no-write-lock-file --impure --json --expr '
     let
       f = builtins.getFlake "'"path:${repo_root}"'";
       pkgs = import f.inputs.nixpkgs { };
       reg = import "'"${repo_root}"'/lib/derivation-registry/default.nix" { lib = pkgs.lib; };
     in
       '"$1"''
+  } 2>&1 | grep -v '^warning:' || true
 }
 
 # P1/P2/P4: the known derived fact resolves to exactly one complete entry.
@@ -49,8 +55,6 @@ reg_expr() {
 out="$(reg_expr 'reg.resolve { derivedFact = "fabricSelectorRoles"; }' 2>&1)" || {
   fail "P4 resolve({ fabricSelectorRoles }) failed; the registry does not resolve a registered derived fact
 ${out}"; }
-
-out="$(printf '%s\n' "${out}" | grep -v '^warning:' || true)"
 
 jq -e '.ruleId == "DRV-FABRIC-ADJ"
        and (.determiningFacts | length) > 0

@@ -485,11 +485,52 @@ jobs:
         run: |
           set -uo pipefail
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          apps_json="$(nix eval --json ".#apps.${system}" 2>/dev/null || echo '{}')"
-          mapfile -t apps < <(jq -r 'keys[]?' <<<"${apps_json}")
+          mapfile -t apps < <(nix eval --json ".#apps.${system}" | jq -r 'keys[]?')
+          if (( ${#apps[@]} == 0 )); then
+            echo "::error::no apps in .#apps.${system}; the test jobs would substitute everything"
+            exit 1
+          fi
+          # An app is `{ type = "app"; program = <string with store context>; }`, and
+          # neither spelling of it is a derivation. Both measured in this job:
+          #
+          #   nix build ".#apps.${system}.${app}"
+          #     error: expected flake output attribute 'apps.x86_64-linux.compile' to be
+          #     a derivation or path but found a set: { type = "app"; program = ... }
+          #
+          #   nix build ".#apps.${system}.${app}.program"
+          #     error: string '/nix/store/...-app/bin/app' has context with the output
+          #     'out' from derivation '/nix/store/...-app.drv', but the string is not the
+          #     right placeholder for this derivation output
+          #
+          # The derivation is the context of that string; `builtins.getContext` reads it.
+          # Getting this wrong is how run 45521299422 lost every test job: the warm step
+          # built nothing, the export step found no derivations, the upload step warned
+          # instead of failing, and all 98 test jobs died in actions/download-artifact
+          # with "Artifact not found for name: nix-store" before running a single test.
+          # So: no `|| echo`, no `|| continue`. If an app cannot be built, this job is
+          # red and says which one.
+          : > "${RUNNER_TEMP}/app-drvs.txt"
           for app in "${apps[@]}"; do
             echo "::group::warm app ${app}"
-            nix build --no-link ".#apps.${system}.${app}" || echo "warm ${app} failed (tests build it themselves)"
+            APP="${app}" REPO="${PWD}" nix eval --impure --raw --expr '
+              let
+                flake = builtins.getFlake ("path:" + builtins.getEnv "REPO");
+                program = flake.apps.${builtins.currentSystem}.${builtins.getEnv "APP"}.program;
+              in
+              builtins.head (builtins.filter
+                (n: builtins.match ".*\.drv" n != null)
+                (builtins.attrNames (builtins.getContext program)))
+            ' > "${RUNNER_TEMP}/app-drv.txt" || {
+              echo "::error::${app}: its program is not produced by a derivation"
+              exit 1
+            }
+            drv="$(cat "${RUNNER_TEMP}/app-drv.txt")"
+            echo "${app} -> ${drv}"
+            nix build --no-link "${drv}" || {
+              echo "::error::${app} (${drv}) failed to build; the test jobs would substitute it"
+              exit 1
+            }
+            printf '%s\n' "${drv}" >> "${RUNNER_TEMP}/app-drvs.txt"
             echo "::endgroup::"
           done
 
@@ -497,29 +538,41 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          mapfile -t apps < <(nix eval --json ".#apps.${system}" 2>/dev/null | jq -r 'keys[]?')
+          # The derivations the warm step resolved and built. Read from the manifest
+          # rather than recomputed: an app whose program the previous step could not
+          # turn into a derivation must fail there, once, and not be silently skipped
+          # here as well.
+          if [[ ! -s "${RUNNER_TEMP}/app-drvs.txt" ]]; then
+            echo "::error::the warm step recorded no app derivations"
+            exit 1
+          fi
+          mapfile -t drvs < "${RUNNER_TEMP}/app-drvs.txt"
           : > /tmp/store-paths.txt
-          for app in "${apps[@]}"; do
-            program="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
-            deriver="$(nix-store -q --deriver "${program}" 2>/dev/null)" || continue
-            [[ "${deriver}" == "unknown-deriver" ]] && continue
-            nix-store -qR "${deriver}" >> /tmp/store-paths.txt || true
+          for drv in "${drvs[@]}"; do
+            nix-store -qR "${drv}" >> /tmp/store-paths.txt
           done
           sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
-          echo "exporting $(wc -l < /tmp/store-paths.txt) store paths"
-          if [[ -s /tmp/store-paths.txt ]]; then
-            mapfile -t paths < /tmp/store-paths.txt
-            nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
-            ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
+          # Zero paths exported is the exact failure that shipped: the artifact step
+          # then finds no file, warns, and 98 jobs download nothing. Fail here, where
+          # the cause is visible, instead of 98 times downstream.
+          paths_count="$(wc -l < /tmp/store-paths.txt)"
+          echo "exporting ${paths_count} store paths"
+          if (( paths_count == 0 )); then
+            echo "::error::exported 0 store paths; the test jobs would substitute everything"
+            exit 1
           fi
+          mapfile -t paths < /tmp/store-paths.txt
+          nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
+          ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
 
       - uses: actions/upload-artifact@v4
         with:
           name: nix-store
           path: "${{ runner.temp }}/nix-store.nar.zst"
           retention-days: 1
-          if-no-files-found: warn
+          # `warn` here is how the broken warm step stayed invisible: the artifact
+          # silently did not exist and every consumer failed 30 minutes later.
+          if-no-files-found: error
 
   test:
     name: "${{ matrix.test || format('shard {0}', matrix.shard) }}"
@@ -625,6 +678,11 @@ jobs:
 
       # The store the warm job exported, imported into this runner: the tests build
       # their own derivations, and with the closure present they substitute nothing.
+      #
+      # No `continue-on-error`: a missing artifact is the failure mode that shipped.
+      # Without it this step "succeeds", the test runs against a cold store, and it
+      # substitutes the whole closure from cache.nixos.org -- which looks like a pass
+      # and is the opposite of what the warm job exists for.
       - uses: actions/download-artifact@v4
         with:
           name: nix-store
@@ -633,12 +691,133 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -s "${RUNNER_TEMP}/nix-store.nar.zst" ]]; then
-            zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >/dev/null
-            echo "imported $(wc -l < /dev/null 2>/dev/null || true)"
-          else
-            echo "no store artifact (warm job did not produce one)"
+          if [[ ! -s "${RUNNER_TEMP}/nix-store.nar.zst" ]]; then
+            echo "::error::no store artifact; every test in this job would substitute from the network"
+            exit 1
           fi
+          zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >/dev/null
+          echo "imported $(zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --query --hash 2>/dev/null | wc -l) object(s)"
+
+      # THE STORE IS CLOSED FROM HERE DOWN.
+      #
+      # "The cache is hitting" was true for the /nix tarball and false for what the
+      # tests do with it: a test builds its own derivation, and with a cache hit but
+      # no closure the substitution is a network fetch from cache.nixos.org that no
+      # step reported. So the network is removed rather than measured:
+      #
+      #   substituters =            no substituter to fetch from
+      #   builders      =           no remote builder to offload to
+      #   --offline                 fail rather than resolve a missing path
+      #   flake-registry            no HTTP registry lookup
+      #
+      # `--offline` alone is not enough: it still consults configured substituters
+      # when they are reachable, so the substituter list is emptied as well. Both,
+      # then assert, then run.
+      #
+      # This is a tripwire, not a preference. If a test needs something the warm job
+      # did not anticipate, it fails HERE, with the path it wanted, instead of
+      # silently downloading 111 MiB per job and reporting green.
+      - name: "Close the store: no substituters, no network"
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf 'substituters =\n'
+            printf 'extra-substituters =\n'
+            printf 'builders =\n'
+            printf 'builders-use-substitutes = false\n'
+            printf 'flake-registry =\n'
+          } >> "$GITHUB_ENV"
+          {
+            printf 'substituters =\n'
+            printf 'extra-substituters =\n'
+            printf 'builders =\n'
+            printf 'builders-use-substitutes = false\n'
+            printf 'flake-registry =\n'
+            printf 'experimental-features = nix-command flakes\n'
+          } | sudo tee /etc/nix/nix.conf >/dev/null
+          nix config show | grep -E '^(substituters|builders) ' || true
+
+      # `--offline` is a FLAG, not a setting, and the suites shell out to bare `nix`
+      # 200+ times (`nix run`, `nix build`, `nix flake archive`) in ways no NIX_CONFIG
+      # can cover. A wrapper on PATH is the only place that catches all of them: every
+      # `nix` invocation becomes `nix --offline <args>` unless the caller already said
+      # `--offline`. With substituters emptied above, a missing path is now an error
+      # that names the path, not a silent download.
+      # A NETWORK NAMESPACE, NOT JUST A FLAG.
+      #
+      # Measured on the runner image: `nix --offline` does NOT block flake INPUT
+      # fetching. A test that runs `nix flake prefetch github:...` reaches the network
+      # even with `--offline` on the command line and empty substituters, because
+      # `--offline` governs substitution, not fetchers. Reproduced:
+      #
+      #   nix --offline flake prefetch github:NixOS/nonexistent-repo-xyz123
+      #   error: unable to download 'https://api.github.com/repos/.../commits/HEAD'
+      #
+      # A 404 from api.github.com is proof the request left the machine. So the test
+      # runs inside a network namespace with no interfaces but loopback, where the
+      # request cannot leave at all and Nix says so itself:
+      #
+      #   warning: you don't have Internet access; disabling some network-dependent
+      #   features
+      #
+      # That warning is the point: enforcement by the kernel, reported by Nix, and
+      # visible in the transcript the assertion below greps.
+      - name: "Verify the test can run with no network"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! unshare --net --map-root-user true 2>/dev/null; then
+            echo "::error::cannot create a network namespace; the offline guarantee would be unverified"
+            exit 1
+          fi
+          out="$(unshare --net --map-root-user nix eval --raw --expr '1' 2>&1 || true)"
+          if ! grep -qi "don't have Internet access" <<<"${out}"; then
+            echo "::error::Nix did not report offline mode inside the namespace"
+            printf '%s\n' "${out}" | head -10
+            exit 1
+          fi
+          echo "PASS OFFLINE-NAMESPACE: no network, and Nix reports it"
+
+      - name: "Force --offline on every nix invocation"
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrapper_dir="${RUNNER_TEMP}/offline-bin"
+          mkdir -p "${wrapper_dir}"
+          real_nix="$(command -v nix)"
+          if [[ "${real_nix}" == "${wrapper_dir}/nix" ]]; then
+            echo "::error::the offline wrapper resolved to itself"
+            exit 1
+          fi
+          cat > "${wrapper_dir}/nix" <<WRAPPER
+          #!/usr/bin/env bash
+          # Generated by .github/workflows/tests-matrix.yml. Not a convenience: a test
+          # that reaches the network must fail, and this is where it fails.
+          set -uo pipefail
+          real_nix="${real_nix}"
+          for arg in "\$@"; do
+            [[ "\${arg}" == "--offline" ]] && exec "\${real_nix}" "\$@"
+          done
+          exec "\${real_nix}" --offline "\$@"
+          WRAPPER
+          chmod +x "${wrapper_dir}/nix"
+          printf '%s\n' "${wrapper_dir}" >> "$GITHUB_PATH"
+          echo "wrapper: ${wrapper_dir}/nix -> ${real_nix} --offline"
+          "${wrapper_dir}/nix" --version
+          # Proof the wrapper is what a test will get, and that it is offline: a
+          # forced fetch of a path that is not in the store must fail, and must fail
+          # with the offline error rather than a download.
+          printf 'substituters: %s\n' "$(nix config show substituters)"
+          if nix --offline build --no-link nixpkgs#hello 2>&1 | tee "${RUNNER_TEMP}/offline-probe.log"; then
+            echo "::error::the offline probe SUCCEEDED, which means a substituter answered"
+            exit 1
+          fi
+          grep -qiE 'offline|not available|do not know how to build' "${RUNNER_TEMP}/offline-probe.log" || {
+            echo "::error::the probe failed for the wrong reason; see the log above"
+            exit 1
+          }
+          echo "PASS OFFLINE-PROBE: a fetch not in the store fails locally, it does not download"
 
       - id: discover
         name: "Discover entrypoints"
@@ -696,60 +875,11 @@ jobs:
       # input and nothing that a test builds. Every test job then pays for the same
       # closure: measured on FS-030-HDS-010-SDS-040-SMS-010, 144 paths / 111 MiB,
       # including git (2.52.0) whose `out` references its own 15.1 MiB `-doc` output.
-      # Those derivations are identical for every test in a repository, so they are
-      # built once here and cached; `test` restores this cache because it needs `list`.
-      #
-      # Failures are tolerated: a repository whose app does not build must still run
-      # its tests, which is what the matrix is for.
-      - name: "Warm the build closure"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          apps_json="$(nix eval --json ".#apps.${system}" 2>/dev/null || echo '{}')"
-          mapfile -t apps < <(jq -r 'keys[]?' <<<"${apps_json}")
-          if [[ ${#apps[@]} -eq 0 ]]; then
-            echo "no apps to warm"
-          fi
-          for app in "${apps[@]}"; do
-            echo "::group::warm app ${app}"
-            nix build --no-link ".#apps.${system}.${app}" || echo "warm ${app} failed (tests build it themselves)"
-            echo "::endgroup::"
-          done
-
-      # PASS THE STORE TO THE DOWNSTREAM RUNNERS.
-      #
-      # The warmed /nix cache is immutable and per-lock, so a job cannot add to it, and
-      # a test that builds its own derivation (`app.drv` is built inside the test) still
-      # fetched 145 paths / 111 MiB even on a cache hit. An artifact has no such limit:
-      # export the closure of every app derivation once, and each test job imports it
-      # before running, so nothing is substituted.
-      - name: "Export the store closure for the test jobs"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          mapfile -t apps < <(nix eval --json ".#apps.${system}" 2>/dev/null | jq -r 'keys[]?')
-          : > /tmp/store-paths.txt
-          for app in "${apps[@]}"; do
-            program="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
-            deriver="$(nix-store -q --deriver "${program}" 2>/dev/null)" || continue
-            [[ "${deriver}" == "unknown-deriver" ]] && continue
-            nix-store -qR "${deriver}" >> /tmp/store-paths.txt || true
-          done
-          sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
-          echo "exporting $(wc -l < /tmp/store-paths.txt) store paths"
-          if [[ -s /tmp/store-paths.txt ]]; then
-            mapfile -t paths < /tmp/store-paths.txt
-            nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
-            ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
-          fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nix-store
-          path: "${{ runner.temp }}/nix-store.nar.zst"
-          retention-days: 1
-          if-no-files-found: warn
+      # The closure is warmed ONCE, in `list` (see "Warm the build closure" there),
+      # and reached these jobs as the `nix-store` artifact. This block used to be
+      # duplicated here, and the duplicate is the copy that kept the broken
+      # `nix build .#apps.<sys>.<name>` spelling long enough to ship: two copies of a
+      # step are two chances to fix one of them. Removed, not repaired.
 
       # jq and ripgrep ship with the runner image. sops is 45 MB and yq is 10 MB,
       # and 47 of 1689 test files name sops while 2 name yq -- so they are fetched
@@ -930,12 +1060,22 @@ jobs:
           # fork's token cannot read the base repository's history. Explicit off is
           # recorded as skipped, never as passed.
           S88_CI_GATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'off' || 'on' }}
+          # The store was closed in the "Close the store" step above, for both the
+          # file and the environment. This records the intent for the log assertion.
+          NIX_OFFLINE: "1"
         run: |
           set -uo pipefail
-          # One test per job when the matrix fits; otherwise this job owns every
-          # entrypoint whose index lands in this shard.
+          # `script(1)` gives the test a pty and tees everything it prints to
+          # ${RUNNER_TEMP}/run.log, in order, stdout and stderr together. A plain
+          # `2>&1 | tee` loses the interleaving Nix uses on a tty, and the assertion
+          # in the next step greps this file. `-e` propagates the test's exit status,
+          # which is why the if/else below still sees a failure as a failure.
+          command -v script >/dev/null || { echo "util-linux script(1) is required" >&2; exit 1; }
+          # The test runs INSIDE the network namespace: no route out, so no fetcher and
+          # no substituter can reach anything, whatever flag the test passes.
           if [[ -n "${TEST_NAME:-}" ]]; then
-            exec bash tests/run-one.sh "tests/${TEST_NAME}"
+            exec unshare --net --map-root-user \
+              script -q -e -c "bash tests/run-one.sh 'tests/${TEST_NAME}'" "${RUNNER_TEMP}/run.log"
           fi
 
           # The same discovery and the same sort as the list job, so shard N owns
@@ -959,9 +1099,45 @@ jobs:
           printf 'shard %s/%s runs %s test(s)\n' "${SHARD}" "${SHARDS}" "${#mine[@]}"
           failures=0
           for test_path in "${mine[@]}"; do
-            if ! bash tests/run-one.sh "${test_path}"; then
+            if ! unshare --net --map-root-user \
+                   script -q -e -c "bash tests/run-one.sh '${test_path}'" "${RUNNER_TEMP}/run.log"; then
               failures=$((failures + 1))
             fi
           done
           printf 'shard %s/%s: %s of %s failed\n' "${SHARD}" "${SHARDS}" "${failures}" "${#mine[@]}"
           (( failures == 0 )) || exit 1
+
+      # THE PROOF, ON THE REAL OUTPUT, IN EVERY JOB.
+      #
+      # The user's question was whether the cache is hitting EVERYWHERE, and the
+      # honest answer found by reading the logs was: the /nix cache hit, and the test
+      # still substituted. So the assertion is on the transcript the test produced,
+      # not on the cache step's own "Cache restored" line.
+      #
+      # `always()`: when a test fails because it needed something the warm job did not
+      # cover, the interesting line is in this grep, and skipping it on failure would
+      # hide exactly that.
+      - name: "Assert the run was offline"
+        if: always()
+        shell: bash
+        env:
+          TEST_NAME: ${{ matrix.test }}
+        run: |
+          set -uo pipefail
+          log="${RUNNER_TEMP}/run.log"
+          # If the transcript is missing, say so instead of passing vacuously -- a
+          # check over zero lines is the same class of bug as a suite over zero tests.
+          if [[ ! -s "${log}" ]]; then
+            echo "::error::no run transcript at ${log}; the offline assertion cannot be made"
+            exit 1
+          fi
+          # Every way a substitution announces itself in a Nix log, plus the two hosts
+          # the suites touch when they fall out of the store.
+          pattern='copying path .+ from|substituting .+|downloading .+ from|curl: \(|cache\.nixos\.org|channels\.nixos\.org'
+          if matches="$(grep -aEn "${pattern}" "${log}")"; then
+            echo "::error::the test fetched from the network; the store was supposed to be closed"
+            printf '%s\n' "${matches}" | head -40
+            exit 1
+          fi
+          printf 'PASS OFFLINE %s: %s lines of transcript, 0 substitutions, 0 cache.nixos.org fetches\n' \
+            "${TEST_NAME:-shard}" "$(wc -l < "${log}")"

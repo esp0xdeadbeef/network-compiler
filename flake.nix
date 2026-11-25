@@ -342,31 +342,27 @@
           pkgs = mkPkgs system;
         in
         {
-          # `packages` is what a developer gets from `nix develop`.
+          # THE COMPLETE DECLARATION OF WHAT THE TESTS NEED.
           #
-          # DELIBERATELY MINIMAL, and kept out of the CI store artifact. mkShell's own
-          # closure always carries a C toolchain -- measured: gcc 264 MB, python3 107 MB,
-          # perl 55 MB, 684 MB and 133 paths for the four tools listed here -- because
-          # that is what mkShell is: a shell for BUILDING. Shipping it to test jobs cost
-          # 62% of a 1.49 GiB artifact to deliver a 2.5 MB rg.
+          # Measured from the suites themselves, counting real invocations and not
+          # comments: nix 501, jq 197, git 84, ssh 13, python3 3, rg 2. Before this
+          # output existed those came from the runner image plus four `curl`s in the
+          # workflow (ripgrep, sops, yq), which meant the environment was implicit --
+          # no derivation described it, so nothing could cache it coherently and every
+          # job fetched the same bytes again.
           #
-          # What the tests actually lack on a hosted runner is `rg` alone: the image has
-          # git and jq, and CI is already running nix. This output stays as the honest
-          # declaration of the environment for a developer (`nix develop`), and CI reads
-          # it for PATH but no longer exports its closure.
+          # `nix develop` and `nix build .#devShells.<sys>.default` are the two ways to
+          # consume it. Nothing in CI installs a tool outside this list.
           default = pkgs.mkShell {
             name = "network-tests";
             packages = [
               pkgs.git
               pkgs.jq
+              pkgs.nix
+              pkgs.openssh
+              pkgs.python3
               pkgs.ripgrep
               pkgs.zstd
-            ];
-            nativeBuildInputs = [
-              (pkgs.lib.getBin pkgs.git)
-              (pkgs.lib.getBin pkgs.jq)
-              (pkgs.lib.getBin pkgs.ripgrep)
-              (pkgs.lib.getBin pkgs.zstd)
             ];
           };
         }

@@ -1256,23 +1256,41 @@ jobs:
           #     live in `-bin`, not in `.out` or `.dev`.
           system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
           extra_path=""
-          if nix eval --raw --impure ".#devShells.${system_name}.default.name" >/dev/null 2>&1; then
-            nix eval --json --impure \
-              --expr "let f = builtins.getFlake \"path:${PWD}\"; in map toString (f.devShells.\"${system_name}\".default.nativeBuildInputs or [])" \
-              > "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || echo '[]' > "${RUNNER_TEMP}/shell-pkgs.json"
-            while read -r pkg; do
-              [[ -n "${pkg}" && -d "${pkg}/bin" ]] || continue
-              printf '%s\n' "${pkg}/bin" >> "$GITHUB_PATH"
-              extra_path="${extra_path}${pkg}/bin:"
-            done < <(jq -r '.[]' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || true)
+          # `nix print-dev-env`, FILTERED TO THE NAMED TOOLS.
+          #
+          # Four attempts at reading the packages out of the flake each failed
+          # differently: `.packages` does not exist on a mkShell, `.out`/`.dev` carry no
+          # bin/ for split-output packages, nativeBuildInputs reported 0 in CI, and
+          # print-dev-env's PATH is the whole stdenv -- gcc, binutils-wrapper, make,
+          # patchelf -- which would hand the suites a compiler they must not have.
+          #
+          # print-dev-env is still the right source, because it is what `nix develop`
+          # itself assembles; it only needs selecting from. For each tool this workflow
+          # depends on, the FIRST directory on that PATH which actually contains it is
+          # exported. Verified locally: four directories, jq from -bin, no gcc.
+          if shell_path="$(nix print-dev-env ".#devShells.${system_name}.default" 2>/dev/null \
+                            | grep -m1 "^PATH='" | sed "s/^PATH='//; s/'$//")" && [[ -n "${shell_path}" ]]; then
+            IFS=: read -ra shell_dirs <<< "${shell_path}"
+            for wanted in jq git rg zstd; do
+              for d in "${shell_dirs[@]}"; do
+                [[ -x "${d}/${wanted}" ]] || continue
+                printf '%s\n' "${d}" >> "$GITHUB_PATH"
+                case ":${extra_path}" in
+                  *":${d}:"*) ;;
+                  *) extra_path="${extra_path}${d}:" ;;
+                esac
+                break
+              done
+            done
+            echo "declared tool dirs: $(printf '%s' "${extra_path}" | tr ':' '\n' | grep -c . || true)"
+          else
+            echo "::warning::nix print-dev-env failed for .#devShells.${system_name}.default"
           fi
-          # Report against the image plus what was just declared, since GITHUB_PATH only
-          # affects later steps. A tool missing from both is a real defect: the suites
-          # call these by name.
           for tool in nix jq git rg zstd; do
             found="$(PATH="${extra_path}${PATH}" command -v "${tool}" 2>/dev/null || true)"
             if [[ -z "${found}" ]]; then
               echo "::error::${tool} is needed by the suites and is neither declared nor on the image"
+              echo "::error::declared tool dirs: ${extra_path:-<none>}"
               exit 1
             fi
             printf '  %-6s %s\n' "${tool}" "${found}"

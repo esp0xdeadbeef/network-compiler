@@ -424,6 +424,21 @@ jobs:
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           # The test environment: this is what used to be a ripgrep curl and four
           # hand-rolled warm steps. One command, in the flake, via the documented shell.
+          #
+          # `nix build` of the devShell is NOT enough. The steps below run with
+          #   shell: 'nix develop -c bash -e {0}'
+          # and `nix develop` builds a separate `-env` derivation. Measured in CI:
+          # warming the devShell left that env derivation unbuilt, so the first step
+          # using the shell started a 151-derivation bootstrap -- gcc, bash, binutils
+          # from source -- after the store had closed. `print-dev-env` is what forces
+          # the same derivation `nix develop` will use, and it runs here while the
+          # cache is still open.
+          if nix print-dev-env ".#devShells.${system}.default" > "${RUNNER_TEMP}/dev-env.txt" 2>"${RUNNER_TEMP}/dev-env.err"; then
+            echo "PASS WARM-DEVSHELL-ENV: the shell's own environment derivation is built"
+          else
+            echo "::warning::the devShell environment did not build"
+            sed 's/^/  /' "${RUNNER_TEMP}/dev-env.err" >&2 || true
+          fi
           if nix build --no-link ".#devShells.${system}.default" 2>/dev/null; then
             echo "PASS WARM-DEVSHELL: .#devShells.${system}.default is present"
           else
@@ -435,8 +450,13 @@ jobs:
           # output", measured). `nix run`'s installable is the supported way, so the
           # program path is resolved and realised directly.
           for app in $(nix eval --json ".#apps.${system}" --apply builtins.attrNames 2>/dev/null | jq -r '.[]?' 2>/dev/null || true); do
-            prog="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
-            if nix build --no-link "${prog}" 2>/dev/null; then
+            # stderr NOT discarded: "app <name> did not warm" with no reason is what made
+            # this loop useless the first time it ran.
+            prog="$(nix eval --raw ".#apps.${system}.${app}.program")" || {
+              echo "::warning::${app}: .program does not resolve"
+              continue
+            }
+            if nix build --no-link "${prog}"; then
               echo "PASS WARM-APP: ${app} -> ${prog}"
             else
               echo "::warning::app ${app} did not warm"

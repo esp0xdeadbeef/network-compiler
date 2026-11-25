@@ -1,38 +1,3 @@
-name: "Tests (matrix)"
-
-# One job per test, generated from the repository's own discovery contract.
-#
-# The per-repository `run-all-tests.sh` files forked into ten variants, each with
-# its own scheduling and exit conventions, so a suite run's shape depended on which
-# repository you were in. A matrix fixes the shape without unifying those files:
-#
-#   list  discovers the entrypoints through `scripts/lib/discover-tests.sh` (the one
-#         file that IS byte-identical everywhere) and emits a JSON matrix;
-#   test  runs exactly one entrypoint per job via `tests/run-one.sh`.
-#
-# Consequences worth stating, because they are the reason for the change:
-#   - fail-fast is a local convenience, not a CI property: `fail-fast: false` here
-#     means one run reports every failure. A local run can still stop early;
-#   - a wedged test occupies one job, not the whole suite;
-#   - a `flake.lock` bump re-runs everything, which is what "bump lock" should do.
-# TRUST MODEL: no pull_request trigger, on purpose.
-#
-# The matrix runs the repository's own test code, and on a pull request that code is
-# whatever the contributor wrote -- including the workflow file itself, when the
-# branch lives in this repository. Read-only permissions bound the damage, but they do
-# not make it zero: the run still occupies runners, can print its token, and can add
-# cache or artifact entries. The alternative implemented here is to not run untrusted
-# code at all.
-#
-# What that costs: a pull request gets no suite result before merge. To validate one,
-# either land it (push to main) or, for a branch in this repository, dispatch this
-# workflow on that branch by hand with "Run workflow" -- `workflow_dispatch` requires
-# write access, so the decision is a maintainer's. A fork PR cannot be dispatched
-# directly; fetch its branch into this repository first, which is the review step.
-#
-# If pull_request is ever re-added, keep `permissions:` read-only, keep matrix values
-# in `env:` rather than spliced into `run:`, and leave GH_TOKEN empty for forks.
-on:
   push:
     branches:
       - main
@@ -192,7 +157,7 @@ jobs:
           path: |
             /nix
             /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v1
+          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-eval-v1
           restore-keys: |
             nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
             nix-${{ runner.os }}-
@@ -295,7 +260,7 @@ jobs:
           path: |
             /nix
             /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v1
+          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-eval-v1
           restore-keys: |
             nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
             nix-${{ runner.os }}-
@@ -379,10 +344,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # /nix must exist before the cache is unpacked (absolute store paths; tar will
-      # not create the missing parent), and the key carries a build stamp so this job
-      # can SAVE a store that already contains the build closure -- an entry is
-      # immutable, so a key the gate already wrote can never be extended.
+      # /nix must exist before the cache is unpacked: the archive members are absolute
+      # store paths and tar will not create the missing parent.
+      #
+      # Two keys, because a cache entry is immutable and whoever writes it first wins:
+      # the gates write `-eval-v1` (evaluation inputs only, `--no-build`), and `list`
+      # alone writes `-apps-v1` (that store plus the build closure). Sharing one key
+      # meant the gate saved first and the warm job's save was skipped, which is
+      # exactly how every test job still fetched git's 15 MiB doc output.
       - name: "Prepare /nix for the cache"
         shell: bash
         run: |

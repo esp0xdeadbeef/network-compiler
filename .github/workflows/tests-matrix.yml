@@ -1014,14 +1014,24 @@ jobs:
 
           as_test() { if [[ -n "${netns}" ]]; then ${netns} "$@"; else "$@"; fi; }
 
-          drv="$(as_test nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
+          # `path:$PWD`, NOT `$PWD`. Measured locally, same tree, same nix:
+          #
+          #   nix eval --impure "$PWD#apps.<sys>.compile.program"       -> apgm8dl0...
+          #   nix eval --impure "path:$PWD#apps.<sys>.compile.program"  -> imrlx70w...
+          #
+          # Two derivations, because the `path:` flake URL produces different sourceInfo
+          # from a bare directory argument -- and the test uses `path:${repo_root}#...`.
+          # That single character difference is why 950 derivations were rebuilt from
+          # source in run 45678523867 while this step had already built the app.
+          flake_ref="path:${PWD}"
+          drv="$(as_test nix eval --raw --impure "${flake_ref}#apps.${system}.compile.program" \
             --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
           if [[ -z "${drv}" ]]; then
             echo "no compile app derivable here; the tests will say if they need one"
             exit 0
           fi
           echo "compile app as the test resolves it: ${drv}"
-          prog="$(as_test nix eval --raw "${PWD}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
+          prog="$(as_test nix eval --raw "${flake_ref}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
           if [[ -n "${prog}" ]] && as_test nix build --no-link "${prog}"; then
             echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
           else

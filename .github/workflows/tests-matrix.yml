@@ -826,6 +826,50 @@ jobs:
           zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >"${RUNNER_TEMP}/imported-paths.txt"
           printf 'imported %s path(s)\n' "$(grep -c . "${RUNNER_TEMP}/imported-paths.txt")"
 
+      - name: "Warm this job's own app closure, as the test will resolve it"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          # No namespace, no root juggling: the discriminator turned out to be the flake
+          # REFERENCE FORM below, not the identity running it. Earlier runs compared root
+          # in `unshare` against the runner user and saw two derivations; that difference
+          # was `$PWD` versus `path:$PWD`, misattributed to the user.
+          as_test() { "$@"; }
+
+          # `path:$PWD`, NOT `$PWD`. Measured locally, same tree, same nix:
+          #
+          #   nix eval --impure "$PWD#apps.<sys>.compile.program"       -> apgm8dl0...
+          #   nix eval --impure "path:$PWD#apps.<sys>.compile.program"  -> imrlx70w...
+          #
+          # Two derivations, because the `path:` flake URL produces different sourceInfo
+          # from a bare directory argument -- and the test uses `path:${repo_root}#...`.
+          # That single character difference is why 950 derivations were rebuilt from
+          # source in run 45678523867 while this step had already built the app.
+          flake_ref="path:${PWD}"
+          drv="$(as_test nix eval --raw --impure "${flake_ref}#apps.${system}.compile.program" \
+            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
+          if [[ -z "${drv}" ]]; then
+            echo "no compile app derivable here; the tests will say if they need one"
+            exit 0
+          fi
+          echo "compile app as the test resolves it: ${drv}"
+          # `nix-store -r <drv>`, NOT `nix build <program>`.
+          #
+          # The derivation is now the right one (run 45681668432 shows a single app drv
+          # on both sides), but realising it is a different question. `nix build` on the
+          # program path does not pull the derivation's BUILD inputs -- measured: the
+          # test still needed optparse-applicative and 950 others that the app links
+          # against at build time.
+          #
+          # `nix-store --realise` on the .drv builds the derivation AND everything
+          # required to build it, which is exactly the closure the test would need.
+          if [[ -n "${drv}" ]] && as_test nix-store -r "${drv}" > /dev/null; then
+            echo "PASS WARM-LOCAL-DEPS: build closure of ${drv} is present"
+          else
+            echo "::warning::the build closure of ${drv} could not be completed"
+          fi
+
       # WARM THIS JOB'S OWN APP -- AND AGAIN INSIDE THE NAMESPACE.
       #
       # The app derivation is computed from the flake source, and the test computes it
@@ -892,11 +936,21 @@ jobs:
             failures=$((failures + 1))
           fi
 
-          prog="$(nix eval --raw ".#apps.${system}.compile.program" 2>/dev/null)" || prog=""
-          if [[ -n "${prog}" ]] && nix path-info "${prog}" >/dev/null 2>&1; then
-            echo "PASS CACHE-APP: ${prog}"
+          # THE DERIVATION'S OUTPUT, not the program path inside it.
+          #
+          # Checking `nix path-info "$prog"` where prog is `<out>/bin/app` asks whether a
+          # file inside an output exists; the question is whether the OUTPUT is present.
+          # Resolve the derivation the same way the test does -- `path:` -- and look at
+          # what it produces.
+          app_drv="$(nix eval --raw --impure "path:${PWD}#apps.${system}.compile.program" \
+            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || app_drv=""
+          app_out="$(nix-store -q --outputs "${app_drv}" 2>/dev/null | head -1)" || app_out=""
+          if [[ -n "${app_out}" ]] && nix path-info "${app_out}" >/dev/null 2>&1; then
+            echo "PASS CACHE-APP: ${app_out}"
           else
-            echo "::error::CACHE-APP: the compile app is NOT in the store"
+            echo "::error::CACHE-APP: the compile app output is NOT in the store"
+            echo "  derivation: ${app_drv:-<unresolved>}"
+            echo "  output:     ${app_out:-<unknown>}"
             failures=$((failures + 1))
           fi
 
@@ -1019,49 +1073,6 @@ jobs:
             exit 1
           fi
           echo "PASS OFFLINE-NAMESPACE: no network, and Nix reports it"
-
-      - name: "Warm this job's own app closure, as the test will resolve it"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          netns="${NIX_NETNS:-}"
-          [[ -n "${netns}" ]] || { echo "::warning::no namespace prefix; warming as the runner user"; netns=""; }
-
-          as_test() { if [[ -n "${netns}" ]]; then ${netns} "$@"; else "$@"; fi; }
-
-          # `path:$PWD`, NOT `$PWD`. Measured locally, same tree, same nix:
-          #
-          #   nix eval --impure "$PWD#apps.<sys>.compile.program"       -> apgm8dl0...
-          #   nix eval --impure "path:$PWD#apps.<sys>.compile.program"  -> imrlx70w...
-          #
-          # Two derivations, because the `path:` flake URL produces different sourceInfo
-          # from a bare directory argument -- and the test uses `path:${repo_root}#...`.
-          # That single character difference is why 950 derivations were rebuilt from
-          # source in run 45678523867 while this step had already built the app.
-          flake_ref="path:${PWD}"
-          drv="$(as_test nix eval --raw --impure "${flake_ref}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
-          if [[ -z "${drv}" ]]; then
-            echo "no compile app derivable here; the tests will say if they need one"
-            exit 0
-          fi
-          echo "compile app as the test resolves it: ${drv}"
-          # `nix-store -r <drv>`, NOT `nix build <program>`.
-          #
-          # The derivation is now the right one (run 45681668432 shows a single app drv
-          # on both sides), but realising it is a different question. `nix build` on the
-          # program path does not pull the derivation's BUILD inputs -- measured: the
-          # test still needed optparse-applicative and 950 others that the app links
-          # against at build time.
-          #
-          # `nix-store --realise` on the .drv builds the derivation AND everything
-          # required to build it, which is exactly the closure the test would need.
-          if [[ -n "${drv}" ]] && as_test nix-store -r "${drv}" > /dev/null; then
-            echo "PASS WARM-LOCAL-DEPS: build closure of ${drv} is present"
-          else
-            echo "::warning::the build closure of ${drv} could not be completed"
-          fi
 
       - name: "Close the store: no substituters, no network"
         shell: bash

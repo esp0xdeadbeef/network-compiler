@@ -355,10 +355,25 @@
           # consume it. Nothing in CI installs a tool outside this list.
           default = pkgs.mkShell {
             name = "network-tests";
+            # NO `pkgs.nix` HERE, DELIBERATELY.
+            #
+            # It was in this list, and it broke caching in a way that took a long time to
+            # see. The devShell contributes to PATH, so a devShell nix takes precedence
+            # over the one CI installs -- and two Nix versions evaluate the same flake to
+            # DIFFERENT derivations:
+            #
+            #   warm step, before this PATH existed, nix 2.34.7 -> nb2kj34w...-app.drv
+            #   the test, with this PATH exported,    nix 2.31.3 -> qzkpb3mx...-app.drv
+            #
+            # (run 45673056576, FS-100-HDS-010-SDS-010-SMS-030). The warm was therefore
+            # useless by construction: nothing it built could ever be the thing the test
+            # asked for.
+            #
+            # CI provides its own Nix. Using that one everywhere keeps evaluation
+            # consistent, which is the precondition for any of this to cache.
             packages = [
               pkgs.git
               pkgs.jq
-              pkgs.nix
               pkgs.openssh
               pkgs.python3
               pkgs.ripgrep

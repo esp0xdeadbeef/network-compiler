@@ -180,68 +180,14 @@ jobs:
       # absolute store paths and tar cannot create the missing parent, so a restore
       # into a runner with no /nix fails member by member ("Cannot open: No such file
       # or directory") and the job downloads everything anyway.
-      - name: "Prepare /nix for the cache"
-        shell: bash
-        run: |
-          sudo mkdir -p /nix
-          sudo chown -R "$(id -u):$(id -g)" /nix
 
-      # The tools this job installs, cached apart from /nix: ripgrep is 2.5 MB and
-      # identical for every job, and a cache hit turns its download into a no-op.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: toolcache
-        with:
-          path: /home/runner/.local/bin
-          key: tools-${{ runner.os }}-rg-14.1.1
-
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: nixcache
-        with:
-          path: |
-            /nix
-            /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-eval-v1
-          restore-keys: |
-            nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
-            nix-${{ runner.os }}-
-
-      - if: steps.nixcache.outputs.cache-hit != 'true'
-        uses: nixbuild/nix-quick-install-action@v35
-        with:
-          nix_conf: |
-            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
 
       # On a hit there was no installer to run, so `nix` is on disk but neither on
       # PATH nor reachable through the profile symlink the installer creates in
       # $HOME: nix-quick-install appends `$HOME/.nix-profile/bin`, and that symlink
       # lives outside /nix, so the cache does not carry it.
-      - if: steps.nixcache.outputs.cache-hit == 'true'
-        name: "Put the restored Nix on PATH"
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "/nix/var/nix/profiles/per-user"
-          ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
-          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
-          # Without it every nix command dies with "experimental Nix feature
-          # 'nix-command' is disabled", which is what a restored cache produced.
-          if [[ ! -f /etc/nix/nix.conf ]]; then
-            sudo mkdir -p /etc/nix
-            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
-          fi
-          for candidate in "${HOME}/.nix-profile/bin" \
-                           "/nix/var/nix/profiles/default/bin" \
-                           "/nix/var/nix/profiles/per-user/${USER}/bin"; do
-            [[ -x "${candidate}/nix" ]] && printf '%s\n' "${candidate}" >> "${GITHUB_PATH}"
-          done
-          if ! command -v nix >/dev/null; then
-            # Last resort: the store is what was restored, so the binary is in it.
-            store_nix="$(find /nix/store -maxdepth 3 -name nix -type f -perm -u+x 2>/dev/null | head -1)"
-            if [[ -n "${store_nix}" ]]; then
-              printf '%s\n' "$(dirname "${store_nix}")" >> "${GITHUB_PATH}"
-            fi
-          fi
-
       - name: "Nix is available"
         shell: bash
         run: |
@@ -291,60 +237,14 @@ jobs:
       # absolute store paths and tar cannot create the missing parent, so a restore
       # into a runner with no /nix fails member by member ("Cannot open: No such file
       # or directory") and the job downloads everything anyway.
-      - name: "Prepare /nix for the cache"
-        shell: bash
-        run: |
-          sudo mkdir -p /nix
-          sudo chown -R "$(id -u):$(id -g)" /nix
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: nixcache
-        with:
-          path: |
-            /nix
-            /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-eval-v1
-          restore-keys: |
-            nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
-            nix-${{ runner.os }}-
-
-      - if: steps.nixcache.outputs.cache-hit != 'true'
-        uses: nixbuild/nix-quick-install-action@v35
-        with:
-          nix_conf: |
-            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
 
       # On a hit there was no installer to run, so `nix` is on disk but neither on
       # PATH nor reachable through the profile symlink the installer creates in
       # $HOME: nix-quick-install appends `$HOME/.nix-profile/bin`, and that symlink
       # lives outside /nix, so the cache does not carry it.
-      - if: steps.nixcache.outputs.cache-hit == 'true'
-        name: "Put the restored Nix on PATH"
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "/nix/var/nix/profiles/per-user"
-          ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
-          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
-          # Without it every nix command dies with "experimental Nix feature
-          # 'nix-command' is disabled", which is what a restored cache produced.
-          if [[ ! -f /etc/nix/nix.conf ]]; then
-            sudo mkdir -p /etc/nix
-            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
-          fi
-          for candidate in "${HOME}/.nix-profile/bin" \
-                           "/nix/var/nix/profiles/default/bin" \
-                           "/nix/var/nix/profiles/per-user/${USER}/bin"; do
-            [[ -x "${candidate}/nix" ]] && printf '%s\n' "${candidate}" >> "${GITHUB_PATH}"
-          done
-          if ! command -v nix >/dev/null; then
-            # Last resort: the store is what was restored, so the binary is in it.
-            store_nix="$(find /nix/store -maxdepth 3 -name nix -type f -perm -u+x 2>/dev/null | head -1)"
-            if [[ -n "${store_nix}" ]]; then
-              printf '%s\n' "$(dirname "${store_nix}")" >> "${GITHUB_PATH}"
-            fi
-          fi
-
       - name: "Nix is available"
         shell: bash
         run: |
@@ -395,49 +295,8 @@ jobs:
       # writes `-apps-v2` (that store plus the build closure). With one shared key the
       # gate saved first, `list`'s save was skipped, and every test job fetched git's
       # 15 MiB doc output again.
-      - name: "Prepare /nix for the cache"
-        shell: bash
-        run: |
-          sudo mkdir -p /nix
-          sudo chown -R "$(id -u):$(id -g)" /nix
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: nixcache
-        with:
-          path: |
-            /nix
-            /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v2
-          restore-keys: |
-            nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
-            nix-${{ runner.os }}-
-      - if: steps.nixcache.outputs.cache-hit != 'true'
-        uses: nixbuild/nix-quick-install-action@v35
-        with:
-          nix_conf: |
-            experimental-features = nix-command flakes
-      - if: steps.nixcache.outputs.cache-hit == 'true'
-        name: "Put the restored Nix on PATH"
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "/nix/var/nix/profiles/per-user"
-          ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
-          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
-          # Without it every nix command dies with "experimental Nix feature
-          # 'nix-command' is disabled", which is what a restored cache produced.
-          if [[ ! -f /etc/nix/nix.conf ]]; then
-            sudo mkdir -p /etc/nix
-            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
-          fi
-          for candidate in "${HOME}/.nix-profile/bin" \
-                           "/nix/var/nix/profiles/default/bin" \
-                           "/nix/var/nix/profiles/per-user/${USER}/bin"; do
-            [[ -x "${candidate}/nix" ]] && printf '%s\n' "${candidate}" >> "${GITHUB_PATH}"
-          done
-          command -v nix >/dev/null || {
-            store_nix="$(find /nix/store -maxdepth 3 -name nix -type f -perm -u+x 2>/dev/null | head -1)"
-            [[ -n "${store_nix}" ]] && printf '%s\n' "$(dirname "${store_nix}")" >> "${GITHUB_PATH}"
-          }
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: "Nix is available"
         shell: bash
         run: |
@@ -476,262 +335,6 @@ jobs:
           echo "discovered ${count} entrypoint(s)"
 
 
-      # Warm the BUILD closure, not just the evaluation inputs, then hand it to the
-      # test jobs as an artifact: a cache entry is immutable and per-lock, so it can
-      # never be extended, and a test that builds its own derivation still fetched 145
-      # paths / 111 MiB even with the warmed cache restored.
-      - name: "Warm the build closure"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          mapfile -t apps < <(nix eval --json ".#apps.${system}" | jq -r 'keys[]?')
-          if (( ${#apps[@]} == 0 )); then
-            echo "::error::no apps in .#apps.${system}; the test jobs would substitute everything"
-            exit 1
-          fi
-          # An app is `{ type = "app"; program = <string with store context>; }`, and
-          # neither spelling of it is a derivation. Both measured in this job:
-          #
-          #   nix build ".#apps.${system}.${app}"
-          #     error: expected flake output attribute 'apps.x86_64-linux.compile' to be
-          #     a derivation or path but found a set: { type = "app"; program = ... }
-          #
-          #   nix build ".#apps.${system}.${app}.program"
-          #     error: string '/nix/store/...-app/bin/app' has context with the output
-          #     'out' from derivation '/nix/store/...-app.drv', but the string is not the
-          #     right placeholder for this derivation output
-          #
-          # The derivation is the context of that string; `builtins.getContext` reads it.
-          # Getting this wrong is how run 45521299422 lost every test job: the warm step
-          # built nothing, the export step found no derivations, the upload step warned
-          # instead of failing, and all 98 test jobs died in actions/download-artifact
-          # with "Artifact not found for name: nix-store" before running a single test.
-          # So: no `|| echo`, no `|| continue`. If an app cannot be built, this job is
-          # red and says which one.
-          : > "${RUNNER_TEMP}/app-drvs.txt"
-          for app in "${apps[@]}"; do
-            echo "::group::warm app ${app}"
-            # `builtins.getFlake "path:$PWD"` reads the files as a plain directory and
-            # sets no revision, while the tests run `nix run "$ROOT#compile"` on a git
-            # checkout. `mkEvalApp` bakes `self.sourceInfo` into the app, so the two
-            # spellings produce DIFFERENT derivations -- measured: the warm job built
-            # q98iidds...-app.drv and the test then tried to build x0miqdjk...-app.drv
-            # from source (run 45529713443). Warming the wrong derivation is the same
-            # outcome as not warming: the test substitutes the whole toolchain.
-            #
-            # So the warm step asks for the app the same way a test does: through the
-            # flake reference `.#<app>`, from the repository root.
-            nix eval --raw "${PWD}#apps.${system}.${app}.program" \
-              --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' \
-              > "${RUNNER_TEMP}/app-drv.txt" || {
-              echo "::error::${app}: its program is not produced by a derivation"
-              exit 1
-            }
-            drv="$(cat "${RUNNER_TEMP}/app-drv.txt")"
-            echo "${app} -> ${drv}"
-            # --print-out-paths is not decoration. `nix-store -qR <drv>` lists the .drv
-            # files and NOT their outputs, so exporting from drvs alone shipped a store
-            # with every derivation and almost none of the things they produce: measured
-            # in run 45527750114, where the test jobs were handed 1896 paths and then
-            # tried to build bash-5.3 and Nix 2.31.3 from source. The output paths are
-            # what the tests execute, and they are what has to travel.
-            # `nix build --print-out-paths <drv>` is NOT the tool: given a .drv it prints
-            # the .drv back (measured), so app-outs.txt filled with derivations again and
-            # the test jobs rebuilt bash from source a second time. `nix-store -r` builds
-            # the derivation and prints the paths it produces, which is what has to travel.
-            nix-store -r "${drv}" > "${RUNNER_TEMP}/app-out.txt" 2>"${RUNNER_TEMP}/app-err.txt" || {
-              cat "${RUNNER_TEMP}/app-err.txt" >&2
-              echo "::error::${app} (${drv}) failed to build; the test jobs would substitute it"
-              exit 1
-            }
-            echo "  outputs: $(tr '\n' ' ' < "${RUNNER_TEMP}/app-out.txt")"
-            echo "  sourceInfo: $(nix eval --impure --raw --expr "let f = builtins.getFlake \"path:${PWD}\"; in builtins.toJSON (f.sourceInfo or {})" 2>/dev/null)"
-            echo "  worktree: $(git status --porcelain --untracked-files=all | wc -l) changed path(s)"
-            printf '%s\n' "${drv}" >> "${RUNNER_TEMP}/app-drvs.txt"
-            cat "${RUNNER_TEMP}/app-out.txt" >> "${RUNNER_TEMP}/app-outs.txt"
-            echo "::endgroup::"
-          done
-
-      # THE FLAKE INPUTS THE TESTS THEMSELVES FETCH.
-      #
-      # tests/test-emitter-provenance-repo-boundary.sh runs
-      #   nix flake archive --json "path:${repo_root}"
-      # which materialises every flake input into the store -- including the
-      # `github:esp0xdeadbeef/...` pins in flake.lock. With the store closed, an input
-      # that was never materialised here cannot be fetched there, and the test dies on
-      #   error: unable to download 'https://github.com/.../archive/<rev>.tar.gz'
-      # (run 45530546670). Running the same command once, here, is what makes the
-      # input closure part of the cache instead of part of the run.
-      - name: "Warm the flake inputs the provenance tests archive"
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -f tests/test-emitter-provenance-repo-boundary.sh ]]; then
-            echo "no provenance test in this repository; nothing to archive"
-            exit 0
-          fi
-          # The inputs of THIS lock are not enough. A sibling pins this repository:
-          # network-labs' flake.lock names `network-compiler` at rev 5a8682f..., and the
-          # provenance test runs a compiler from a labs intent, which materialises THAT
-          # revision -- so the closed store refused it with
-          #   unable to download 'https://github.com/.../archive/5a8682fe....tar.gz'
-          # (run 45532698895, the three remaining failures).
-          #
-          # So every `github:esp0xdeadbeef/*` pin named by a sibling lock is materialised
-          # too. This is a fixed, lock-defined set, read from the sibling checkouts the
-          # job already has.
-          # Rather than run the sibling lock parser here, ask jq: every github pin owned
-          # by this account, from every sibling lock that is present.
-          for sibling_lock in ../*/flake.lock; do
-            [[ -f "${sibling_lock}" ]] || continue
-            # EVERY github pin, not just this account's. Measured: after limiting the
-            # scan to esp0xdeadbeef, three jobs still failed on a THIRD-PARTY pin --
-            #   unable to download 'https://github.com/openconfig/public/archive/f3443...'
-            # (run 45539512049) -- because openconfig/public is an input of every lock in
-            # this fleet. A pin is a pin; the owner says nothing about whether the tests
-            # will materialise it.
-            jq -r '.nodes[] | (.locked // {}) | select(.type == "github" and .rev != null) | "github:\(.owner)/\(.repo)/\(.rev)"' \
-              "${sibling_lock}" 2>/dev/null || true
-          done | sort -u | grep -v '^$' > "${RUNNER_TEMP}/sibling-github-refs.txt" || true
-          printf 'sibling github pins: %s\n' "$(wc -l < "${RUNNER_TEMP}/sibling-github-refs.txt")"
-          while read -r ref; do
-            [[ -n "${ref}" ]] || continue
-            echo "::group::materialise ${ref}"
-            # `flake prefetch`, NOT `flake archive`.
-            #
-            # `archive` walks the pin's OWN inputs and therefore wants to update the
-            # pin's lock file, which fails for an older revision whose lock no longer
-            # matches:
-            #   error: … while updating the lock file of flake 'github:.../5a8682f'
-            # -- and --no-update-lock-file does not avoid it (measured in run 45536566784).
-            #
-            # `prefetch` materialises exactly the revision named, into a store path, and
-            # walks no inputs. The tests fetch these refs the same way, so this is the
-            # matching primitive: same revision in, same store path out.
-            nix flake prefetch --json "${ref}" \
-              > "${RUNNER_TEMP}/prefetch.json" || {
-              echo "::error::a sibling pins ${ref} and it could not be materialised"
-              exit 1
-            }
-            store_path="$(jq -r '.storePath' "${RUNNER_TEMP}/prefetch.json")"
-            # Recorded PER REF. The apps loop below is a separate loop, so reading
-            # prefetch.json there returned the LAST ref's path for every iteration and
-            # every revision reported "no apps" (run 45549346309).
-            printf '%s\t%s\n' "${ref}" "${store_path}" >> "${RUNNER_TEMP}/ref-paths.tsv"
-            printf '%s\n' "${store_path}" >> "${RUNNER_TEMP}/app-outs.txt"
-            echo "  ${store_path}"
-            echo "::endgroup::"
-          done < "${RUNNER_TEMP}/sibling-github-refs.txt"
-
-      # THE ONE TOOL THE RUNNER IMAGE LACKS, WARMED BY ITSELF.
-      #
-      # jq, git and nix are all present on a hosted runner (or provided by CI), so the
-      # only thing the suites actually need from the store is ripgrep -- which used to
-      # arrive as a 2.5 MB curl into ~/.local/bin. This warms just that derivation's
-      # closure: 8 paths, a couple of MB, two seconds.
-      #
-      # Deliberately NOT the whole devShell: `pkgs.mkShell`'s closure carries a C
-      # toolchain (gcc 264 MB, python3 107 MB, perl 55 MB -- measured 684 MB / 133
-      # paths). Shipping that to deliver an rg is what made the artifact 1.49 GiB, and
-      # a compiler on PATH is not something the suites should be given. The full
-      # devShell stays in the flake for `nix develop`; CI takes only ripgrep from it.
-      - name: "Warm ripgrep from the test environment"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          if ! rg_out="$(nix build --no-link --print-out-paths --impure \
-                 --expr "let f = builtins.getFlake \"path:${PWD}\"; p = f.inputs.nixpkgs.legacyPackages.\"${system}\"; in p.lib.getBin p.ripgrep" 2>/dev/null)"; then
-            echo "::warning::could not warm ripgrep; the test job will say so"
-            exit 0
-          fi
-          echo "ripgrep: ${rg_out}"
-          nix-store -qR "${rg_out}" >> "${RUNNER_TEMP}/app-outs.txt"
-          printf 'ripgrep closure: %s path(s)\n' "$(nix-store -qR "${rg_out}" | wc -l)"
-
-      - name: "Export the store closure for the test jobs"
-        shell: bash
-        run: |
-          set -uo pipefail
-          # The derivations the warm step resolved and built. Read from the manifest
-          # rather than recomputed: an app whose program the previous step could not
-          # turn into a derivation must fail there, once, and not be silently skipped
-          # here as well.
-          if [[ ! -s "${RUNNER_TEMP}/app-drvs.txt" ]]; then
-            echo "::error::the warm step recorded no app derivations"
-            exit 1
-          fi
-          mapfile -t drvs < "${RUNNER_TEMP}/app-drvs.txt"
-          : > /tmp/store-paths.txt
-          # THE DERIVATIONS AND THEIR OUTPUTS, BOTH.
-          #
-          # `nix-store -qR <drv>` walks a derivation's references, which is other .drv
-          # files and the inputs they name -- not the path the derivation PRODUCES. So
-          # this loop shipped 1896 paths that were mostly derivations, and a test that
-          # ran `nix run .#compile` found no compiler: it went on to build bash-5.3 and
-          # Nix 2.31.3 from source and died on `bash-5.3.tar.gz` from ftpmirror.gnu.org,
-          # which the closed store then refused (run 45527750114).
-          #
-          # The real outputs are recorded by the warm step. Their runtime closure is what
-          # an executed binary needs, and `-qR` on an output does include it.
-          for drv in "${drvs[@]}"; do
-            nix-store -qR "${drv}" >> /tmp/store-paths.txt
-          done
-          if [[ -s "${RUNNER_TEMP}/flake-input-paths.txt" ]]; then
-            mapfile -t finputs < "${RUNNER_TEMP}/flake-input-paths.txt"
-            for fin in "${finputs[@]}"; do
-              nix-store -qR "${fin}" >> /tmp/store-paths.txt
-            done
-            echo "flake inputs: ${#finputs[@]}"
-          fi
-          if [[ -s "${RUNNER_TEMP}/labs-paths.txt" ]]; then
-            mapfile -t lp < "${RUNNER_TEMP}/labs-paths.txt"
-            for lp_one in "${lp[@]}"; do
-              nix-store -qR "${lp_one}" >> /tmp/store-paths.txt
-            done
-            echo "network-labs closure: ${#lp[@]}"
-          fi
-          if [[ -s "${RUNNER_TEMP}/app-outs.txt" ]]; then
-            mapfile -t outs < "${RUNNER_TEMP}/app-outs.txt"
-            for out in "${outs[@]}"; do
-              nix-store -qR "${out}" >> /tmp/store-paths.txt
-            done
-            echo "app outputs: ${#outs[@]}"
-          else
-            echo "::error::no app output paths recorded; the export would carry derivations only"
-            exit 1
-          fi
-          sort -u -o /tmp/store-paths.txt /tmp/store-paths.txt
-          # Zero paths exported is the exact failure that shipped: the artifact step
-          # then finds no file, warns, and 98 jobs download nothing. Fail here, where
-          # the cause is visible, instead of 98 times downstream.
-          paths_count="$(wc -l < /tmp/store-paths.txt)"
-          echo "exporting ${paths_count} store paths"
-          if (( paths_count == 0 )); then
-            echo "::error::exported 0 store paths; the test jobs would substitute everything"
-            exit 1
-          fi
-          mapfile -t paths < /tmp/store-paths.txt
-          # -3, NOT -19. Measured on a real 1.49 GiB export: -19 took 58 s on 24 cores
-          # (and far longer on a 4-core runner) to save 9 MB against -3's 1 s, on an
-          # artifact kept for one day. 7z -mx=1 was 3 s and 43 MB against zstd -3's 1 s
-          # and 42 MB, so it is not the better tool here; zstd at its default level is.
-          #
-          # The stream is piped, so the size is diagnostics only: the artifact is what
-          # the next job imports, and a compression level that stalls or OOMs the
-          # exporter costs the whole sweep.
-          nix-store --export "${paths[@]}" | zstd -3 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
-          ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nix-store
-          path: "${{ runner.temp }}/nix-store.nar.zst"
-          retention-days: 1
-          # `warn` here is how the broken warm step stayed invisible: the artifact
-          # silently did not exist and every consumer failed 30 minutes later.
-          if-no-files-found: error
 
   test:
     name: "${{ matrix.test || format('shard {0}', matrix.shard) }}"
@@ -770,59 +373,23 @@ jobs:
       # absolute store paths and tar cannot create the missing parent, so a restore
       # into a runner with no /nix fails member by member ("Cannot open: No such file
       # or directory") and the job downloads everything anyway.
-      - name: "Prepare /nix for the cache"
-        shell: bash
-        run: |
-          sudo mkdir -p /nix
-          sudo chown -R "$(id -u):$(id -g)" /nix
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: nixcache
-        with:
-          path: |
-            /nix
-            /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v2
-          restore-keys: |
-            nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
-            nix-${{ runner.os }}-
-
-      - if: steps.nixcache.outputs.cache-hit != 'true'
-        uses: nixbuild/nix-quick-install-action@v35
-        with:
-          nix_conf: |
-            experimental-features = nix-command flakes
-
-      # On a hit there was no installer to run, so `nix` is on disk but neither on
-      # PATH nor reachable through the profile symlink the installer creates in
-      # $HOME: nix-quick-install appends `$HOME/.nix-profile/bin`, and that symlink
-      # lives outside /nix, so the cache does not carry it.
-      - if: steps.nixcache.outputs.cache-hit == 'true'
-        name: "Put the restored Nix on PATH"
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "/nix/var/nix/profiles/per-user"
-          ln -sfn "/nix/var/nix/profiles/per-user/${USER}" "${HOME}/.nix-profile"
-          # /etc/nix/nix.conf comes from the installer, which did not run on a hit.
-          # Without it every nix command dies with "experimental Nix feature
-          # 'nix-command' is disabled", which is what a restored cache produced.
-          if [[ ! -f /etc/nix/nix.conf ]]; then
-            sudo mkdir -p /etc/nix
-            printf 'experimental-features = nix-command flakes\n' | sudo tee /etc/nix/nix.conf >/dev/null
-          fi
-          for candidate in "${HOME}/.nix-profile/bin" \
-                           "/nix/var/nix/profiles/default/bin" \
-                           "/nix/var/nix/profiles/per-user/${USER}/bin"; do
-            [[ -x "${candidate}/nix" ]] && printf '%s\n' "${candidate}" >> "${GITHUB_PATH}"
-          done
-          if ! command -v nix >/dev/null; then
-            # Last resort: the store is what was restored, so the binary is in it.
-            store_nix="$(find /nix/store -maxdepth 3 -name nix -type f -perm -u+x 2>/dev/null | head -1)"
-            if [[ -n "${store_nix}" ]]; then
-              printf '%s\n' "$(dirname "${store_nix}")" >> "${GITHUB_PATH}"
-            fi
-          fi
+      # THE STANDARD WAY TO CACHE NIX IN GITHUB ACTIONS.
+      #
+      # Everything here used to be hand-rolled: actions/cache over /nix keyed by the
+      # lock, a prepare-the-directory step, a conditional installer, a restore hack that
+      # rebuilt the profile symlink and /etc/nix/nix.conf by hand, a 1.5 GiB
+      # `nix-store --export` artifact, and six warm steps that tried to guess what to
+      # pre-build. Magic Nix Cache does all of it: it is a local binary cache that pushes
+      # whatever a job builds into the GitHub Actions cache and serves it back to every
+      # other job, including matrix jobs. From its README: "Everything built in your
+      # workflow is cached."
+      #
+      #   - uses: DeterminateSystems/nix-installer-action@main
+      #   - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      # /nix is created by the installer; nothing has to be prepared for a cache any more.
 
       - name: "Nix is available"
         shell: bash
@@ -842,79 +409,40 @@ jobs:
       # Without it this step "succeeds", the test runs against a cold store, and it
       # substitutes the whole closure from cache.nixos.org -- which looks like a pass
       # and is the opposite of what the warm job exists for.
-      - uses: actions/download-artifact@v4
-        with:
-          name: nix-store
-          path: "${{ runner.temp }}"
-      - name: "Import the passed nix store"
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -s "${RUNNER_TEMP}/nix-store.nar.zst" ]]; then
-            echo "::error::no store artifact; every test in this job would substitute from the network"
-            exit 1
-          fi
-          zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >"${RUNNER_TEMP}/imported-paths.txt"
-          printf 'imported %s path(s)\n' "$(grep -c . "${RUNNER_TEMP}/imported-paths.txt")"
-
-      # WARM THIS JOB'S OWN APP -- AND AGAIN INSIDE THE NAMESPACE.
+      # WARM THE CLOSURE THIS JOB WILL NEED, WHILE THE CACHE IS STILL OPEN.
       #
-      # The app derivation is computed from the flake source, and the test computes it
-      # as ROOT inside `sudo -n env PATH=... unshare -n`. Three runs measured a
-      # different derivation on each side (5vjl2hf8 / 2k7kmfb3, 9i2w9a93 / ni3s22q5),
-      # and every locally-reproducible explanation was ruled out: .git, untracked
-      # files, cwd, a foreign git repo, HOME, XDG_CACHE_HOME, safe.directory, and
-      # --impure with --no-warn-dirty all give the same drv here.
+      # Magic Nix Cache is a substituter: it serves what other jobs built out of the
+      # GitHub Actions cache. So it has to be reachable while this job warms, and it has
+      # to be gone by the time a test runs -- otherwise "offline" would mean "we served
+      # it from a cache instead of the network", which is a different claim.
       #
-      # So this step does what can be verified: it warms from the runner identity,
-      # BEFORE the store closes so the network is available. The step AFTER the store
-      # closes then asks the same question as root inside the namespace and reports
-      # whether the two agree, which is the one fact the logs have not yet stated.
-      - name: "Warm this job's own app closure"
+      # That is exactly the order below: warm here, close the store after.
+      - name: "Warm the closure this job needs"
         shell: bash
         run: |
           set -uo pipefail
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          drv="$(nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
-          if [[ -z "${drv}" ]]; then
-            echo "no compile app derivable here; the tests will say if they need one"
-            exit 0
-          fi
-          echo "runner-user compile app: ${drv}"
-          prog="$(nix eval --raw "${PWD}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
-          # The test resolves through `nix run --no-warn-dirty --no-write-lock-file`,
-          # which implies --impure. Ask the same way and report the drv, so a flag
-          # difference cannot hide between the warm and the run.
-          test_style_drv="$(nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || test_style_drv=""
-          echo "test-style compile app: ${test_style_drv}"
-          if [[ -n "${prog}" ]] && nix build --no-link "${prog}" > /dev/null 2>&1; then
-            echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
+          # The test environment: this is what used to be a ripgrep curl and four
+          # hand-rolled warm steps. One command, in the flake, via the documented shell.
+          if nix build --no-link ".#devShells.${system}.default" 2>/dev/null; then
+            echo "PASS WARM-DEVSHELL: .#devShells.${system}.default is present"
           else
-            echo "::warning::the build closure of ${drv} could not be completed"
+            echo "::warning::the devShell did not build"
           fi
-          printf '%s\n' "${drv}" > "${RUNNER_TEMP}/warmed-drv.txt"
+          # The app the tests execute. `nix build .#apps.<sys>.<name>` is NOT the spelling
+          # -- an app is a set, and even `.program` is a string with context, which Nix
+          # rejects ("the string is not the right placeholder for this derivation
+          # output", measured). `nix run`'s installable is the supported way, so the
+          # program path is resolved and realised directly.
+          for app in $(nix eval --json ".#apps.${system}" --apply builtins.attrNames 2>/dev/null | jq -r '.[]?' 2>/dev/null || true); do
+            prog="$(nix eval --raw ".#apps.${system}.${app}.program" 2>/dev/null)" || continue
+            if nix build --no-link "${prog}" 2>/dev/null; then
+              echo "PASS WARM-APP: ${app} -> ${prog}"
+            else
+              echo "::warning::app ${app} did not warm"
+            fi
+          done
 
-      # THE STORE IS CLOSED FROM HERE DOWN.
-      #
-      # "The cache is hitting" was true for the /nix tarball and false for what the
-      # tests do with it: a test builds its own derivation, and with a cache hit but
-      # no closure the substitution is a network fetch from cache.nixos.org that no
-      # step reported. So the network is removed rather than measured:
-      #
-      #   substituters =            no substituter to fetch from
-      #   builders      =           no remote builder to offload to
-      #   --offline                 fail rather than resolve a missing path
-      #   flake-registry            no HTTP registry lookup
-      #
-      # `--offline` alone is not enough: it still consults configured substituters
-      # when they are reachable, so the substituter list is emptied as well. Both,
-      # then assert, then run.
-      #
-      # This is a tripwire, not a preference. If a test needs something the warm job
-      # did not anticipate, it fails HERE, with the path it wanted, instead of
-      # silently downloading 111 MiB per job and reporting green.
       - name: "Close the store: no substituters, no network"
         shell: bash
         run: |
@@ -1078,39 +606,6 @@ jobs:
           fi
           echo "PASS OFFLINE-NAMESPACE: no network, and Nix reports it"
 
-      # ROOTLESS PODMAN, THE OPTION THAT DOES NOT DEPEND ON THE HOST'S NAMESPACE POLICY.
-      #
-      # `sudo -n unshare -n` works on today's runner images. It is still a root
-      # namespace created by a privileged helper, and a runner image that stops granting
-      # it would turn every test job red for a reason unrelated to the commit. Rootless
-      # podman gives the same guarantee with a different failure mode: measured here,
-      # `podman run --network=none` has no route AND no resolver --
-      #
-      #   wget: bad address 'cache.nixos.org'
-      #
-      # which is a stronger statement than "unshare succeeded", because it proves the
-      # fetcher cannot even resolve a name.
-      #
-      # Recorded, not required: a repository whose tests do not run inside a container
-      # still gets the namespace. When podman is usable, NIX_CONTAINER_NETNS names the
-      # command the run step should wrap tests in, and the probe below prefers it.
-      - name: "Compare the warmed derivation with the one root resolves"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          warmed="$(cat "${RUNNER_TEMP}/warmed-drv.txt" 2>/dev/null || true)"
-          root_drv="$(${NIX_NETNS:?} nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || root_drv=""
-          echo "warmed (runner): ${warmed:-<none>}"
-          echo "root resolves:   ${root_drv:-<none>}"
-          if [[ -n "${warmed}" && "${warmed}" == "${root_drv}" ]]; then
-            echo "PASS WARM-IDENTITY: the derivation is the same for both identities"
-          else
-            echo "::error::the derivation root resolves differs from the warmed one; this is why the test rebuilds"
-            exit 1
-          fi
-
       - name: "Check rootless podman as a fallback sandbox"
         shell: bash
         run: |
@@ -1259,60 +754,32 @@ jobs:
       # Nix store copies the binary but not its closure, and the copied jq failed with
       # "cannot execute: required file not found" (it loads libjq.so.1 from a store
       # path the next job does not have). A store path is not a portable binary.
-      - name: "Put the declared tools on PATH"
-        shell: bash
-        env:
-          TEST_NAME: ${{ matrix.test }}
+      # THE DOCUMENTED WAY TO RUN A STEP IN THE FLAKE'S ENVIRONMENT.
+      #
+      # From cachix/install-nix-action's README ("How do I configure steps to use my
+      # flake's development environment?"), which is the standard reference for this:
+      #
+      #   - name: Run a command with nix develop
+      #     shell: 'nix develop -c bash -e {0}'
+      #     run: echo "hello, pure world!"
+      #
+      # The step's SHELL is the devShell. Nix assembles PATH itself, so there is nothing
+      # to read out of the flake and nothing to append to GITHUB_PATH -- which is what
+      # the previous attempts got wrong in five different ways (`.packages`, `.out`,
+      # `.dev`, nativeBuildInputs reporting 0, and print-dev-env's whole-stdenv PATH).
+      #
+      # The run step below uses the same shell, so the suites execute inside the
+      # devShell and get exactly the tools it declares.
+      - name: "Check the devShell provides the test tools"
+        shell: 'nix develop -c bash -e {0}'
         run: |
           set -euo pipefail
-          # THE DECLARATION IS THE FLAKE'S; THIS STEP ONLY WIRES IT UP.
-          #
-          # The tools used to be the runner image plus four curls in this workflow
-          # (ripgrep 2.5 MB, sops 45 MB, yq 10 MB), which meant nothing was declared and
-          # nothing could be cached. `.#devShells.<system>.default` now names them.
-          #
-          # Two things this step must get right, both measured the hard way:
-          #
-          #   * `nix build` of a mkShell produces a marker derivation, not a bin/; only
-          #     `nix develop` assembles PATH. A workflow step needs the tools for LATER
-          #     steps, so each package's bin/ is appended to GITHUB_PATH.
-          #   * the attribute to read is nativeBuildInputs -- a mkShell exposes no
-          #     `.packages` (the log said "devShell packages: 0"), and the flake asks for
-          #     `lib.getBin` because jq and zstd are split-output packages whose binaries
-          #     live in `-bin`, not in `.out` or `.dev`.
-          system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          extra_path=""
-          # NO `print-dev-env` HERE. It BUILDS the devShell, and this step runs after the
-          # store is closed, so in CI it failed with its stderr discarded and left
-          # `declared tool dirs: <none>`. The devShell is warmed in the `list` job
-          # instead, and what arrives here is the store path it produced.
-          #
-          # jq, git and nix are already available -- the image has the first two and CI is
-          # running the third. ripgrep is the one the image lacks, and the `list` job now
-          # warms it; here it only has to be found.
-          if ! command -v rg >/dev/null; then
-            # Ask the flake, offline. The store already holds the closure from the
-            # `list` job, so this resolves without fetching: --offline would be the
-            # wrapper's job, but it is applied here too so a miss fails rather than
-            # reaching the network.
-            rg_bin=""
-            if rg_out="$(nix --offline build --no-link --print-out-paths --impure \
-                 --expr "let f = builtins.getFlake \"path:${PWD}\"; p = f.inputs.nixpkgs.legacyPackages.\"${system_name}\"; in p.lib.getBin p.ripgrep" 2>/dev/null)"; then
-              rg_bin="${rg_out}/bin"
-            fi
-            if [[ -n "${rg_bin}" && -x "${rg_bin}/rg" ]]; then
-              printf '%s\n' "${rg_bin}" >> "$GITHUB_PATH"
-              extra_path="${rg_bin}:"
-            fi
-          fi
           for tool in nix jq git rg; do
-            found="$(PATH="${extra_path}${PATH}" command -v "${tool}" 2>/dev/null || true)"
-            if [[ -z "${found}" ]]; then
-              echo "::error::${tool} is needed by the suites and is not on PATH"
-              echo "::error::searched: ${extra_path:-<nothing extra>}"
+            command -v "${tool}" >/dev/null || {
+              echo "::error::${tool} is not in .#devShells.default"
               exit 1
-            fi
-            printf '  %-6s %s\n' "${tool}" "${found}"
+            }
+            printf '  %-6s %s\n' "${tool}" "$(command -v "${tool}")"
           done
 
       # The suites resolve sibling repositories as ../network-*, the developer
@@ -1414,7 +881,10 @@ jobs:
           git -C "${target}" checkout --quiet FETCH_HEAD
 
       - name: "Run ${{ matrix.test || format('shard {0}', matrix.shard) }}"
-        shell: bash
+        # The devShell IS the shell, per install-nix-action's README. The suites then run
+        # with exactly the tools the flake declares, and nothing has to be copied onto
+        # PATH by hand.
+        shell: 'nix develop -c bash -e {0}'
         env:
           # Matrix values are derived from filenames, which a pull request controls.
           # They are passed as ENVIRONMENT, never spliced into a shell line: a file

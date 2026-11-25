@@ -664,7 +664,22 @@ jobs:
           exec "\${real_nix}" --offline "\$@"
           WRAPPER
           chmod +x "${wrapper_dir}/nix"
-          printf '%s\n' "${wrapper_dir}" >> "$GITHUB_PATH"
+          # NOT on GITHUB_PATH, ON PURPOSE.
+          #
+          # The test steps use `shell: 'nix develop -c bash -e {0}'`. If this directory
+          # is on PATH at the time that shell is constructed, the `nix` in the shell line
+          # resolves to the wrapper -- so `nix develop` itself runs with `--offline`,
+          # cannot reach Magic Nix Cache or any substituter, and bootstraps gcc and bash
+          # from source. Measured in run 45663674942:
+          #
+          #   shell: /home/runner/work/_temp/offline-bin/nix develop -c bash -e {0}
+          #   these 151 derivations will be built: ... bootstrap-tools, gcc-15.2.0
+          #
+          # The wrapper is exported through RUNNER_TEMP so the run step can prepend it
+          # INSIDE the shell, where it belongs: the tests must be offline, the act of
+          # constructing their environment must not be.
+          printf 'NIX_OFFLINE_WRAPPER_DIR=%s\n' "${wrapper_dir}" >> "$GITHUB_ENV"
+          echo "wrapper (applied inside the shell): ${wrapper_dir}/nix -> ${real_nix} --offline"
           echo "wrapper: ${wrapper_dir}/nix -> ${real_nix} --offline"
           "${wrapper_dir}/nix" --version
           # Proof, as configuration rather than as an anecdote: with the wrapper on PATH,
@@ -777,30 +792,16 @@ jobs:
       # THE DOCUMENTED WAY TO RUN A STEP IN THE FLAKE'S ENVIRONMENT.
       #
       # From cachix/install-nix-action's README ("How do I configure steps to use my
-      # flake's development environment?"), which is the standard reference for this:
+      # flake's development environment?"):
       #
       #   - name: Run a command with nix develop
       #     shell: 'nix develop -c bash -e {0}'
-      #     run: echo "hello, pure world!"
       #
-      # The step's SHELL is the devShell. Nix assembles PATH itself, so there is nothing
-      # to read out of the flake and nothing to append to GITHUB_PATH -- which is what
-      # the previous attempts got wrong in five different ways (`.packages`, `.out`,
-      # `.dev`, nativeBuildInputs reporting 0, and print-dev-env's whole-stdenv PATH).
-      #
-      # The run step below uses the same shell, so the suites execute inside the
-      # devShell and get exactly the tools it declares.
-      - name: "Check the devShell provides the test tools"
-        shell: 'nix develop -c bash -e {0}'
-        run: |
-          set -euo pipefail
-          for tool in nix jq git rg; do
-            command -v "${tool}" >/dev/null || {
-              echo "::error::${tool} is not in .#devShells.default"
-              exit 1
-            }
-            printf '  %-6s %s\n' "${tool}" "$(command -v "${tool}")"
-          done
+      # That is applied to the RUN step below, so the suites execute inside the devShell
+      # and get exactly the tools it declares. There is deliberately no separate
+      # "check the tools exist" step in this shell: it would construct the environment a
+      # second time after the store is closed, which is the bootstrap that cost run
+      # 45663674942 its 151 derivations. The run step proves the tools by using them.
 
       # The suites resolve sibling repositories as ../network-*, the developer
       # layout. Without them the cross-repository cases fail (or, worse, skip), and
@@ -940,6 +941,20 @@ jobs:
           # `2>&1 | tee` loses the interleaving Nix uses on a tty, and the assertion
           # in the next step greps this file. `-e` propagates the test's exit status,
           # which is why the if/else below still sees a failure as a failure.
+          # THE WRAPPER GOES ON PATH HERE, INSIDE THE SHELL.
+          #
+          # It is deliberately absent from the shell's own PATH (see "Force --offline on
+          # every nix invocation"): if it were there, `nix develop -c bash` would resolve
+          # `nix` to the wrapper and the shell would be built offline. Prepending it now
+          # means every `nix` a TEST calls is `nix --offline`, while the shell that
+          # contains them was constructed with the cache open.
+          if [[ -n "${NIX_OFFLINE_WRAPPER_DIR:-}" && -x "${NIX_OFFLINE_WRAPPER_DIR}/nix" ]]; then
+            export PATH="${NIX_OFFLINE_WRAPPER_DIR}:${PATH}"
+            echo "tests run with $(command -v nix) (offline wrapper)"
+          else
+            echo "::error::the offline wrapper is missing; the tests would run with network access"
+            exit 1
+          fi
           command -v script >/dev/null || { echo "util-linux script(1) is required" >&2; exit 1; }
           # The test runs INSIDE the network namespace, using whichever form the host
           # offers (see "Verify the test can run with no network").

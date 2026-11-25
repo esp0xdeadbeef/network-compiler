@@ -695,8 +695,8 @@ jobs:
             echo "::error::no store artifact; every test in this job would substitute from the network"
             exit 1
           fi
-          zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >/dev/null
-          echo "imported $(zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --query --hash 2>/dev/null | wc -l) object(s)"
+          zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >"${RUNNER_TEMP}/imported-paths.txt"
+          printf 'imported %s path(s)\n' "$(grep -c . "${RUNNER_TEMP}/imported-paths.txt")"
 
       # THE STORE IS CLOSED FROM HERE DOWN.
       #
@@ -721,22 +721,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Nix has no `substituters` ENVIRONMENT variable. Lines like
+          # `substituters =` in $GITHUB_ENV are not settings a Nix process ever reads,
+          # and `substituters ` is not even a valid environment name. The settings live
+          # in nix.conf, and NIX_CONFIG is appended to it, so the closed configuration
+          # goes to both: NIX_CONFIG for this step and every later one, /etc/nix/nix.conf
+          # for a `nix` that does not inherit this environment (a test that re-execs
+          # through sudo, for instance).
+          #
+          # Built line by line: a YAML block scalar would carry this file's indentation
+          # into the value, and Nix would read "          substituters" as a name.
+          closed_config="$(printf '%s\n' \
+            'substituters =' \
+            'extra-substituters =' \
+            'builders =' \
+            'builders-use-substitutes = false' \
+            'flake-registry =' \
+            'experimental-features = nix-command flakes')"
           {
-            printf 'substituters =\n'
-            printf 'extra-substituters =\n'
-            printf 'builders =\n'
-            printf 'builders-use-substitutes = false\n'
-            printf 'flake-registry =\n'
+            echo 'NIX_CONFIG<<__CLOSED_CONFIG__'
+            printf '%s\n' "${closed_config}"
+            echo '__CLOSED_CONFIG__'
           } >> "$GITHUB_ENV"
-          {
-            printf 'substituters =\n'
-            printf 'extra-substituters =\n'
-            printf 'builders =\n'
-            printf 'builders-use-substitutes = false\n'
-            printf 'flake-registry =\n'
-            printf 'experimental-features = nix-command flakes\n'
-          } | sudo tee /etc/nix/nix.conf >/dev/null
-          nix config show | grep -E '^(substituters|builders) ' || true
+          printf '%s\n' "${closed_config}" | sudo tee -a /etc/nix/nix.conf >/dev/null
+          export NIX_CONFIG="${closed_config}"
+          # Asserted, not assumed: measured here, these lines empty both lists, and
+          # `nix eval` of this flake still works with them set.
+          printf 'substituters: [%s]\nbuilders: [%s]\n' \
+            "$(nix config show substituters)" "$(nix config show builders)"
+          if [[ -n "$(nix config show substituters | tr -d '[:space:]')" ]]; then
+            echo "::error::substituters are still configured; a missing path would be downloaded"
+            exit 1
+          fi
 
       # `--offline` is a FLAG, not a setting, and the suites shell out to bare `nix`
       # 200+ times (`nix run`, `nix build`, `nix flake archive`) in ways no NIX_CONFIG
@@ -763,15 +779,40 @@ jobs:
       #
       # That warning is the point: enforcement by the kernel, reported by Nix, and
       # visible in the transcript the assertion below greps.
+      # A NETWORK NAMESPACE, NOT JUST A FLAG.
+      #
+      # Measured: `nix --offline` does NOT block flake INPUT fetching --
+      # `nix --offline flake prefetch github:...` still opens a connection, because
+      # `--offline` governs substitution, not fetchers. So the test runs in a network
+      # namespace, where Nix itself reports
+      #   warning: you don't have Internet access; disabling some network-dependent
+      #   features
+      #
+      # Which namespace a host offers is a property of the host, and this fleet already
+      # measured it: tests/lib/nft-netns-check.sh in
+      # network-renderer-containerlab-linux-backend records that a GitHub-hosted
+      # ubuntu-26.04 runner restricts unprivileged user namespaces, so `unshare -Urn`
+      # dies with
+      #   unshare: write failed /proc/self/uid_map: Operation not permitted
+      # while `sudo -n unshare -n` works (the runners give passwordless sudo; the
+      # /nix prepare step already uses it). Same order as that helper: user namespace
+      # first, root namespace second, hard failure if neither -- never a silent pass.
       - name: "Verify the test can run with no network"
         shell: bash
         run: |
           set -euo pipefail
-          if ! unshare --net --map-root-user true 2>/dev/null; then
-            echo "::error::cannot create a network namespace; the offline guarantee would be unverified"
+          netns=""
+          if unshare -Urn true >/dev/null 2>&1; then
+            netns="unshare -Urn"
+          elif sudo -n unshare -n true >/dev/null 2>&1; then
+            netns="sudo -n unshare -n"
+          else
+            echo "::error::this host gives no network namespace, so an offline run cannot be verified"
             exit 1
           fi
-          out="$(unshare --net --map-root-user nix eval --raw --expr '1' 2>&1 || true)"
+          printf 'NIX_NETNS=%s\n' "${netns}" >> "$GITHUB_ENV"
+          echo "namespace: ${netns}"
+          out="$(${netns} nix eval --raw --expr '1' 2>&1 || true)"
           if ! grep -qi "don't have Internet access" <<<"${out}"; then
             echo "::error::Nix did not report offline mode inside the namespace"
             printf '%s\n' "${out}" | head -10
@@ -805,19 +846,32 @@ jobs:
           printf '%s\n' "${wrapper_dir}" >> "$GITHUB_PATH"
           echo "wrapper: ${wrapper_dir}/nix -> ${real_nix} --offline"
           "${wrapper_dir}/nix" --version
-          # Proof the wrapper is what a test will get, and that it is offline: a
-          # forced fetch of a path that is not in the store must fail, and must fail
-          # with the offline error rather than a download.
-          printf 'substituters: %s\n' "$(nix config show substituters)"
-          if nix --offline build --no-link nixpkgs#hello 2>&1 | tee "${RUNNER_TEMP}/offline-probe.log"; then
-            echo "::error::the offline probe SUCCEEDED, which means a substituter answered"
+          # Proof, as configuration rather than as an anecdote: with the wrapper on PATH,
+          # any `nix` a test invokes is `nix --offline`, and there is no substituter and
+          # no remote builder for it to reach.
+          #
+          # Not asserted here: "build something that is not in the store and watch it
+          # fail". Whether a package is already in the restored store is a fact about the
+          # cache, not about the configuration, so such a probe passes or fails for
+          # reasons unrelated to what this step sets up. Measured once: `nix --offline
+          # build nixpkgs#hello` SUCCEEDED on a warm store and looked like a broken
+          # guarantee when it was only a hit.
+          substituters="$(nix config show substituters)"
+          builders="$(nix config show builders)"
+          printf 'substituters: %s\nbuilders: %s\n' "${substituters}" "${builders}"
+          if [[ -n "${substituters//[[:space:]]/}" ]]; then
+            echo "::error::substituters are still configured ('${substituters}'); a missing path would be downloaded"
             exit 1
           fi
-          grep -qiE 'offline|not available|do not know how to build' "${RUNNER_TEMP}/offline-probe.log" || {
-            echo "::error::the probe failed for the wrong reason; see the log above"
+          if [[ -n "${builders//[[:space:]]/}" ]]; then
+            echo "::error::remote builders are still configured ('${builders}')"
             exit 1
-          }
-          echo "PASS OFFLINE-PROBE: a fetch not in the store fails locally, it does not download"
+          fi
+          if [[ "$(command -v nix)" != "${wrapper_dir}/nix" ]]; then
+            echo "::error::the nix a test resolves is not the offline wrapper"
+            exit 1
+          fi
+          echo "PASS OFFLINE-CONFIG: nix resolves to the wrapper, no substituter, no builder"
 
       - id: discover
         name: "Discover entrypoints"
@@ -1071,11 +1125,15 @@ jobs:
           # in the next step greps this file. `-e` propagates the test's exit status,
           # which is why the if/else below still sees a failure as a failure.
           command -v script >/dev/null || { echo "util-linux script(1) is required" >&2; exit 1; }
-          # The test runs INSIDE the network namespace: no route out, so no fetcher and
-          # no substituter can reach anything, whatever flag the test passes.
+          # The test runs INSIDE the network namespace, using whichever form the host
+          # offers (see "Verify the test can run with no network").
+          #
+          # The test name is expanded by the shell `script -c` starts, from the
+          # environment -- never spliced into this line, because a filename a pull
+          # request controls would otherwise be code here.
           if [[ -n "${TEST_NAME:-}" ]]; then
-            exec unshare --net --map-root-user \
-              script -q -e -c "bash tests/run-one.sh 'tests/${TEST_NAME}'" "${RUNNER_TEMP}/run.log"
+            exec ${NIX_NETNS:?} \
+              script -q -e -c 'bash tests/run-one.sh "tests/${TEST_NAME}"' "${RUNNER_TEMP}/run.log"
           fi
 
           # The same discovery and the same sort as the list job, so shard N owns
@@ -1099,8 +1157,8 @@ jobs:
           printf 'shard %s/%s runs %s test(s)\n' "${SHARD}" "${SHARDS}" "${#mine[@]}"
           failures=0
           for test_path in "${mine[@]}"; do
-            if ! unshare --net --map-root-user \
-                   script -q -e -c "bash tests/run-one.sh '${test_path}'" "${RUNNER_TEMP}/run.log"; then
+            if ! TEST_PATH="${test_path}" ${NIX_NETNS:?} \
+                   script -q -e -c 'bash tests/run-one.sh "${TEST_PATH}"' "${RUNNER_TEMP}/run.log"; then
               failures=$((failures + 1))
             fi
           done

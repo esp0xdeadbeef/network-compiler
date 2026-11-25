@@ -38,7 +38,14 @@ reg_expr() {
       reg = import "'"${repo_root}"'/lib/derivation-registry/default.nix" { lib = pkgs.lib; };
     in
       '"$1"''
-  } 2>&1 | grep -v '^warning:' || true
+  } 2>&1 | grep -v '^warning:'
+  # No `|| true` on the pipeline above: `grep -v` exits 1 when every line is filtered,
+  # and the negative cases here DEPEND on the nix exit status reaching the caller
+  # ("an unregistered derived fact ... failing closed"). `pipefail` is set at the top of
+  # this file, so the pipeline's status is nix's status unless nix succeeded -- in which
+  # case a value was printed and grep's 0 or 1 is irrelevant.
+  local rc=${PIPESTATUS[0]}
+  return ${rc}
 }
 
 # SN1: a fact a rule produces is derivable.

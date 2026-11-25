@@ -31,13 +31,21 @@ source "${repo_root}/tests/lib/direct-test-guard.sh"
 fail() { echo "FAIL learned-route-classification: $*" >&2; exit 1; }
 
 mod_expr() {
-  nix eval --no-write-lock-file --impure --json --expr '
+  # QUIET-WARNINGS: callers add 2>&1 so a real error reaches their failure text, and
+  # with the store closed every nix command prints "warning: you don't have Internet
+  # access; ...". That line joined the JSON value and jq rejected a correct answer
+  # (run 45545298522, "the learned route was not classified conditional and unowned:
+  # warning ..."). Warnings are dropped; errors and the exit status are not.
+  { nix eval --no-write-lock-file --impure --json --expr '
     let
       f = builtins.getFlake "'"path:${repo_root}"'";
       pkgs = import f.inputs.nixpkgs { };
       mod = import "'"${repo_root}"'/lib/stages/learned-route-classification.nix" { lib = pkgs.lib; };
     in
       '"$1"''
+  } 2>&1 | grep -v '^warning:'
+  local rc=${PIPESTATUS[0]}
+  return ${rc}
 }
 
 # SN4/P1/P2/P3: a complete learned route is conditional, not owned, and does not

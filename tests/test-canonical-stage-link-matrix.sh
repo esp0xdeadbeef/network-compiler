@@ -3,6 +3,21 @@ set -euo pipefail
 
 ROOT="${NETWORK_COMPILER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+# `<nixpkgs>` resolves through NIX_PATH, and NIX_PATH is not the same here as on a
+# workstation: CI sets it to the empty string, which is not "unset" -- the default
+# `nixpkgs=flake:nixpkgs` entry is only installed when the variable is absent. So
+# this case evaluated a DIFFERENT nixpkgs in CI and asserted on a different `lib`:
+#
+#   error: canonical stage link matrix mismatch:
+#     [{"actual":false,"expected":true,"ok":false,"pair":"access->downstream-selector"}]
+#
+# It was green locally and red in CI for that reason alone. The pin is taken from
+# this repository's own committed flake.lock, the idiom the rest of the fleet
+# already uses, so the ambient NIX_PATH stops being an input to the result.
+source "${ROOT}/tests/lib/pinned-nixpkgs.sh"
+pin_nixpkgs "${ROOT}"
+
+# `import <nixpkgs>`, now pointed at the committed pin by the line above.
 nix eval --impure --expr '
 let
   pkgs = import <nixpkgs> { };

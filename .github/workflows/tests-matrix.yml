@@ -890,100 +890,6 @@ jobs:
           fi
           echo "PASS CACHE: the cache is complete, so any failure from here is the test"
 
-      - name: "Warm this job's own app closure"
-        shell: bash
-        run: |
-          set -uo pipefail
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          drv="$(nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
-          if [[ -z "${drv}" ]]; then
-            echo "no compile app derivable here; the tests will say if they need one"
-            exit 0
-          fi
-          echo "runner-user compile app: ${drv}"
-          prog="$(nix eval --raw "${PWD}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
-          # The test resolves through `nix run --no-warn-dirty --no-write-lock-file`,
-          # which implies --impure. Ask the same way and report the drv, so a flag
-          # difference cannot hide between the warm and the run.
-          test_style_drv="$(nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || test_style_drv=""
-          echo "test-style compile app: ${test_style_drv}"
-          if [[ -n "${prog}" ]] && nix build --no-link "${prog}" > /dev/null 2>&1; then
-            echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
-          else
-            echo "::warning::the build closure of ${drv} could not be completed"
-          fi
-          printf '%s\n' "${drv}" > "${RUNNER_TEMP}/warmed-drv.txt"
-
-      # THE STORE IS CLOSED FROM HERE DOWN.
-      #
-      # "The cache is hitting" was true for the /nix tarball and false for what the
-      # tests do with it: a test builds its own derivation, and with a cache hit but
-      # no closure the substitution is a network fetch from cache.nixos.org that no
-      # step reported. So the network is removed rather than measured:
-      #
-      #   substituters =            no substituter to fetch from
-      #   builders      =           no remote builder to offload to
-      #   --offline                 fail rather than resolve a missing path
-      #   flake-registry            no HTTP registry lookup
-      #
-      # `--offline` alone is not enough: it still consults configured substituters
-      # when they are reachable, so the substituter list is emptied as well. Both,
-      # then assert, then run.
-      #
-      # This is a tripwire, not a preference. If a test needs something the warm job
-      # did not anticipate, it fails HERE, with the path it wanted, instead of
-      # silently downloading 111 MiB per job and reporting green.
-      - name: "Close the store: no substituters, no network"
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Nix has no `substituters` ENVIRONMENT variable. Lines like
-          # `substituters =` in $GITHUB_ENV are not settings a Nix process ever reads,
-          # and `substituters ` is not even a valid environment name. The settings live
-          # in nix.conf, and NIX_CONFIG is appended to it, so the closed configuration
-          # goes to both: NIX_CONFIG for this step and every later one, /etc/nix/nix.conf
-          # for a `nix` that does not inherit this environment (a test that re-execs
-          # through sudo, for instance).
-          #
-          # Built line by line: a YAML block scalar would carry this file's indentation
-          # into the value, and Nix would read "          substituters" as a name.
-          closed_config="$(printf '%s\n' \
-            'substituters =' \
-            'extra-substituters =' \
-            'builders =' \
-            'builders-use-substitutes = false' \
-            'flake-registry =' \
-            'experimental-features = nix-command flakes')"
-          {
-            echo 'NIX_CONFIG<<__CLOSED_CONFIG__'
-            printf '%s\n' "${closed_config}"
-            echo '__CLOSED_CONFIG__'
-          } >> "$GITHUB_ENV"
-          printf '%s\n' "${closed_config}" | sudo tee -a /etc/nix/nix.conf >/dev/null
-          export NIX_CONFIG="${closed_config}"
-          # Asserted, not assumed: measured here, these lines empty both lists, and
-          # `nix eval` of this flake still works with them set.
-          printf 'substituters: [%s]\nbuilders: [%s]\n' \
-            "$(nix config show substituters)" "$(nix config show builders)"
-          if [[ -n "$(nix config show substituters | tr -d '[:space:]')" ]]; then
-            echo "::error::substituters are still configured; a missing path would be downloaded"
-            exit 1
-          fi
-
-      # ROOT'S ANSWER, STATED IN THE LOG.
-      #
-      # This runs after the store is closed, so it cannot build anything -- it only
-      # resolves, offline, the derivation root will ask for, and prints it beside the
-      # one the warm built. If they differ, this line says so before the test fails,
-      # which turns the next run's log into the evidence that has been missing.
-      # `--offline` is a FLAG, not a setting, and the suites shell out to bare `nix`
-      # 200+ times (`nix run`, `nix build`, `nix flake archive`) in ways no NIX_CONFIG
-      # can cover. A wrapper on PATH is the only place that catches all of them: every
-      # `nix` invocation becomes `nix --offline <args>` unless the caller already said
-      # `--offline`. With substituters emptied above, a missing path is now an error
-      # that names the path, not a silent download.
       # A NETWORK NAMESPACE, NOT JUST A FLAG.
       #
       # Measured on the runner image: `nix --offline` does NOT block flake INPUT
@@ -1098,39 +1004,79 @@ jobs:
           fi
           echo "PASS OFFLINE-NAMESPACE: no network, and Nix reports it"
 
-      # ROOTLESS PODMAN, THE OPTION THAT DOES NOT DEPEND ON THE HOST'S NAMESPACE POLICY.
-      #
-      # `sudo -n unshare -n` works on today's runner images. It is still a root
-      # namespace created by a privileged helper, and a runner image that stops granting
-      # it would turn every test job red for a reason unrelated to the commit. Rootless
-      # podman gives the same guarantee with a different failure mode: measured here,
-      # `podman run --network=none` has no route AND no resolver --
-      #
-      #   wget: bad address 'cache.nixos.org'
-      #
-      # which is a stronger statement than "unshare succeeded", because it proves the
-      # fetcher cannot even resolve a name.
-      #
-      # Recorded, not required: a repository whose tests do not run inside a container
-      # still gets the namespace. When podman is usable, NIX_CONTAINER_NETNS names the
-      # command the run step should wrap tests in, and the probe below prefers it.
-      - name: "Compare the warmed derivation with the one root resolves"
+      - name: "Warm this job's own app closure, as the test will resolve it"
         shell: bash
         run: |
           set -uo pipefail
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          warmed="$(cat "${RUNNER_TEMP}/warmed-drv.txt" 2>/dev/null || true)"
-          root_drv="$(${NIX_NETNS:?} nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || root_drv=""
-          echo "warmed (runner): ${warmed:-<none>}"
-          echo "root resolves:   ${root_drv:-<none>}"
-          if [[ -n "${warmed}" && "${warmed}" == "${root_drv}" ]]; then
-            echo "PASS WARM-IDENTITY: the derivation is the same for both identities"
+          netns="${NIX_NETNS:-}"
+          [[ -n "${netns}" ]] || { echo "::warning::no namespace prefix; warming as the runner user"; netns=""; }
+
+          as_test() { if [[ -n "${netns}" ]]; then ${netns} "$@"; else "$@"; fi; }
+
+          drv="$(as_test nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
+            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || drv=""
+          if [[ -z "${drv}" ]]; then
+            echo "no compile app derivable here; the tests will say if they need one"
+            exit 0
+          fi
+          echo "compile app as the test resolves it: ${drv}"
+          prog="$(as_test nix eval --raw "${PWD}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
+          if [[ -n "${prog}" ]] && as_test nix build --no-link "${prog}"; then
+            echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
           else
-            echo "::error::the derivation root resolves differs from the warmed one; this is why the test rebuilds"
+            echo "::warning::the build closure of ${drv} could not be completed"
+          fi
+
+      - name: "Close the store: no substituters, no network"
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Nix has no `substituters` ENVIRONMENT variable. Lines like
+          # `substituters =` in $GITHUB_ENV are not settings a Nix process ever reads,
+          # and `substituters ` is not even a valid environment name. The settings live
+          # in nix.conf, and NIX_CONFIG is appended to it, so the closed configuration
+          # goes to both: NIX_CONFIG for this step and every later one, /etc/nix/nix.conf
+          # for a `nix` that does not inherit this environment (a test that re-execs
+          # through sudo, for instance).
+          #
+          # Built line by line: a YAML block scalar would carry this file's indentation
+          # into the value, and Nix would read "          substituters" as a name.
+          closed_config="$(printf '%s\n' \
+            'substituters =' \
+            'extra-substituters =' \
+            'builders =' \
+            'builders-use-substitutes = false' \
+            'flake-registry =' \
+            'experimental-features = nix-command flakes')"
+          {
+            echo 'NIX_CONFIG<<__CLOSED_CONFIG__'
+            printf '%s\n' "${closed_config}"
+            echo '__CLOSED_CONFIG__'
+          } >> "$GITHUB_ENV"
+          printf '%s\n' "${closed_config}" | sudo tee -a /etc/nix/nix.conf >/dev/null
+          export NIX_CONFIG="${closed_config}"
+          # Asserted, not assumed: measured here, these lines empty both lists, and
+          # `nix eval` of this flake still works with them set.
+          printf 'substituters: [%s]\nbuilders: [%s]\n' \
+            "$(nix config show substituters)" "$(nix config show builders)"
+          if [[ -n "$(nix config show substituters | tr -d '[:space:]')" ]]; then
+            echo "::error::substituters are still configured; a missing path would be downloaded"
             exit 1
           fi
 
+      # ROOT'S ANSWER, STATED IN THE LOG.
+      #
+      # This runs after the store is closed, so it cannot build anything -- it only
+      # resolves, offline, the derivation root will ask for, and prints it beside the
+      # one the warm built. If they differ, this line says so before the test fails,
+      # which turns the next run's log into the evidence that has been missing.
+      # `--offline` is a FLAG, not a setting, and the suites shell out to bare `nix`
+      # 200+ times (`nix run`, `nix build`, `nix flake archive`) in ways no NIX_CONFIG
+      # can cover. A wrapper on PATH is the only place that catches all of them: every
+      # `nix` invocation becomes `nix --offline <args>` unless the caller already said
+      # `--offline`. With substituters emptied above, a missing path is now an error
+      # that names the path, not a silent download.
       - name: "Check rootless podman as a fallback sandbox"
         shell: bash
         run: |

@@ -342,7 +342,13 @@ jobs:
 
   list:
     name: "list tests"
-    needs: flake-check
+    # BOTH flake jobs, in order, before a single test is scheduled: the gate that
+    # evaluates the committed pins and the drift report that evaluates today's. They
+    # were parallel because drift is `continue-on-error` -- which controls whether a
+    # FAILURE stops dependants, not whether they WAIT. A test run that starts while
+    # the drift check is still resolving is a test run against two different input
+    # sets, and that is the thing this whole workflow exists to prevent.
+    needs: [flake-check, flake-drift]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

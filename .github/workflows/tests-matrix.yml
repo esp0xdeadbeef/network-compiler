@@ -674,7 +674,19 @@ jobs:
             exit 1
           fi
           mapfile -t paths < /tmp/store-paths.txt
-          nix-store --export "${paths[@]}" | zstd -19 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
+          # -3, NOT -19. Measured on a 704 MB export of a real closure, 4 threads:
+          #
+          #   zstd -3  -T4:   3 s -> 226 MB
+          #   zstd -9  -T4:  11 s -> 193 MB
+          #   zstd -19 -T4: 265 s -> 171 MB
+          #
+          # -19 costs 262 extra seconds to save 55 MB, on an artifact with
+          # retention-days: 1. Worse, it stalls on the larger exports this actually
+          # produces (1.5 GiB+), which is the export the tests were waiting on.
+          #
+          # The default level is the right trade: compression is not what this artifact
+          # is for, delivering a store is.
+          nix-store --export "${paths[@]}" | zstd -3 -T0 -o "${RUNNER_TEMP}/nix-store.nar.zst"
           ls -lh "${RUNNER_TEMP}/nix-store.nar.zst"
 
       - uses: actions/upload-artifact@v4

@@ -342,6 +342,11 @@
           pkgs = mkPkgs system;
         in
         {
+          # `packages` is what a developer gets from `nix develop`. It is also what CI
+          # reads to build PATH, via nativeBuildInputs -- and that list resolves jq, nix
+          # and zstd to their `-dev` outputs, which carry headers and no bin/. Naming the
+          # binary-bearing outputs explicitly keeps both consumers correct, which is
+          # what makes this declaration usable rather than merely descriptive.
           default = pkgs.mkShell {
             name = "network-tests";
             packages = [
@@ -351,6 +356,18 @@
               pkgs.nix
               pkgs.ripgrep
               pkgs.zstd
+            ];
+            # `lib.getBin`, not `.out` or `.dev`: jq is a split-output package whose
+            # binary lives in `-bin`, and mkShell rewrites nativeBuildInputs to dev
+            # outputs, which have neither. getBin gives the output that actually holds
+            # the executable, which is the only thing CI can put on PATH.
+            nativeBuildInputs = [
+              (pkgs.lib.getBin pkgs.coreutils)
+              (pkgs.lib.getBin pkgs.git)
+              (pkgs.lib.getBin pkgs.jq)
+              (pkgs.lib.getBin pkgs.nix)
+              (pkgs.lib.getBin pkgs.ripgrep)
+              (pkgs.lib.getBin pkgs.zstd)
             ];
           };
         }

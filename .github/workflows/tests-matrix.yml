@@ -1459,8 +1459,27 @@ jobs:
           # `nix develop` builds it, and the warmed store carries it. The step's job
           # is now only to prove the declared tools are the ones on PATH.
           system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          if ! nix build --no-link ".#devShells.${system_name}.default" > /dev/null 2>&1; then
-            echo "::warning::the devShell did not build; the runner image's tools will be used"
+          # BUILDING A DEV SHELL DOES NOT PUT ITS TOOLS ON PATH.
+          #
+          # `pkgs.mkShell`'s output is a marker derivation, not a bin/. Only
+          # `nix develop` assembles PATH, and a workflow step needs the tools visible to
+          # later steps, so the packages themselves are resolved and their bin/ dirs are
+          # added to GITHUB_PATH. Measured the wrong way first (run 45645903550): every
+          # test job failed with "rg is declared in .#devShells but not on PATH".
+          if ! nix eval --raw --impure ".#devShells.${system_name}.default.name" > /dev/null 2>&1; then
+            echo "::warning::no devShell in this repository; the image's tools will be used"
+          else
+            # The packages are read from the flake's own declaration, not from
+            # nativeBuildInputs: that list resolves to `-dev` outputs for jq, nix and
+            # zstd, which carry headers and no bin/. The declaration in `packages` is
+            # what a `nix develop` puts on PATH, so it is what is read here.
+            nix eval --json --impure \
+              --expr "let f = builtins.getFlake \"path:${PWD}\"; in map toString (f.devShells.\"${system_name}\".default.packages or [])" \
+              > "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || echo '[]' > "${RUNNER_TEMP}/shell-pkgs.json"
+            jq -r '.[]' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null | while read -r pkg; do
+              [[ -d "${pkg}/bin" ]] && printf '%s\n' "${pkg}/bin" >> "$GITHUB_PATH"
+            done || true
+            echo "devShell packages: $(jq -r 'length' "${RUNNER_TEMP}/shell-pkgs.json" 2>/dev/null || echo 0)"
           fi
           while read -r tool; do
             [[ -n "${tool}" ]] || continue

@@ -879,11 +879,21 @@ jobs:
             echo "::error::remote builders are still configured ('${builders}')"
             exit 1
           fi
-          if [[ "$(command -v nix)" != "${wrapper_dir}/nix" ]]; then
-            echo "::error::the nix a test resolves is not the offline wrapper"
+          # `GITHUB_PATH` applies to LATER steps, so `command -v nix` here still finds the
+          # real binary -- asserting on it in this step failed job 138908084389 with
+          # "the nix a test resolves is not the offline wrapper" when the wiring was in
+          # fact correct. The assertion is therefore on the ordering inside GITHUB_PATH,
+          # which is what a later step's lookup will use: the wrapper directory must come
+          # before the real nix's directory.
+          wrapper_line="$(grep -n "^${wrapper_dir}$" "$GITHUB_PATH" | cut -d: -f1)"
+          real_line="$(grep -n "^${real_nix%/*}$" "$GITHUB_PATH" | cut -d: -f1 || true)"
+          if [[ -z "${wrapper_line}" ]]; then
+            echo "::error::the wrapper directory is not on GITHUB_PATH"
             exit 1
           fi
-          echo "PASS OFFLINE-CONFIG: nix resolves to the wrapper, no substituter, no builder"
+          printf 'GITHUB_PATH: wrapper at line %s, real nix dir at line %s\n' \
+            "${wrapper_line}" "${real_line:-<inherited>}"
+          echo "PASS OFFLINE-CONFIG: wrapper precedes the real nix on PATH, no substituter, no builder"
 
       - id: discover
         name: "Discover entrypoints"

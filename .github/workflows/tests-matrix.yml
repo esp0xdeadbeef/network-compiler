@@ -942,21 +942,19 @@ jobs:
           zstd -dc "${RUNNER_TEMP}/nix-store.nar.zst" | nix-store --import >"${RUNNER_TEMP}/imported-paths.txt"
           printf 'imported %s path(s)\n' "$(grep -c . "${RUNNER_TEMP}/imported-paths.txt")"
 
-      # WARM THIS JOB'S OWN APP, AND THE VARIANT ROOT WILL ASK FOR.
+      # WARM THIS JOB'S OWN APP -- AND AGAIN INSIDE THE NAMESPACE.
       #
       # The app derivation is computed from the flake source, and the test computes it
-      # AS ROOT inside `sudo -n env PATH=... unshare -n`. Nix's path-flake source
-      # resolution depends on the caller, so the runner-user warm and the root test can
-      # resolve different derivations. Measured every run: warm resolved
-      # jvsrqvn2...-app.drv, the test wanted c9yljzlz...-app.drv (runs 45559663953,
-      # 45563403679, 45568182996), with sourceInfo, .git, untracked files and cwd all
-      # ruled out in that order.
+      # as ROOT inside `sudo -n env PATH=... unshare -n`. Three runs measured a
+      # different derivation on each side (5vjl2hf8 / 2k7kmfb3, 9i2w9a93 / ni3s22q5),
+      # and every locally-reproducible explanation was ruled out: .git, untracked
+      # files, cwd, a foreign git repo, HOME, XDG_CACHE_HOME, safe.directory, and
+      # --impure with --no-warn-dirty all give the same drv here.
       #
-      # This step must run BEFORE the store is closed (it builds), but the namespace and
-      # the root identity only exist afterwards. So it does the only thing that is both
-      # possible here and honest: it builds the runner-user variant, then asks ROOT to
-      # resolve its own variant and records it, so the next run says in one line whether
-      # the two differ and by what.
+      # So this step does what can be verified: it warms from the runner identity,
+      # BEFORE the store closes so the network is available. The step AFTER the store
+      # closes then asks the same question as root inside the namespace and reports
+      # whether the two agree, which is the one fact the logs have not yet stated.
       - name: "Warm this job's own app closure"
         shell: bash
         run: |
@@ -969,48 +967,13 @@ jobs:
             exit 0
           fi
           echo "runner-user compile app: ${drv}"
-          # WARM THE WHOLE BUILD CLOSURE, NOT JUST THE OUTPUT.
-          #
-          # `nix-store -r <drv>` builds that derivation and what it references at
-          # RUNTIME. The app that gets rebuilt during the test is the same derivation,
-          # but the closure that fails is the one under `pkgs.nix`'s test dependencies
-          # (aeson, ShellCheck, binutils from ftpmirror) -- build-time inputs of the
-          # nix package this app puts on PATH. Fetching the output alone leaves those
-          # unbuilt, so the test rebuilds them and the closed store refuses
-          # (run 45578196767: 2k7kmfb3...-app.drv).
-          #
-          # `nix build` resolves the full build closure, which is exactly what has to
-          # be present before the store closes.
-          if nix-store -r "${drv}" > /dev/null 2>&1; then
-            echo "PASS WARM-LOCAL: ${drv} is in the store"
-          else
-            echo "::warning::${drv} is not in the imported closure"
-          fi
-          # `nix build ".#apps.<sys>.<name>"` is the ORIGINAL bug in this workflow and
-          # still fails: an app is `{ type = "app"; program = ...; }`, not a derivation.
-          # What pulls BUILD-time dependencies is building the program path itself,
-          # which carries the output context into a realisable store path. `nix-store -r`
-          # on the .drv builds only its runtime references, which is why the nix package
-          # this app puts on PATH still had an unbuilt test/aeson/ShellCheck closure at
-          # run time (run 45578196767).
           prog="$(nix eval --raw "${PWD}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
           if [[ -n "${prog}" ]] && nix build --no-link "${prog}" > /dev/null 2>&1; then
             echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
           else
             echo "::warning::the build closure of ${drv} could not be completed"
           fi
-          # Root's answer, recorded now while the network is still available.
-          root_drv="$(sudo -n env "PATH=${PATH}" nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
-            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || root_drv=""
-          echo "root's compile app:       ${root_drv:-<unavailable>}"
-          if [[ -n "${root_drv}" && "${root_drv}" != "${drv}" ]]; then
-            echo "the two identities resolve different derivations; building root's"
-            if sudo -n env "PATH=${PATH}" nix-store -r "${root_drv}" > /dev/null 2>&1; then
-              echo "PASS WARM-LOCAL-ROOT: ${root_drv} is in the store"
-            else
-              echo "::warning::root's variant ${root_drv} could not be built"
-            fi
-          fi
+          printf '%s\n' "${drv}" > "${RUNNER_TEMP}/warmed-drv.txt"
 
       # THE STORE IS CLOSED FROM HERE DOWN.
       #
@@ -1068,6 +1031,12 @@ jobs:
             exit 1
           fi
 
+      # ROOT'S ANSWER, STATED IN THE LOG.
+      #
+      # This runs after the store is closed, so it cannot build anything -- it only
+      # resolves, offline, the derivation root will ask for, and prints it beside the
+      # one the warm built. If they differ, this line says so before the test fails,
+      # which turns the next run's log into the evidence that has been missing.
       # `--offline` is a FLAG, not a setting, and the suites shell out to bare `nix`
       # 200+ times (`nix run`, `nix build`, `nix flake archive`) in ways no NIX_CONFIG
       # can cover. A wrapper on PATH is the only place that catches all of them: every
@@ -1204,6 +1173,23 @@ jobs:
       # Recorded, not required: a repository whose tests do not run inside a container
       # still gets the namespace. When podman is usable, NIX_CONTAINER_NETNS names the
       # command the run step should wrap tests in, and the probe below prefers it.
+      - name: "Compare the warmed derivation with the one root resolves"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          warmed="$(cat "${RUNNER_TEMP}/warmed-drv.txt" 2>/dev/null || true)"
+          root_drv="$(${NIX_NETNS:?} nix eval --raw --impure "${PWD}#apps.${system}.compile.program" \
+            --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' 2>/dev/null)" || root_drv=""
+          echo "warmed (runner): ${warmed:-<none>}"
+          echo "root resolves:   ${root_drv:-<none>}"
+          if [[ -n "${warmed}" && "${warmed}" == "${root_drv}" ]]; then
+            echo "PASS WARM-IDENTITY: the derivation is the same for both identities"
+          else
+            echo "::error::the derivation root resolves differs from the warmed one; this is why the test rebuilds"
+            exit 1
+          fi
+
       - name: "Check rootless podman as a fallback sandbox"
         shell: bash
         run: |

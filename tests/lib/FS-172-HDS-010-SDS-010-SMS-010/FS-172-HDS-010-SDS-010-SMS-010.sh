@@ -38,9 +38,19 @@ reg_expr() {
 }
 
 # P1/P2/P4: the known derived fact resolves to exactly one complete entry.
+# `2>&1` is kept so a genuine error message reaches the failure text below, but
+# Nix's warnings must not be merged into the value: with the store closed, every
+# nix command prints
+#   warning: you don't have Internet access; disabling some network-dependent features
+# and that line, prepended to the JSON, made jq reject a perfectly good entry.
+# Measured in run 45540528886, FS-172-HDS-010-SDS-010-SMS-010:
+#   FAIL ... P2 ... got warning: you don't have Internet access; ...
+# so warnings are dropped here and errors are not.
 out="$(reg_expr 'reg.resolve { derivedFact = "fabricSelectorRoles"; }' 2>&1)" || {
   fail "P4 resolve({ fabricSelectorRoles }) failed; the registry does not resolve a registered derived fact
 ${out}"; }
+
+out="$(printf '%s\n' "${out}" | grep -v '^warning:' || true)"
 
 jq -e '.ruleId == "DRV-FABRIC-ADJ"
        and (.determiningFacts | length) > 0

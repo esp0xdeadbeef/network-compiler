@@ -845,6 +845,31 @@ jobs:
 
           if nix print-dev-env ".#devShells.${system}.default" > "${RUNNER_TEMP}/dev-env.txt" 2>"${RUNNER_TEMP}/dev-env.err"; then
             echo "PASS CACHE-ENV: the devShell environment is in the store"
+            # AND HAND ITS PATH TO THE LATER STEPS.
+            #
+            # `nix develop -c bash` was the documented way to run a step in a flake's
+            # environment, and it does not work here: it constructs a `network-tests-env`
+            # derivation that `print-dev-env` never names, so the artifact cannot contain
+            # it and the closed store bootstraps 151 derivations instead
+            # (run 45670950104: PASS CACHE-ENV at line 296, 151 derivations at 693).
+            #
+            # print-dev-env IS satisfied by the artifact, so its PATH is what the tests
+            # get. Exported here rather than in a later step because this one runs
+            # BEFORE the store closes and before the offline wrapper is installed --
+            # the same conditions under which it was proven to work.
+            shell_path="$(grep -m1 "^PATH='" "${RUNNER_TEMP}/dev-env.txt" | sed "s/^PATH='//; s/'$//")"
+            if [[ -n "${shell_path}" ]]; then
+              added=0
+              for d in ${shell_path//:/ }; do
+                [[ -d "${d}" ]] || continue
+                printf '%s\n' "${d}" >> "$GITHUB_PATH"
+                added=$((added + 1))
+              done
+              echo "PASS CACHE-PATH: ${added} PATH entries exported from the flake's devShell"
+            else
+              echo "::error::CACHE-PATH: print-dev-env produced no PATH"
+              failures=$((failures + 1))
+            fi
           else
             echo "::error::CACHE-ENV: .#devShells.${system}.default is NOT in the store"
             sed 's/^/  /' "${RUNNER_TEMP}/dev-env.err" >&2 || true
@@ -1270,7 +1295,7 @@ jobs:
       # shell the tests run in -- so a missing tool fails here, named, instead of midway
       # through a suite.
       - name: "Assert the flake declares every tool the tests use"
-        shell: 'nix develop -c bash -e {0}'
+        shell: bash
         run: |
           set -euo pipefail
           missing=0
@@ -1386,9 +1411,7 @@ jobs:
           git -C "${target}" checkout --quiet FETCH_HEAD
 
       - name: "Run ${{ matrix.test || format('shard {0}', matrix.shard) }}"
-        # Per cachix/install-nix-action's README, the devShell IS the step's shell. Every
-        # tool then comes from the repo-root flake, and nothing is installed ad hoc.
-        shell: 'nix develop -c bash -e {0}'
+        shell: bash
         env:
           # Matrix values are derived from filenames, which a pull request controls.
           # They are passed as ENVIRONMENT, never spliced into a shell line: a file

@@ -624,6 +624,32 @@ jobs:
             echo "::endgroup::"
           done < "${RUNNER_TEMP}/sibling-github-refs.txt"
 
+      # THE ONE TOOL THE RUNNER IMAGE LACKS, WARMED BY ITSELF.
+      #
+      # jq, git and nix are all present on a hosted runner (or provided by CI), so the
+      # only thing the suites actually need from the store is ripgrep -- which used to
+      # arrive as a 2.5 MB curl into ~/.local/bin. This warms just that derivation's
+      # closure: 8 paths, a couple of MB, two seconds.
+      #
+      # Deliberately NOT the whole devShell: `pkgs.mkShell`'s closure carries a C
+      # toolchain (gcc 264 MB, python3 107 MB, perl 55 MB -- measured 684 MB / 133
+      # paths). Shipping that to deliver an rg is what made the artifact 1.49 GiB, and
+      # a compiler on PATH is not something the suites should be given. The full
+      # devShell stays in the flake for `nix develop`; CI takes only ripgrep from it.
+      - name: "Warm ripgrep from the test environment"
+        shell: bash
+        run: |
+          set -uo pipefail
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          if ! rg_out="$(nix build --no-link --print-out-paths --impure \
+                 --expr "let f = builtins.getFlake \"path:${PWD}\"; p = f.inputs.nixpkgs.legacyPackages.\"${system}\"; in p.lib.getBin p.ripgrep" 2>/dev/null)"; then
+            echo "::warning::could not warm ripgrep; the test job will say so"
+            exit 0
+          fi
+          echo "ripgrep: ${rg_out}"
+          nix-store -qR "${rg_out}" >> "${RUNNER_TEMP}/app-outs.txt"
+          printf 'ripgrep closure: %s path(s)\n' "$(nix-store -qR "${rg_out}" | wc -l)"
+
       - name: "Export the store closure for the test jobs"
         shell: bash
         run: |
@@ -1256,41 +1282,34 @@ jobs:
           #     live in `-bin`, not in `.out` or `.dev`.
           system_name="$(nix eval --impure --raw --expr builtins.currentSystem)"
           extra_path=""
-          # `nix print-dev-env`, FILTERED TO THE NAMED TOOLS.
+          # NO `print-dev-env` HERE. It BUILDS the devShell, and this step runs after the
+          # store is closed, so in CI it failed with its stderr discarded and left
+          # `declared tool dirs: <none>`. The devShell is warmed in the `list` job
+          # instead, and what arrives here is the store path it produced.
           #
-          # Four attempts at reading the packages out of the flake each failed
-          # differently: `.packages` does not exist on a mkShell, `.out`/`.dev` carry no
-          # bin/ for split-output packages, nativeBuildInputs reported 0 in CI, and
-          # print-dev-env's PATH is the whole stdenv -- gcc, binutils-wrapper, make,
-          # patchelf -- which would hand the suites a compiler they must not have.
-          #
-          # print-dev-env is still the right source, because it is what `nix develop`
-          # itself assembles; it only needs selecting from. For each tool this workflow
-          # depends on, the FIRST directory on that PATH which actually contains it is
-          # exported. Verified locally: four directories, jq from -bin, no gcc.
-          if shell_path="$(nix print-dev-env ".#devShells.${system_name}.default" 2>/dev/null \
-                            | grep -m1 "^PATH='" | sed "s/^PATH='//; s/'$//")" && [[ -n "${shell_path}" ]]; then
-            IFS=: read -ra shell_dirs <<< "${shell_path}"
-            for wanted in jq git rg zstd; do
-              for d in "${shell_dirs[@]}"; do
-                [[ -x "${d}/${wanted}" ]] || continue
-                printf '%s\n' "${d}" >> "$GITHUB_PATH"
-                case ":${extra_path}" in
-                  *":${d}:"*) ;;
-                  *) extra_path="${extra_path}${d}:" ;;
-                esac
-                break
-              done
-            done
-            echo "declared tool dirs: $(printf '%s' "${extra_path}" | tr ':' '\n' | grep -c . || true)"
-          else
-            echo "::warning::nix print-dev-env failed for .#devShells.${system_name}.default"
+          # jq, git and nix are already available -- the image has the first two and CI is
+          # running the third. ripgrep is the one the image lacks, and the `list` job now
+          # warms it; here it only has to be found.
+          if ! command -v rg >/dev/null; then
+            # Ask the flake, offline. The store already holds the closure from the
+            # `list` job, so this resolves without fetching: --offline would be the
+            # wrapper's job, but it is applied here too so a miss fails rather than
+            # reaching the network.
+            rg_bin=""
+            if rg_out="$(nix --offline build --no-link --print-out-paths --impure \
+                 --expr "let f = builtins.getFlake \"path:${PWD}\"; p = f.inputs.nixpkgs.legacyPackages.\"${system_name}\"; in p.lib.getBin p.ripgrep" 2>/dev/null)"; then
+              rg_bin="${rg_out}/bin"
+            fi
+            if [[ -n "${rg_bin}" && -x "${rg_bin}/rg" ]]; then
+              printf '%s\n' "${rg_bin}" >> "$GITHUB_PATH"
+              extra_path="${rg_bin}:"
+            fi
           fi
-          for tool in nix jq git rg zstd; do
+          for tool in nix jq git rg; do
             found="$(PATH="${extra_path}${PATH}" command -v "${tool}" 2>/dev/null || true)"
             if [[ -z "${found}" ]]; then
-              echo "::error::${tool} is needed by the suites and is neither declared nor on the image"
-              echo "::error::declared tool dirs: ${extra_path:-<none>}"
+              echo "::error::${tool} is needed by the suites and is not on PATH"
+              echo "::error::searched: ${extra_path:-<nothing extra>}"
               exit 1
             fi
             printf '  %-6s %s\n' "${tool}" "${found}"

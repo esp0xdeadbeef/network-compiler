@@ -384,7 +384,7 @@ jobs:
       #
       # Two keys, because a cache entry is immutable and the first writer wins: the
       # gates write `-eval-v1` (evaluation inputs only, `--no-build`) and `list` alone
-      # writes `-apps-v1` (that store plus the build closure). With one shared key the
+      # writes `-apps-v2` (that store plus the build closure). With one shared key the
       # gate saved first, `list`'s save was skipped, and every test job fetched git's
       # 15 MiB doc output again.
       - name: "Prepare /nix for the cache"
@@ -398,7 +398,7 @@ jobs:
           path: |
             /nix
             /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v1
+          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v2
           restore-keys: |
             nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
             nix-${{ runner.os }}-
@@ -564,7 +564,7 @@ jobs:
           path: |
             /nix
             /home/runner/.cache/nix
-          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v1
+          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-apps-v2
           restore-keys: |
             nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
             nix-${{ runner.os }}-

@@ -1031,9 +1031,18 @@ jobs:
             exit 0
           fi
           echo "compile app as the test resolves it: ${drv}"
-          prog="$(as_test nix eval --raw "${flake_ref}#apps.${system}.compile.program" 2>/dev/null)" || prog=""
-          if [[ -n "${prog}" ]] && as_test nix build --no-link "${prog}"; then
-            echo "PASS WARM-LOCAL-DEPS: build closure of ${prog} is present"
+          # `nix-store -r <drv>`, NOT `nix build <program>`.
+          #
+          # The derivation is now the right one (run 45681668432 shows a single app drv
+          # on both sides), but realising it is a different question. `nix build` on the
+          # program path does not pull the derivation's BUILD inputs -- measured: the
+          # test still needed optparse-applicative and 950 others that the app links
+          # against at build time.
+          #
+          # `nix-store --realise` on the .drv builds the derivation AND everything
+          # required to build it, which is exactly the closure the test would need.
+          if [[ -n "${drv}" ]] && as_test nix-store -r "${drv}" > /dev/null; then
+            echo "PASS WARM-LOCAL-DEPS: build closure of ${drv} is present"
           else
             echo "::warning::the build closure of ${drv} could not be completed"
           fi

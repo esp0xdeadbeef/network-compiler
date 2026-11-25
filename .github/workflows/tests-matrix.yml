@@ -512,6 +512,10 @@ jobs:
           : > "${RUNNER_TEMP}/app-drvs.txt"
           for app in "${apps[@]}"; do
             echo "::group::warm app ${app}"
+            # `path:$PWD`, not `$PWD`: the two produce different derivations, measured in
+            # this series, and the tests resolve `path:${repo_root}#...`. A warm that uses
+            # the bare form builds something no test will ever ask for.
+            #
             # `builtins.getFlake "path:$PWD"` reads the files as a plain directory and
             # sets no revision, while the tests run `nix run "$ROOT#compile"` on a git
             # checkout. `mkEvalApp` bakes `self.sourceInfo` into the app, so the two
@@ -522,7 +526,7 @@ jobs:
             #
             # So the warm step asks for the app the same way a test does: through the
             # flake reference `.#<app>`, from the repository root.
-            nix eval --raw "${PWD}#apps.${system}.${app}.program" \
+            nix eval --raw "path:${PWD}#apps.${system}.${app}.program" \
               --apply 'p: builtins.head (builtins.filter (n: builtins.match ".*\.drv" n != null) (builtins.attrNames (builtins.getContext p)))' \
               > "${RUNNER_TEMP}/app-drv.txt" || {
               echo "::error::${app}: its program is not produced by a derivation"

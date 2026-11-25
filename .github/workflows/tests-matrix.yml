@@ -1049,6 +1049,25 @@ jobs:
             echo "::error::this host gives no network namespace, so an offline run cannot be verified"
             exit 1
           fi
+          # GIT MUST SEE THE REPOSITORY AS ROOT TOO.
+          #
+          # The namespace form that works here is `sudo -n env PATH=... unshare -n`, so
+          # the tests run as root. actions/checkout registers the workspace as a safe
+          # directory for the RUNNER user only, so as root git refuses it --
+          #   fatal: detected dubious ownership in repository at ...
+          # -- and Nix's path-flake dirty detection then differs from the warm step's,
+          # which changes self.sourceInfo and therefore the app derivation. Measured:
+          # warm resolved 0dysk2a6...-app.drv and the test then wanted
+          # 1yhkdwgl...-app.drv (run 45559663953).
+          #
+          # Registering the same directory for root makes both sides read the same git
+          # state, so the derivation the test asks for is the one that was warmed.
+          sudo -n git config --global --add safe.directory "${PWD}" 2>/dev/null || true
+          if ${netns} git -C "${PWD}" rev-parse --show-toplevel >/dev/null 2>&1; then
+            echo "git sees ${PWD} inside the namespace"
+          else
+            echo "::warning::git cannot read ${PWD} inside the namespace; a path-flake dirty state may differ from the warm step"
+          fi
           printf 'NIX_NETNS=%s\n' "${netns}" >> "$GITHUB_ENV"
           echo "namespace: ${netns}"
           # `sudo` resets PATH, so a bare `nix` inside the namespace is "No such file

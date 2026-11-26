@@ -2,7 +2,24 @@
   description = "nixos-network-compiler";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/0182a361324364ae3f436a63005877674cf45efb";
+    # TRACK THE BRANCH, NOT A REV.
+    #
+    # This was pinned to 0182a361324364ae3f436a63005877674cf45efb, so `nix flake
+    # update` could never move it and every other repository in the fleet drifted to a
+    # different nixpkgs. The cost was invisible in this repository's own CI and total
+    # in everyone else's: a suite that runs this repository's tests from a sibling
+    # checkout evaluates THIS lock, found a nixpkgs whose stdenv nobody had warmed,
+    # and rebuilt the whole bootstrap toolchain from source --
+    #
+    #   these 1534 derivations will be built:
+    #     .../bootstrap-tools.tar.xz.drv
+    #   error: unable to download 'http://tarballs.nixos.org/stdenv/...':
+    #     Could not resolve host: tarballs.nixos.org
+    #
+    # measured in network-labs shard 0 running FS-030-HDS-010-SDS-010-SMS-010. The
+    # branch is what every other flake in the fleet uses, which is what lets one warm
+    # cover all of them.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
 
     network-labs.url = "github:esp0xdeadbeef/network-labs";

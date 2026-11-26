@@ -124,11 +124,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1795564060,
-        "narHash": "sha256-ME50ZdBgmbU5sh+h9hrOKmHsD+4gfI/OJBb8ua/Z8kg=",
+        "lastModified": 1795689353,
+        "narHash": "sha256-sJDqPHAMduiUsSpPn9SVhSfQSOanncX7tc11JPsSvOY=",
         "owner": "esp0xdeadbeef",
         "repo": "network-labs",
-        "rev": "77cbb0719961d3ae54992fc519c45d5691005cf7",
+        "rev": "40718285aedb17d5fe817b57d529cf385bf7ab40",
         "type": "github"
       },
       "original": {

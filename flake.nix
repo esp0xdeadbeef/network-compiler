@@ -20,7 +20,16 @@
     # branch is what every other flake in the fleet uses, which is what lets one warm
     # cover all of them.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-network.url = "github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753";
+    # `nixpkgs-network` USED TO LIVE HERE, and it is gone deliberately.
+    #
+    # It was `github:NixOS/nixpkgs/ac56c456ebe4901c561d3ebf1c98fbd970aea753` (2024-07-27)
+    # carried in full to obtain one addition to `lib`: `lib.network.ipv6`. That patch is
+    # not landing upstream, so the fleet was maintaining a second nixpkgs -- an absolute
+    # rev, therefore unmovable by `nix flake update` and unreachable by any consumer's
+    # `follows` -- to get 600 lines of helpers. Every lock that could reach it held two
+    # nixpkgs graphs, each with its own stdenv, and a warm could only cover one.
+    #
+    # The library is vendored at ./lib/network instead.
 
     network-labs.url = "github:esp0xdeadbeef/network-labs";
   };
@@ -29,7 +38,6 @@
     {
       self,
       nixpkgs,
-      nixpkgs-network,
       network-labs,
     }:
     let
@@ -62,8 +70,9 @@
       mkPkgs =
         system:
         let
-          patchedPkgs = import nixpkgs-network { inherit system; };
-          patchedNetwork = patchedPkgs.lib.network;
+          # The vendored library, not a second nixpkgs. `lib` is nixpkgs' own lib so
+          # the helpers behave exactly as they did when they arrived through the patch.
+          patchedNetwork = import ./lib/network { lib = nixpkgs.lib; };
         in
         import nixpkgs {
           inherit system;
@@ -329,6 +338,13 @@
     in
     {
       lib = {
+        # THE VENDORED `lib.network`, EXPORTED SO CONSUMERS DO NOT RE-PIN A NIXPKGS.
+        #
+        # `network-forwarding-model` used to obtain `lib.network` by carrying its own
+        # copy of the patched nixpkgs (`nixpkgs-network`, an absolute rev). That is the
+        # lower layer re-pinning what the owner should provide. It arrives from here now,
+        # so the fleet has one nixpkgs and one stdenv instead of two of each.
+        network = import ./lib/network { lib = nixpkgs.lib; };
         compile = system: (mkSystemLib system).compile;
         compilePath = system: (mkSystemLib system).compilePath;
         writeJSON = system: (mkSystemLib system).writeJSON;

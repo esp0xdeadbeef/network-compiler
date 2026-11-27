@@ -1731,27 +1731,35 @@ jobs:
             # Supplying this repository's lock gives the sibling deterministic pins, all of
             # which the cache step above has already materialised and realised. It is a
             # scratch checkout, so an untracked lock file there costs nothing.
-            # SUPPLY THIS REPOSITORY'S LOCK, ALWAYS.
+            # A SIBLING'S OWN LOCK IS KEPT. DO NOT OVERWRITE IT.
             #
-            # The suites do not evaluate a sibling THROUGH this flake -- they `cd` into
-            # the sibling checkout and run `nix` there, so the sibling's own lock (or its
-            # flake.nix) is the pinning authority, and every `follows` this flake
-            # declares is bypassed. That is why pin drift is possible even though the
-            # responsible layer pins correctly.
+            # The suites do not evaluate a sibling THROUGH this flake -- they `cd` into the
+            # sibling checkout and run `nix` there, so the sibling's own lock is the
+            # pinning authority and every `follows` this flake declares is bypassed. That
+            # is why pin drift is possible even when the responsible layer pins correctly,
+            # and the fix belongs in the sibling's own flake (an absolute rev in an input
+            # URL cannot be moved by a `follows` OR by a copied lock -- measured).
             #
-            # Copying the lock used to happen only when the sibling shipped none, which
-            # left the common case unpinned: network-compiler's flake.nix pinned
-            # nixpkgs at an absolute rev, so the sibling's tests evaluated a nixpkgs
-            # nobody had warmed and rebuilt the bootstrap toolchain (1534 derivations,
-            # then `Could not resolve host: tarballs.nixos.org`).
+            # Overwriting this lock was tried and is WRONG. A lock describes the graph of
+            # the flake that wrote it; this repository's lock maps `root.inputs.network-compiler`,
+            # so a sibling whose flake declares `network-labs` finds no entry for it, and
+            # Nix then UPDATES the lock -- which is a network operation:
             #
-            # Measured: copying this lock into that checkout does NOT move an
-            # absolute-rev input (the URL wins over the lock), which is exactly why the
-            # rev had to become a branch in the first place -- and with the branch, the
-            # sibling now resolves to this repository's nixpkgs, which is the warmed one.
-            if [[ -f flake.lock ]]; then
-              cp flake.lock "${workspace}/${name}/flake.lock"
-              printf '  supplied the pin: %s now follows this lock\n' "${name}"
+            #   … while updating the lock file of flake
+            #     'git+file:///.../network-compiler'
+            #   … while fetching the input 'github:esp0xdeadbeef/network-labs'
+            #   error: unable to download
+            #     'https://api.github.com/repos/esp0xdeadbeef/network-labs/commits/HEAD':
+            #     Could not resolve host: api.github.com
+            #
+            # measured in network-labs shard 0 after the overwrite shipped. With its own
+            # lock restored, the same evaluation completes offline with no lock update.
+            #
+            # A sibling that ships NO lock cannot be served one either: any lock supplied
+            # is the wrong graph, so the update happens anyway. Those checkouts are
+            # reported, not patched, so the gap is visible instead of silent.
+            if [[ ! -f "${workspace}/${name}/flake.lock" ]]; then
+              echo "::warning::sibling ${name} ships no flake.lock; its evaluation cannot be offline"
             fi
 
             # WARM THE SIBLING'S OWN STDENV.

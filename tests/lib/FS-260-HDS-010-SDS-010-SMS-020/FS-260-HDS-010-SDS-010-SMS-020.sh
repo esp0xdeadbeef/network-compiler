@@ -9,7 +9,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 archive_json="${tmp_dir}/archive.json"
 
-nix flake archive --json "path:${ROOT}" >"${archive_json}"
+flake-archive-offline --json "path:${ROOT}" >"${archive_json}"
 labs_path="${ROOT}/tests/fixtures"
 
 compile_example() {

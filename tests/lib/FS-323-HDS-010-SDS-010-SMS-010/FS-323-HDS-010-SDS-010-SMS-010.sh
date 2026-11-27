@@ -28,7 +28,7 @@ fail() { echo "FAIL reachability-fact-permission-separation: $*" >&2; exit 1; }
 # Resolve the checked-out network-labs through the flake, the same way the cards
 # that need a concrete path do: the `labs:` scheme is only understood by
 # `nix run <flake>#compile`.
-labs_path="$(nix flake archive --json "path:${ROOT}" | jq -er '.inputs["network-labs"].path')"
+labs_path="$(flake-archive-offline --json "path:${ROOT}" | jq -er '.inputs["network-labs"].path')"
 base_intent="${labs_path}/examples/single-wan/intent.nix"
 [[ -f "${base_intent}" ]] || fail "P1 no single-wan example at ${base_intent}"
 

@@ -27,7 +27,7 @@ fail() { echo "FAIL source-class-assignment: $*" >&2; exit 1; }
 flake_input_path() {
   local input="$1"
   if [[ "${input}" == "network-labs" && -n "${NETWORK_LABS_PATH:-}" ]]; then realpath "${NETWORK_LABS_PATH}"; return; fi
-  nix flake archive --json "path:${repo_root}" | jq -er ".inputs[\"${input}\"].path"
+  flake-archive-offline --json "path:${repo_root}" | jq -er ".inputs[\"${input}\"].path"
 }
 
 example_dir="$(flake_input_path network-labs)/examples/single-wan"

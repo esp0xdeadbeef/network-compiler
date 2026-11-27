@@ -22,7 +22,7 @@ all_passed=true
 
 # Resolve network-labs root for sat/intent.nix
 archive_json="${tmp_dir}/archive.json"
-nix flake archive --json "path:${ROOT}" > "${archive_json}"
+flake-archive-offline --json "path:${ROOT}" > "${archive_json}"
 labs_root="$(jq -er '.inputs["network-labs"].path' "${archive_json}")"
 sat_intent="${labs_root}/GAMP/SAT/intent.nix"
 

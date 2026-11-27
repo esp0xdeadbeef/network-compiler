@@ -12,7 +12,7 @@ archive_json="${tmp_dir}/archive.json"
 actual_json="${tmp_dir}/actual.json"
 expected_json="${tmp_dir}/expected.json"
 
-nix flake archive --json "path:${ROOT}" >"${archive_json}"
+flake-archive-offline --json "path:${ROOT}" >"${archive_json}"
 labs_path="${ROOT}/tests/fixtures"
 
 compile_example() {

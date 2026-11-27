@@ -73,7 +73,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-nix flake archive --json "path:${repo_root}" > "${archive_json}"
+flake-archive-offline --json "path:${repo_root}" > "${archive_json}"
 labs_root="$(jq -er '.inputs["network-labs"].path' "${archive_json}")"
 intent="${labs_root}/examples/single-wan/intent.nix"
 [[ -f "${intent}" ]] || fail "missing intent: ${intent}"

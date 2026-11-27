@@ -21,7 +21,7 @@ flake_input_path() {
     realpath "${NETWORK_LABS_PATH}"
     return
   fi
-  nix flake archive --json "path:${ROOT}" \
+  flake-archive-offline --json "path:${ROOT}" \
     | jq -er ".inputs[\"${input_name}\"].path"
 }
 

@@ -14,7 +14,7 @@ fi
 archive_json="$(mktemp)"
 trap 'rm -f "${archive_json}"' EXIT
 
-nix flake archive --json "path:${repo_root}" > "${archive_json}"
+flake-archive-offline --json "path:${repo_root}" > "${archive_json}"
 
 labs_root="${NETWORK_LABS_ROOT:-}"
 if [[ -z "${labs_root}" ]]; then

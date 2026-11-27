@@ -347,7 +347,7 @@ base
 EOF
 
 set +e
-invalid_output="$(nix run "$ROOT#compile" -- "${invalid_wildcard_input}" 2>&1)"
+invalid_output="$(nix run "$ROOT#compile" -- "${invalid_wildcard_input}" 2>&1 | grep -vF "you don't have Internet access")"
 invalid_rc=$?
 set -e
 

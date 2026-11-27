@@ -30,7 +30,7 @@ expect_compile_failure() {
   local rc
 
   set +e
-  output="$(nix run "$ROOT#compile" -- "${input_file}" 2>&1)"
+  output="$(nix run "$ROOT#compile" -- "${input_file}" 2>&1 | grep -vF "you don't have Internet access")"
   rc=$?
   set -e
 

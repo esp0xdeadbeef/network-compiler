@@ -200,7 +200,7 @@ jq -e '
 
 for bad in core-to-core-link policy-bypass-link; do
   set +e
-  output="$(nix run "$ROOT#compile" -- "$ROOT/tests/negative/${bad}.nix" 2>&1)"
+  output="$(nix run "$ROOT#compile" -- "$ROOT/tests/negative/${bad}.nix" 2>&1 | grep -vF "you don't have Internet access")"
   rc=$?
   set -e
 

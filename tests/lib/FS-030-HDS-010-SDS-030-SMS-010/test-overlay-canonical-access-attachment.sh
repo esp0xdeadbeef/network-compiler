@@ -300,7 +300,7 @@ cat > "$bad_input_file" <<'EOF'
 EOF
 
 set +e
-bad_output="$(nix run "$ROOT#compile" -- "$bad_input_file" 2>&1)"
+bad_output="$(nix run "$ROOT#compile" -- "$bad_input_file" 2>&1 | grep -vF "you don't have Internet access")"
 bad_rc=$?
 set -e
 

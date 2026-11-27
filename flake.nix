@@ -32,6 +32,7 @@
     # The library is vendored at ./lib/network instead.
 
     network-labs.url = "github:esp0xdeadbeef/network-labs";
+    network-labs.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
